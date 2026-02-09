@@ -1,0 +1,25 @@
+
+
+{
+  "name": "DealPro",
+  "short_name": "DealPro",
+  "description": "Hyper-local deal discovery app providing exclusive discounts and QR codes for nearby stores.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "https://api.iconify.design/lucide:sparkles.svg?color=%233b82f6",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "https://api.iconify.design/lucide:sparkles.svg?color=%233b82f6",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

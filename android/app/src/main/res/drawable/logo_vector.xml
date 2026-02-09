@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="300dp"
+    android:height="300dp"
+    android:viewportWidth="300"
+    android:viewportHeight="300">
+
+    <!-- Yellow circular badge background - fills most of canvas -->
+    <path
+        android:fillColor="#EAB308"
+        android:pathData="M150,20 C76.8,20 20,76.8 20,150 C20,223.2 76.8,280 150,280 C223.2,280 280,223.2 280,150 C280,76.8 223.2,20 150,20 Z"/>
+
+    <!-- White "D" letter - scaled and centered -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M95,110 L95,190 L125,190 C148,190 165,173 165,150 C165,127 148,110 125,110 Z M110,125 L125,125 C140,125 150,135 150,150 C150,165 140,175 125,175 L110,175 Z"/>
+
+    <!-- White "P" letter - scaled and centered -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M175,110 L175,190 L190,190 L190,165 L210,165 C225,165 235,155 235,140 C235,125 225,115 210,115 L190,115 L190,110 Z M190,125 L210,125 C215,125 220,130 220,140 C220,150 215,155 210,155 L190,155 Z"/>
+
+    <!-- Decorative spark/star (top right) - scaled -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M245,65 L249,76 L260,80 L249,84 L245,95 L241,84 L230,80 L241,76 Z"/>
+
+    <!-- Decorative spark/star (bottom left) - scaled -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M55,205 L59,216 L70,220 L59,224 L55,235 L51,224 L40,220 L51,216 Z"/>
+
+</vector>

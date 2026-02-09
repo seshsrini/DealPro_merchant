@@ -1,0 +1,397 @@
+:root {
+    --accent: #eab308;
+    --accent-indigo: #ca8a04;
+    --accent-glow: rgba(234, 179, 8, 0.4);
+    --bg-dark: #030712;
+    --glass-bg: rgba(17, 24, 39, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --card-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+}
+
+/* BARCODE SCANNER TRANSPARENCY PROTOCOL */
+body.barcode-scanner-active {
+    background-color: transparent !important;
+}
+body.barcode-scanner-active #root {
+    background-color: transparent !important;
+    opacity: 0.2; /* Dims the UI to show camera clearly */
+}
+body.barcode-scanner-active .scanner-ui-overlay {
+    opacity: 1 !important;
+}
+
+.light-mode {
+    --glass-bg: rgba(255, 255, 255, 0.98); /* Increased opacity for light mode */
+    --glass-border: rgba(0, 0, 0, 0.2); /* Clearer border for light mode */
+    --bg-dark: #f9fafb;
+    --card-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-dark);
+    color: #f3f4f6;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.light-mode {
+    color: #111827; /* Dark text for light mode */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.glass {
+    background: var(--glass-bg) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    border: 1px solid var(--glass-border) !important;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.input-premium {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 1.25rem !important;
+    padding: 0 1.5rem !important;
+    height: 4rem !important;
+    width: 100% !important;
+    outline: none !important;
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    color: #ffffff !important;
+    transition: all 0.3s ease !important;
+}
+
+/* Override height for textarea */
+textarea.input-premium {
+    height: 16rem !important;
+    min-height: 16rem !important;
+}
+
+/* Fix for Select Dropdowns in Dark Mode */
+.input-premium option {
+    background-color: #1e293b;
+    color: #ffffff;
+}
+
+.light-mode .input-premium {
+    background: white !important; /* Solid white background for light mode */
+    border-color: rgba(0, 0, 0, 0.3) !important; /* Clearer border for light mode */
+    color: #111827 !important; /* Darker text for light mode */
+}
+
+/* Fix for Select Dropdowns in Light Mode */
+.light-mode .input-premium option {
+    background-color: #ffffff;
+    color: #0f172a;
+}
+
+.input-premium::placeholder {
+    color: #cbd5e1; /* Brighter placeholder for dark mode (slate-300) */
+    font-weight: 500;
+}
+
+.light-mode .input-premium::placeholder {
+    color: #475569; /* Darker placeholder for light mode */
+}
+
+.input-premium:focus {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(59, 130, 246, 0.6) !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
+}
+
+.light-mode .input-premium:focus {
+    background: rgba(59, 130, 246, 0.05) !important; /* Subtle blue tint on focus */
+    border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+.btn-premium {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-indigo) 100%) !important;
+    color: white !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.12em !important;
+    border-radius: 1.25rem !important;
+    height: 4rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.75rem !important;
+    border: none !important;
+    cursor: pointer !important;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+    box-shadow: 0 12px 24px -6px var(--accent-glow) !important;
+}
+
+.btn-premium:active {
+    transform: scale(0.96) !important;
+    box-shadow: 0 6px 12px -3px var(--accent-glow) !important;
+}
+
+.deal-card {
+    border-radius: 2.5rem !important;
+    overflow: hidden !important;
+    background: var(--glass-bg) !important;
+    border: 1px solid var(--glass-border) !important;
+    box-shadow: var(--card-shadow) !important;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.deal-card:active {
+    transform: scale(0.98);
+}
+
+@keyframes reveal {
+    from { opacity: 0; transform: translateY(30px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-reveal {
+    animation: reveal 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+@keyframes pulse-ring {
+    0% { transform: scale(0.8); opacity: 0.5; }
+    100% { transform: scale(1.3); opacity: 0; }
+}
+
+/* NEW ANIMATIONS FOR SPLASH AND BANNER */
+@keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-8px); }
+    100% { transform: translateY(0px); }
+}
+.animate-float {
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes pulse-slow {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.05); opacity: 0.8; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.animate-pulse-slow {
+    animation: pulse-slow 3s infinite ease-in-out;
+}
+
+@keyframes slow-pulse {
+    0% { transform: scale(0.9); opacity: 0.3; }
+    50% { transform: scale(1.1); opacity: 0.1; }
+    100% { transform: scale(0.9); opacity: 0.3; }
+}
+.animate-slow-pulse {
+    animation: slow-pulse 8s infinite ease-in-out;
+}
+
+
+.pulse-ring::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border: 2px solid var(--accent);
+    border-radius: inherit;
+    animation: pulse-ring 2s infinite;
+}
+
+input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    background: transparent;
+}
+
+input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 22px;
+    width: 22px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+    border: 5px solid var(--accent);
+    margin-top: -9px;
+    transition: all 0.2s ease;
+}
+
+input[type=range]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px;
+    cursor: pointer;
+    background: rgba(59, 130, 246, 0.15);
+    border-radius: 10px;
+}
+
+@keyframes flag-shine {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.indian-flag-text {
+  background: linear-gradient(
+    90deg, 
+    #FF9933 0%, #FF9933 33%, 
+    #FFFFFF 33%, #FFFFFF 66%, 
+    #138808 66%, #138808 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: flag-shine 4s ease-in-out infinite;
+  font-weight: 900;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+}
+
+
+/* --- Dynamic Festival Banner Backgrounds --- */
+
+/* Indian Flag Theme (for Independence Day, Republic Day etc.) */
+.indian-flag-banner {
+  border-color: rgba(255, 153, 51, 0.3); /* Saffron-ish border */
+  background: linear-gradient(135deg, 
+    rgba(255, 153, 51, 0.15) 0%, /* Saffron */
+    rgba(255, 255, 255, 0.05) 33%, /* White */
+    rgba(255, 255, 255, 0.05) 66%,
+    rgba(19, 136, 8, 0.15) 100% /* Green */
+  );
+  box-shadow: 0 4px 60px -10px rgba(255, 153, 51, 0.2), 0 4px 60px -10px rgba(19, 136, 8, 0.2);
+  /* Text color override for readability */
+  color: #fff; /* White text for contrast */
+}
+.light-mode .indian-flag-banner {
+  border-color: rgba(255, 153, 51, 0.5);
+  background: linear-gradient(135deg, 
+    #fff3e0 0%, /* Light Saffron */
+    #ffffff 33%, /* White */
+    #ffffff 66%,
+    #e8ffe8 100% /* Light Green */
+  );
+  box-shadow: 0 4px 30px -10px rgba(255, 153, 51, 0.15), 0 4px 30px -10px rgba(19, 136, 8, 0.15);
+  color: #0f172a; /* Dark text for light mode */
+}
+.indian-flag-banner .text-blue-500 { color: #FF9933; } /* Saffron accent for special text in banner */
+.light-mode .indian-flag-banner .text-blue-500 { color: #FF9933; }
+
+
+/* Diwali Theme */
+.diwali-banner-dark {
+  border-color: rgba(255, 215, 0, 0.3); /* Gold border */
+  background: linear-gradient(135deg, 
+    rgba(255, 165, 0, 0.2) 0%, /* Orange */
+    rgba(255, 215, 0, 0.1) 50%, /* Gold */
+    rgba(139, 0, 0, 0.2) 100% /* Dark Red */
+  );
+  box-shadow: 0 4px 60px -10px rgba(255, 165, 0, 0.2), 0 4px 60px -10px rgba(255, 215, 0, 0.2);
+  color: #fff;
+}
+.light-mode .diwali-banner-light {
+  border-color: rgba(255, 165, 0, 0.4);
+  background: linear-gradient(135deg, 
+    #ffeedd 0%, /* Light Orange */
+    #fffbe6 50%, /* Light Gold */
+    #ffe8e8 100% /* Light Red */
+  );
+  box-shadow: 0 4px 30px -10px rgba(255, 165, 0, 0.15), 0 4px 30px -10px rgba(255, 215, 0, 0.15);
+  color: #0f172a;
+}
+.diwali-banner-dark .text-blue-500 { color: #FFD700; } /* Gold accent */
+.light-mode .diwali-banner-light .text-blue-500 { color: #FF9900; } /* Darker orange-gold for light mode */
+
+
+/* Holi Theme */
+.holi-banner-dark {
+  border-color: rgba(255, 105, 180, 0.3); /* Hot Pink border */
+  background: linear-gradient(135deg, 
+    rgba(255, 105, 180, 0.2) 0%, /* Hot Pink */
+    rgba(135, 206, 235, 0.1) 50%, /* Sky Blue */
+    rgba(50, 205, 50, 0.2) 100% /* Lime Green */
+  );
+  box-shadow: 0 4px 60px -10px rgba(255, 105, 180, 0.2), 0 4px 60px -10px rgba(50, 205, 50, 0.2);
+  color: #fff;
+}
+.light-mode .holi-banner-light {
+  border-color: rgba(255, 105, 180, 0.4);
+  background: linear-gradient(135deg, 
+    #ffe6f2 0%, /* Light Hot Pink */
+    #e0f2f7 50%, /* Light Sky Blue */
+    #e6ffe6 100% /* Light Lime Green */
+  );
+  box-shadow: 0 4px 30px -10px rgba(255, 105, 180, 0.15), 0 4px 30px -10px rgba(50, 205, 50, 0.15);
+  color: #0f172a;
+}
+.holi-banner-dark .text-blue-500 { color: #87CEEB; } /* Sky Blue accent */
+.light-mode .holi-banner-light .text-blue-500 { color: #FF69B4; } /* Hot Pink accent for light mode */
+
+
+/* Christmas Theme */
+.christmas-banner-dark {
+  border-color: rgba(220, 20, 60, 0.3); /* Crimson border */
+  background: linear-gradient(135deg, 
+    rgba(220, 20, 60, 0.2) 0%, /* Crimson */
+    rgba(255, 215, 0, 0.1) 50%, /* Gold */
+    rgba(34, 139, 34, 0.2) 100% /* Forest Green */
+  );
+  box-shadow: 0 4px 60px -10px rgba(220, 20, 60, 0.2), 0 4px 60px -10px rgba(34, 139, 34, 0.2);
+  color: #fff;
+}
+.light-mode .christmas-banner-light {
+  border-color: rgba(220, 20, 60, 0.4);
+  background: linear-gradient(135deg, 
+    #ffe6e6 0%, /* Light Crimson */
+    #fffbe6 50%, /* Light Gold */
+    #e6f7e6 100% /* Light Forest Green */
+  );
+  box-shadow: 0 4px 30px -10px rgba(220, 20, 60, 0.15), 0 4px 30px -10px rgba(34, 139, 34, 0.15);
+  color: #0f172a;
+}
+.christmas-banner-dark .text-blue-500 { color: #FFD700; } /* Gold accent */
+.light-mode .christmas-banner-light .text-blue-500 { color: #DC143C; } /* Crimson accent for light mode */
+
+
+/* Default Blue Theme (repurposed existing blue styles) */
+.default-banner-dark {
+  border-color: rgba(59, 130, 246, 0.2);
+  background: linear-gradient(135deg, rgba(3, 7, 18, 0.2) 0%, rgba(37, 99, 235, 0.1) 100%); /* from-blue-950/20 to-blue-800/10 */
+  box-shadow: 0 4px 60px -10px rgba(59, 130, 246, 0.2); /* shadow-blue-500/20 */
+  color: #fff;
+}
+.light-mode .default-banner-light {
+  border-color: #bfdbfe; /* border-blue-200 */
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); /* from-blue-50 to-blue-100 */
+  box-shadow: 0 4px 30px -10px rgba(0, 0, 0, 0.1); /* shadow-md */
+  color: #111827;
+}
+.default-banner-dark .text-blue-500 { color: #60a5fa; } /* text-blue-400 */
+.light-mode .default-banner-light .text-blue-500 { color: #2563eb; } /* text-blue-700 */
+
+/* Specific light-mode styles for AuthStack's biometric toggle */
+.light-mode .biometric-toggle-switch.active {
+    background-color: #3b82f6; /* Blue background when active */
+}
+.light-mode .biometric-toggle-switch.inactive {
+    background-color: #cbd5e1; /* Light grey background when inactive */
+}
+.light-mode .biometric-toggle-switch .toggle-circle.active {
+    transform: translateX(calc(100% - 2px));
+    background-color: white;
+}
+.light-mode .biometric-toggle-switch .toggle-circle.inactive {
+    transform: translateX(2px);
+    background-color: white;
+}
+.light-mode .biometric-toggle-switch .toggle-circle svg {
+    color: #3b82f6; /* Blue icon when active in light mode */
+}
+.light-mode .biometric-toggle-switch .toggle-circle.inactive svg {
+    color: #475569; /* Darker icon when inactive in light mode */
+}

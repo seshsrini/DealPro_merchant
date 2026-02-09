@@ -1,0 +1,8 @@
+{
+  "name": "DealPro",
+  "description": "Hyper-local deal discovery app providing exclusive discounts and QR codes for nearby stores.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
