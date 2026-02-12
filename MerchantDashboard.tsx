@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { AppView, Deal } from './types';
 import { mDashboardService } from './services/mDashboardService';
+import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import {
   Store,
   Plus,
@@ -26,7 +27,7 @@ import {
 } from 'lucide-react';
 // QRscan is now imported and rendered in App.tsx
 
-type CampaignTab = 'review' | 'active' | 'expired';
+type CampaignTab = 'review' | 'active' | 'expired' | 'needs review';
 
 interface MerchantDashboardProps {
   view: AppView; // Although it will primarily be 'merchant_dashboard', it's good to keep
@@ -42,7 +43,8 @@ interface MerchantDashboardProps {
   onClearDealIdToEdit: () => void;
   isScanning: boolean; // Passed from App.tsx
   // Fix: Corrected function signature for setIsScanning
-  setIsScanning: (val: boolean) => void; 
+  setIsScanning: (val: boolean) => void;
+  setPreSelectedTab?: (tab: CampaignTab | null) => void;
 }
 
 // Helper function to get the nearest upcoming festival
@@ -116,7 +118,8 @@ const getBannerThemeClasses = (themeKey: string, isDark: boolean) => {
 
 export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   view, setView, user, setUser, deals, loading, setLoading, theme, refreshDeals,
-  setDealIdToEdit, onClearDealIdToEdit, isScanning, setIsScanning // Received from App.tsx
+  setDealIdToEdit, onClearDealIdToEdit, isScanning, setIsScanning, // Received from App.tsx
+  setPreSelectedTab
 }) => {
   const isDark = theme === 'dark';
 
@@ -133,6 +136,15 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   const [loadingTotalRedemptions, setLoadingTotalRedemptions] = useState(false);
   const [loadingInvitesSent, setLoadingInvitesSent] = useState(false);
   const [loadingInvitesAccepted, setLoadingInvitesAccepted] = useState(false);
+
+  // Campaign usage state
+  const [campaignUsage, setCampaignUsage] = useState({
+    campaigns_used: 0,
+    campaigns_limit: 0,
+    dotd_used: 0,
+    dotd_limit: 0,
+    has_subscription: false,
+  });
 
   // Derived state for lifetime conversion rate
   const lifetimeConversionRate = useMemo(() => {
@@ -250,6 +262,22 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     fetchAnalytics();
   }, [user?.id]); // Depend on user.id to trigger on user login/profile load
 
+  // Fetch campaign usage
+  useEffect(() => {
+    const fetchCampaignUsage = async () => {
+      try {
+        const usage = await merchantSubscriptionService.getCampaignUsage();
+        setCampaignUsage(usage);
+      } catch (err) {
+        console.error("[MerchantDashboard] Error fetching campaign usage:", err);
+      }
+    };
+
+    if (user?.id) {
+      fetchCampaignUsage();
+    }
+  }, [user?.id, deals]);
+
   // Effect to find the nearest festival
   useEffect(() => {
     setNearestFestival(getNearestFestival());
@@ -259,9 +287,124 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   const subTextClass = isDark ? "text-slate-400" : "text-slate-600";
   const labelClass = isDark ? "text-slate-500" : "text-slate-700";
 
+  // Count campaigns with "needs review" status for the current merchant only
+  const reviewCampaignsCount = useMemo(() => {
+    console.log('[MerchantDashboard] Current User ID:', user.id);
+    console.log('[MerchantDashboard] Total deals:', deals.length);
+
+    // Log all "needs review" status campaigns
+    const needsReviewDeals = deals.filter(deal => deal.status === 'needs review');
+    console.log('[MerchantDashboard] Campaigns with "needs review" status:', needsReviewDeals.length);
+    needsReviewDeals.forEach((deal, idx) => {
+      const dealMerchantId = deal.merchantId || (deal as any).merchant_id;
+      console.log(`[MerchantDashboard] Needs Review deal ${idx + 1}:`, {
+        campaign_id: deal.campaign_id,
+        merchantId: dealMerchantId,
+        status: deal.status,
+        matches: dealMerchantId === user.id
+      });
+    });
+
+    const count = deals.filter(deal => {
+      const dealMerchantId = deal.merchantId || (deal as any).merchant_id;
+      return deal.status === 'needs review' && dealMerchantId === user.id;
+    }).length;
+    console.log('[MerchantDashboard] Final "needs review" filtered count (matching merchant):', count);
+    return count;
+  }, [deals, user.id]);
+
   return (
     <div className="px-6 pt-6 pb-32 animate-reveal space-y-8">
       {/* QRscan is now rendered at the App level */}
+
+      {/* Prominent "Needs Review" Alert Banner */}
+      {reviewCampaignsCount > 0 && (
+        <div className="animate-reveal">
+          <style>{`
+            @keyframes flash-border {
+              0%, 100% { border-color: rgba(239, 68, 68, 0.6); }
+              50% { border-color: rgba(239, 68, 68, 1); }
+            }
+            @keyframes pulse-glow {
+              0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.3), 0 0 40px rgba(239, 68, 68, 0.1); }
+              50% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.5), 0 0 60px rgba(239, 68, 68, 0.2); }
+            }
+            @keyframes shimmer {
+              0% { background-position: -200% 0; }
+              100% { background-position: 200% 0; }
+            }
+            @keyframes bounce-x {
+              0%, 100% { transform: translateX(0); }
+              50% { transform: translateX(4px); }
+            }
+            .flash-border {
+              animation: flash-border 2s ease-in-out infinite;
+            }
+            .pulse-glow {
+              animation: pulse-glow 2s ease-in-out infinite;
+            }
+            .animate-shimmer {
+              animation: shimmer 3s ease-in-out infinite;
+            }
+            .animate-bounce-x {
+              animation: bounce-x 1s ease-in-out infinite;
+            }
+          `}</style>
+          <button
+            onClick={() => {
+              if (setPreSelectedTab) {
+                setPreSelectedTab('needs review');
+              }
+              setView('merchant_deals');
+            }}
+            className={`w-full p-6 rounded-[2.5rem] flex items-center gap-4 text-left group transition-all duration-300 relative overflow-hidden border-4 flash-border pulse-glow
+              active:scale-[0.98] hover:scale-[1.01] ${
+                isDark
+                  ? 'bg-gradient-to-r from-red-950/80 via-red-900/60 to-red-950/80 backdrop-blur-md'
+                  : 'bg-gradient-to-r from-red-50 via-red-100 to-red-50 shadow-2xl'
+              }`}
+          >
+            {/* Animated Background Pattern */}
+            <div className="absolute inset-0 opacity-20">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-red-500/30 to-transparent animate-shimmer"
+                   style={{ backgroundSize: '200% 100%', animation: 'shimmer 3s ease-in-out infinite' }}></div>
+            </div>
+
+            {/* Pulsing Alert Icon */}
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 relative z-10 shadow-lg animate-pulse
+              ${isDark ? 'bg-red-500/30' : 'bg-red-500'}`}>
+              <AlertCircle className={`w-8 h-8 ${isDark ? 'text-red-400' : 'text-white'}`} strokeWidth={2.5} />
+            </div>
+
+            {/* Alert Content */}
+            <div className="relative z-10 flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
+                <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${
+                  isDark ? 'text-red-400' : 'text-red-600'
+                }`}>
+                  Action Required
+                </p>
+              </div>
+              <p className={`text-xl font-black leading-tight ${
+                isDark ? 'text-white' : 'text-red-900'
+              }`}>
+                {reviewCampaignsCount} Campaign{reviewCampaignsCount > 1 ? 's' : ''} Need{reviewCampaignsCount === 1 ? 's' : ''} Review
+              </p>
+              <p className={`text-xs font-bold mt-1 ${
+                isDark ? 'text-red-300' : 'text-red-700'
+              }`}>
+                Tap to review and approve your campaigns
+              </p>
+            </div>
+
+            {/* Arrow Indicator */}
+            <ChevronRight className={`w-7 h-7 ml-auto shrink-0 relative z-10 ${
+              isDark ? 'text-red-400' : 'text-red-600'
+            } group-hover:translate-x-1 transition-transform duration-300 animate-bounce-x`} />
+          </button>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <div>
@@ -276,13 +419,79 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
         </div>
       </div>
 
+      {/* Campaign Usage Counter */}
+      {campaignUsage.has_subscription && (
+        <div className={`rounded-2xl p-4 shadow-xl border ${isDark ? 'glass border-white/10 bg-slate-900/40' : 'bg-white border-slate-200'}`}>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isDark ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-100 border-blue-200'}`}>
+                <Megaphone className="w-5 h-5 text-blue-500" />
+              </div>
+              <div>
+                <p className={`text-[9px] font-black uppercase tracking-wider ${labelClass}`}>Campaigns</p>
+                <p className={`text-lg font-black ${headingClass}`}>
+                  <span className={campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? "text-rose-500" : "text-emerald-500"}>
+                    {campaignUsage.campaigns_used}
+                  </span>
+                  <span className={`${isDark ? 'text-slate-600' : 'text-slate-400'}`}>/{campaignUsage.campaigns_limit}</span>
+                  <span className={`text-xs ml-1 ${subTextClass}`}>this month</span>
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-100 border-amber-200'}`}>
+                <Zap className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <p className={`text-[9px] font-black uppercase tracking-wider ${labelClass}`}>DOTD</p>
+                <p className={`text-lg font-black ${headingClass}`}>
+                  <span className={campaignUsage.dotd_used >= campaignUsage.dotd_limit ? "text-rose-500" : "text-emerald-500"}>
+                    {campaignUsage.dotd_used}
+                  </span>
+                  <span className={`${isDark ? 'text-slate-600' : 'text-slate-400'}`}>/{campaignUsage.dotd_limit}</span>
+                  <span className={`text-xs ml-1 ${subTextClass}`}>this month</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Warning Messages */}
+          {(campaignUsage.campaigns_used >= campaignUsage.campaigns_limit || campaignUsage.dotd_used >= campaignUsage.dotd_limit) && (
+            <div className="mt-4 space-y-2">
+              {campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
+                <div className={`flex items-start gap-2 p-3 rounded-xl border ${isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-200'}`}>
+                  <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 flex-shrink-0" />
+                  <p className={`text-xs ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>
+                    {campaignUsage.campaigns_used > campaignUsage.campaigns_limit
+                      ? <>You have exceeded your monthly campaign limit ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className={`underline font-bold transition-colors ${isDark ? 'hover:text-rose-200' : 'hover:text-rose-600'}`}>upgrade</button> your plan to create more campaigns.</>
+                      : <>You have reached your monthly campaign limit ({campaignUsage.campaigns_limit}/{campaignUsage.campaigns_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className={`underline font-bold transition-colors ${isDark ? 'hover:text-rose-200' : 'hover:text-rose-600'}`}>upgrade</button> your plan to create more campaigns.</>
+                    }
+                  </p>
+                </div>
+              )}
+              {campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
+                <div className={`flex items-start gap-2 p-3 rounded-xl border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+                  <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                    {campaignUsage.dotd_used > campaignUsage.dotd_limit
+                      ? <>You have exceeded your monthly Deal of the Day limit ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className={`underline font-bold transition-colors ${isDark ? 'hover:text-amber-200' : 'hover:text-amber-600'}`}>upgrade</button> your plan.</>
+                      : <>You have reached your monthly Deal of the Day limit ({campaignUsage.dotd_limit}/{campaignUsage.dotd_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className={`underline font-bold transition-colors ${isDark ? 'hover:text-amber-200' : 'hover:text-amber-600'}`}>upgrade</button> your plan.</>
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <button onClick={() => setView('merchant_deals')} className={`p-6 rounded-[2.5rem] flex flex-col gap-5 text-left group active:scale-[0.98] transition-all border ${isDark ? 'glass border-blue-500/20 bg-blue-500/5' : 'bg-white border-slate-200 shadow-md'}`}>
           <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
             <Plus className="w-6 h-6 text-white" strokeWidth={3} />
           </div>
           <div>
-            <p className={`text-base font-black leading-none mb-1 ${headingClass}`}>New Wave</p>
+            <p className={`text-base font-black leading-none mb-1 ${headingClass}`}>New Deal Launch</p>
             <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest">Launch Campaign</p>
           </div>
         </button>

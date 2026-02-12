@@ -5,6 +5,7 @@ import { userService } from './services/userService';
 import { addCampaignService } from './services/addCampaignService';
 import { merchantService } from './services/merchantService';
 import { mDashboardService } from './services/mDashboardService';
+import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { useTranslation } from './contexts/LanguageContext';
 import { 
   Megaphone, 
@@ -33,13 +34,14 @@ import { RichTextEditor } from './components/RichTextEditor';
 
 interface MerchantMyCampaignsProps {
   user: any;
-  deals: Deal[]; 
+  deals: Deal[];
   loading: boolean;
   setLoading: (loading: boolean) => void;
   refreshDeals: () => Promise<void>;
   setView: (view: AppView) => void;
   preSelectedEditDealId?: string | null;
   onClearPreSelected?: () => void;
+  preSelectedTab?: CampaignTab | null;
 }
 
 type CampaignTab = 'review' | 'active' | 'expired' | 'needs review';
@@ -59,11 +61,12 @@ const getFileNameFromUrl = (url: string | null): string | null => {
 
 export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
   user, deals = [], loading, setLoading, refreshDeals, setView,
-  preSelectedEditDealId, onClearPreSelected
+  preSelectedEditDealId, onClearPreSelected, preSelectedTab
 }) => {
   const { t, getLocalizedText } = useTranslation();
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
   const formRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
   
   const [dealTitle, setDealTitle] = useState('');
   const [dealOffer, setDealOffer] = useState('');
@@ -72,7 +75,6 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
   const [dealDescription, setDealDescription] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
-  const [isBulkTranslating, setIsBulkTranslating] = useState(false);
   
   const [merchantStores, setMerchantStores] = useState<MerchantStore[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<string>('');
@@ -83,8 +85,8 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
 
   const [imageLibrary, setImageLibrary] = useState<{url: string, name?: string}[]>([]);
   const [isLibraryLoading, setIsLibraryLoading] = useState(false);
-  
-  const [activeListTab, setActiveListTab] = useState<CampaignTab>('active');
+
+  const [activeListTab, setActiveListTab] = useState<CampaignTab>(preSelectedTab || 'active');
 
   // ROI states
   const [roiInputs, setRoiInputs] = useState<Record<string, {
@@ -96,6 +98,15 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
   
   const [perCampaignClickCounts, setPerCampaignClickCounts] = useState<Record<string, number>>({});
   const [perCampaignRedemptionCounts, setPerCampaignRedemptionCounts] = useState<Record<string, number>>({});
+
+  // Campaign usage state
+  const [campaignUsage, setCampaignUsage] = useState({
+    campaigns_used: 0,
+    campaigns_limit: 0,
+    dotd_used: 0,
+    dotd_limit: 0,
+    has_subscription: false,
+  });
 
   const getStatusDisplay = (status: string) => {
     switch (status.toLowerCase()) {
@@ -111,16 +122,25 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
     return libImage?.url || deal.thumbnail || DEFAULT_DEAL_IMAGE;
   };
 
+  // Scroll to tabs section when preSelectedTab is set
+  useEffect(() => {
+    if (preSelectedTab && tabsRef.current) {
+      setTimeout(() => {
+        tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [preSelectedTab]);
+
   // Pulse Sync Loop (10s)
   useEffect(() => {
     const refreshInterval = setInterval(() => {
-      if (!isTranslating && !isBulkTranslating && !editingDealId) {
+      if (!isTranslating && !editingDealId) {
         refreshDeals();
       }
     }, 10000);
 
     return () => clearInterval(refreshInterval);
-  }, [refreshDeals, isTranslating, isBulkTranslating, editingDealId]);
+  }, [refreshDeals, isTranslating, editingDealId]);
 
   // Load Merchant Assets
   useEffect(() => {
@@ -142,6 +162,22 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
       });
     }
   }, [user.id]);
+
+  // Fetch campaign usage
+  useEffect(() => {
+    const fetchCampaignUsage = async () => {
+      try {
+        const usage = await merchantSubscriptionService.getCampaignUsage();
+        setCampaignUsage(usage);
+      } catch (err) {
+        console.error("Error fetching campaign usage:", err);
+      }
+    };
+
+    if (user.id) {
+      fetchCampaignUsage();
+    }
+  }, [user.id, deals]);
 
   const handleImageSelected = (file: File | null) => {
     setSelectedImageFile(file);
@@ -265,14 +301,15 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
         shop_name: user.store_name,
         deal_heading: dealTitle,
         offer_value: dealOffer,
-        category: user.category, 
+        category: user.category,
         long_description: dealDescription,
         start_date: dealStartDate,
         end_date: dealEndDate,
         store_id: selectedStoreId,
         image_url: imageUrl,
         image_name: imageName,
-        latlong: latlong, 
+        latlong: latlong,
+        is_deal_of_the_day: false, // Regular campaigns are NOT Deal of the Day
       };
 
       if (!editingDealId || isTranslating) { 
@@ -326,20 +363,6 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
     return { projectedRevenue, projectedProfit };
   };
 
-  const handleBulkTranslate = async () => {
-    setIsBulkTranslating(true);
-    setLoading(true);
-    try {
-      await addCampaignService.repairCampaignTranslations(user.id);
-      await refreshDeals(); 
-      alert("Missing translations synchronized.");
-    } catch (e: any) {
-      console.error("Sync error:", e);
-    } finally {
-      setIsBulkTranslating(false);
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="px-6 pt-6 pb-32 animate-reveal space-y-8">
@@ -360,7 +383,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
           <h2 className="text-3xl font-black uppercase tracking-tighter leading-none text-white">My<br/><span className="text-blue-500">Campaigns</span></h2>
           <div className="flex items-center gap-2 mt-2">
             <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-            <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em]">Grid Node Control</p>
+            <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em]">Campaigns & Deals Homepage</p>
           </div>
         </div>
         <button onClick={() => setView('merchant_dashboard')} className="w-14 h-14 glass rounded-2xl flex items-center justify-center border-white/10 active:scale-90 transition-transform">
@@ -368,10 +391,76 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
         </button>
       </div>
 
+      {/* Campaign Usage Counter */}
+      {campaignUsage.has_subscription && (
+        <div className="glass rounded-2xl border-white/10 bg-slate-900/40 p-4 shadow-xl">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                <Megaphone className="w-5 h-5 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Campaigns</p>
+                <p className="text-lg font-black text-white">
+                  <span className={campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? "text-rose-500" : "text-emerald-500"}>
+                    {campaignUsage.campaigns_used}
+                  </span>
+                  <span className="text-slate-600">/{campaignUsage.campaigns_limit}</span>
+                  <span className="text-xs text-slate-500 ml-1">this month</span>
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase text-slate-500 tracking-wider">DOTD</p>
+                <p className="text-lg font-black text-white">
+                  <span className={campaignUsage.dotd_used >= campaignUsage.dotd_limit ? "text-rose-500" : "text-emerald-500"}>
+                    {campaignUsage.dotd_used}
+                  </span>
+                  <span className="text-slate-600">/{campaignUsage.dotd_limit}</span>
+                  <span className="text-xs text-slate-500 ml-1">this month</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Warning Messages */}
+          {(campaignUsage.campaigns_used >= campaignUsage.campaigns_limit || campaignUsage.dotd_used >= campaignUsage.dotd_limit) && (
+            <div className="mt-4 space-y-2">
+              {campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                  <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-rose-300">
+                    {campaignUsage.campaigns_used > campaignUsage.campaigns_limit
+                      ? <>You have exceeded your monthly campaign limit ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className="underline font-bold hover:text-rose-200 transition-colors">upgrade</button> your plan to create more campaigns.</>
+                      : <>You have reached your monthly campaign limit ({campaignUsage.campaigns_limit}/{campaignUsage.campaigns_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className="underline font-bold hover:text-rose-200 transition-colors">upgrade</button> your plan to create more campaigns.</>
+                    }
+                  </p>
+                </div>
+              )}
+              {campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                  <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-amber-300">
+                    {campaignUsage.dotd_used > campaignUsage.dotd_limit
+                      ? <>You have exceeded your monthly Deal of the Day limit ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className="underline font-bold hover:text-amber-200 transition-colors">upgrade</button> your plan.</>
+                      : <>You have reached your monthly Deal of the Day limit ({campaignUsage.dotd_limit}/{campaignUsage.dotd_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className="underline font-bold hover:text-amber-200 transition-colors">upgrade</button> your plan.</>
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Campaign Form */}
       <div ref={formRef} className="glass p-8 rounded-[3.5rem] border-white/10 bg-slate-900/40 shadow-2xl space-y-6">
         <h3 className="text-xl font-black uppercase tracking-tighter text-white text-center">
-          {editingDealId ? 'Update Grid Node' : 'Broadcast New Wave'}
+          {editingDealId ? 'Update Grid Node' : 'Broadcast New Deal Launch'}
         </h3>
         <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-center -mt-4">
           Synchronize your offer to the DealPro grid
@@ -521,7 +610,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
             {loading || isTranslating ? <Loader2 className="w-5 h-5 animate-spin" /> : (
               <div className="flex items-center gap-3">
                 <Megaphone className="w-5 h-5" />
-                <span className="text-[11px] font-black uppercase tracking-widest">{editingDealId ? 'Update Protocol' : 'Broadcast Wave'}</span>
+                <span className="text-[11px] font-black uppercase tracking-widest">Submit for Review</span>
               </div>
             )}
           </button>
@@ -531,22 +620,6 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
             </button>
           )}
         </form>
-      </div>
-
-      {/* Bulk Translation Button */}
-      <div className="text-center px-4">
-        <button 
-          onClick={handleBulkTranslate}
-          disabled={isBulkTranslating || loading}
-          className="text-blue-500 text-[10px] font-black uppercase tracking-widest hover:text-blue-400 active:scale-95 transition-all flex items-center gap-2 mx-auto"
-        >
-          {isBulkTranslating ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          Re-translate missing data
-        </button>
       </div>
 
       {/* Campaigns List */}
@@ -561,7 +634,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
             </p>
         </div>
 
-        <div className="glass p-1.5 rounded-2xl border-white/5 bg-white/5 flex gap-2">
+        <div ref={tabsRef} className="glass p-1.5 rounded-2xl border-white/5 bg-white/5 flex gap-2">
           <button
             onClick={() => setActiveListTab('active')}
             className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeListTab === 'active' ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' : 'text-slate-500 hover:text-slate-300'}`}
@@ -572,7 +645,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
             onClick={() => setActiveListTab('review')}
             className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeListTab === 'review' ? 'bg-amber-600 text-white shadow-xl shadow-amber-500/20' : 'text-slate-500 hover:text-slate-300'}`}
           >
-            Audit ({merchantDeals.filter(d => (d.status || 'active').toLowerCase() === 'review').length})
+            In Review ({merchantDeals.filter(d => (d.status || 'active').toLowerCase() === 'review').length})
           </button>
           {/* Show Needs Review tab only if there are campaigns with that status */}
           {merchantDeals.filter(d => (d.status || '').toLowerCase() === 'needs review').length > 0 && (
@@ -587,9 +660,51 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
             onClick={() => setActiveListTab('expired')}
             className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${activeListTab === 'expired' ? 'bg-rose-600 text-white shadow-xl shadow-rose-500/20' : 'text-slate-500 hover:text-slate-300'}`}
           >
-            History ({merchantDeals.filter(d => (d.status || 'active').toLowerCase() === 'expired').length})
+            Expired ({merchantDeals.filter(d => (d.status || 'active').toLowerCase() === 'expired').length})
           </button>
         </div>
+
+        {/* Animated Guide Banner for Needs Review Tab */}
+        {activeListTab === 'needs review' && (
+          <div className="animate-reveal mt-4">
+            <style>{`
+              @keyframes bounce-down {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(8px); }
+              }
+              @keyframes pulse-scale {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.1); }
+              }
+              .animate-bounce-down {
+                animation: bounce-down 1.5s ease-in-out infinite;
+              }
+              .animate-pulse-scale {
+                animation: pulse-scale 2s ease-in-out infinite;
+              }
+            `}</style>
+            <div className="glass p-6 rounded-2xl border-2 border-orange-500/40 bg-gradient-to-br from-orange-500/10 to-amber-500/10 backdrop-blur-md">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center shrink-0 animate-pulse-scale">
+                  <AlertCircle className="w-6 h-6 text-orange-400" strokeWidth={2.5} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-black text-orange-400 mb-1 uppercase tracking-wider">
+                    Action Required
+                  </p>
+                  <p className="text-xs text-slate-300 font-semibold leading-relaxed">
+                    The campaigns below need your attention. Click <span className="text-orange-400 font-black">EDIT</span> on each campaign to review and fix the issues mentioned by the admin.
+                  </p>
+                </div>
+                <div className="animate-bounce-down">
+                  <svg className="w-8 h-8 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {filteredDeals.length === 0 ? (
           <div className="text-center py-20 glass rounded-[2.5rem] border-white/10 mx-1 bg-slate-950/40">
