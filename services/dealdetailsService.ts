@@ -6,7 +6,7 @@ export const dealDetailsService = {
     console.log(`[dealDetailsService] Fetching details for campaign: ${campaignId}`);
 
     try {
-      const { data, error } = await supabase.functions.invoke('deal-detail', {
+      const { data, error } = await supabase.functions.invoke('get-one', {
         body: { campaignId },
       });
 

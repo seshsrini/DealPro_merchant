@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
       },
     });
 
-    const { consumerId, merchantId, campaignId, claimNo } = await req.json();
+    const { consumerId, merchantId, campaignId, claimNo, isDealOfDay } = await req.json();
 
     // 1. Validate Input Data
     if (!isString(consumerId) || consumerId.length < 1) {
@@ -185,13 +185,14 @@ Deno.serve(async (req) => {
     const { data, error } = await supabase
       .from('campaign_interactions')
       .insert([
-        { 
-          consumer_id: consumerId, 
-          merchant_id: merchantId, 
-          campaign_id: campaignId, 
-          claim_no: claimNo, 
-          is_redeemed: false, 
-          platform: 'mobile' 
+        {
+          consumer_id: consumerId,
+          merchant_id: merchantId,
+          campaign_id: campaignId,
+          claim_no: claimNo,
+          is_redeemed: false,
+          platform: 'mobile',
+          is_dotd: isDealOfDay || false
         }
       ])
       .select('claim_no')

@@ -198,6 +198,12 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
   // Real-time email validation
   const validateEmail = useCallback(async (value: string) => {
+    // Allow empty email for merchants
+    if (!value || value.length === 0) {
+      setEmailTaken(null);
+      setIsCheckingEmail(false);
+      return;
+    }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
       setEmailTaken(null);
       setIsCheckingEmail(false);
@@ -258,12 +264,19 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
     if (regRole === 'user' && value.length >= 7) {
       if (phoneDebounceRef.current) {
-        clearTimeout(phoneDebounceRef.current as number); 
+        clearTimeout(phoneDebounceRef.current as number);
       }
       phoneDebounceRef.current = setTimeout(() => validatePhoneNumber(value, selectedCountry.code), 500) as number;
     } else if (regRole === 'user') {
       setPhoneTaken(null);
       setIsCheckingPhone(false);
+    }
+
+    // Auto-trigger OTP for merchants when 10 digits are entered
+    if (regRole === 'merchant' && selectedCountry.code === '+91' && value.length === 10 && !isPhoneVerified) {
+      const fullPhoneNumber = selectedCountry.code + value;
+      setOtpPhoneNumber(fullPhoneNumber);
+      setShowOtpModal(true);
     }
   };
 
@@ -540,7 +553,14 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       if (regRole === 'user' && (usernameTaken || emailTaken || phoneTaken)) {
         throw new Error("Identifier conflicts exist.");
       }
-      if (isCheckingUsername || isCheckingEmail || isCheckingPhone || usernameTaken === null || emailTaken === null || (regRole === 'user' && regPhone.length > 0 && phoneTaken === null)) {
+      // For merchants, email is optional, so only check if email is provided
+      if (regRole === 'merchant' && email.length > 0 && (isCheckingUsername || isCheckingEmail || isCheckingPhone || usernameTaken === null || emailTaken === null)) {
+        throw new Error("Validation still in progress or inconclusive. Please ensure all identifiers are checked and available.");
+      }
+      if (regRole === 'user' && (isCheckingUsername || isCheckingEmail || isCheckingPhone || usernameTaken === null || emailTaken === null || (regPhone.length > 0 && phoneTaken === null))) {
+        throw new Error("Validation still in progress or inconclusive. Please ensure all identifiers are checked and available.");
+      }
+      if (regRole === 'merchant' && email.length === 0 && (isCheckingUsername || isCheckingPhone || usernameTaken === null)) {
         throw new Error("Validation still in progress or inconclusive. Please ensure all identifiers are checked and available.");
       }
 
@@ -654,9 +674,9 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
   const getPhonePlaceholder = () => {
     const commonPrefix = selectedCountry.code === '+91' ? '10 Digits - ' : '';
-    return regRole === 'user' 
-      ? `Phone Number (${commonPrefix}Optional)` 
-      : `Phone Number (${commonPrefix}Required)`
+    return regRole === 'user'
+      ? `Phone Number (${commonPrefix}Optional)`
+      : `GST registered phone number (${commonPrefix}Required)`
   }
 
   const canSubmit = useMemo(() => {
@@ -665,13 +685,30 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       return false; // Always block if any check is in progress
     }
     // CRITICAL FIX: Block if validation is inconclusive (null state)
-    if (usernameTaken === null || emailTaken === null || (regRole === 'user' && regPhone.length > 0 && phoneTaken === null)) {
+    // For merchants, email is optional, so emailTaken can be null if email is empty
+    if (usernameTaken === null || (regRole === 'user' && regPhone.length > 0 && phoneTaken === null)) {
+      return false;
+    }
+    // For users, email is required and must be validated
+    if (regRole === 'user' && emailTaken === null) {
+      return false;
+    }
+    // For merchants, only validate email if it's provided
+    if (regRole === 'merchant' && email.length > 0 && emailTaken === null) {
       return false;
     }
 
     // Basic fields must be filled and valid format
-    if (username.length < 3 || email.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !isValidPassword(password)) {
-      return false;
+    // For merchants, email is optional
+    if (regRole === 'user') {
+      if (username.length < 3 || email.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !isValidPassword(password)) {
+        return false;
+      }
+    } else {
+      // For merchant, email is optional, so only validate format if provided
+      if (username.length < 3 || (email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) || !isValidPassword(password)) {
+        return false;
+      }
     }
     // Check if identifiers are actually available (not taken)
     if (usernameTaken === true || emailTaken === true || phoneTaken === true) {
@@ -700,14 +737,14 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       if (merchantStores.length === 0) {
         return false;
       }
-      
+
       // All stores must be valid, including new pincode and lookup status
-      const allStoresValid = merchantStores.every(s => 
+      const allStoresValid = merchantStores.every(s =>
         s.store_name.length > 0 && // New validation for store name
-        s.street.length > 0 && 
+        s.street.length > 0 &&
         s.pincode.length === 6 && // Pincode must be 6 digits
         !s.isPincodeSearching && // No active pincode search
-        s.city.length > 0 && 
+        s.city.length > 0 &&
         s.state.length > 0 &&
         s.coords !== null && // GPS coordinates must be resolved
         (s.is24hrs || (s.shift1.length > 0 && s.shift2.length > 0))
@@ -777,7 +814,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                 {t('reg_merchant')}
               </h3>
               <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>
-                {t('reg_merchant_desc') || 'Empower your business with DealPro digital waves'}
+                {t('reg_merchant_desc') || <>Empower your business with <span className="text-white">Deal</span><span className="text-yellow-500">Pro</span> smart commerce</>}
               </p>
             </div>
           </div>
@@ -807,7 +844,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           <span className="text-yellow-500">{t('reg_title').split(' ').slice(1).join(' ')}</span>
         </h2>
         <p className={`font-medium leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>
-          {regRole === 'user' ? 'Join the network to discover local deals.' : 'Empower your business with DealPro digital waves.'}
+          {regRole === 'user' ? 'Join the network to discover local deals.' : <>Empower your business with <span className="text-white">Deal</span><span className="text-yellow-500">Pro</span> smart commerce.</>}
         </p>
       </div>
 
@@ -851,11 +888,11 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           <div className="relative group">
             <input
               type="email"
-              placeholder={t('reg_email')}
+              placeholder={regRole === 'merchant' ? 'Email Address (Optional)' : t('reg_email')}
               className="input-premium"
               value={email}
               onChange={handleEmailChange}
-              required
+              required={regRole === 'user'}
             />
             {isCheckingEmail && (
               <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />

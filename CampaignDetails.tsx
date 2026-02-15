@@ -4,8 +4,9 @@ import { Deal } from './types';
 import { QRCanvas } from './components/QRCanvas';
 import { LocationMap } from './components/LocationMap';
 import { useTranslation } from './contexts/LanguageContext';
-import { dealdetailsService } from './services/dealdetailsService'; 
-import { redeemNowservice } from './services/redeemNowservice'; 
+import { dealdetailsService } from './services/dealdetailsService';
+import { redeemNowservice } from './services/redeemNowservice';
+import { pinnedDealsService } from './services/pinnedDealsService'; 
 import {
   Heart,
   Loader2,
@@ -21,7 +22,8 @@ import {
   Calendar,
   CheckCircle2,
   Star,
-  Sparkles
+  Sparkles,
+  Pin
 } from 'lucide-react';
 
 interface CampaignDetailsProps {
@@ -51,28 +53,64 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
   const storeHrs = deal.storeHrs || 'Timing not available';
 
   const [showAlreadyClaimedPopup, setShowAlreadyClaimedPopup] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
+  const [isPinning, setIsPinning] = useState(false);
+  const [showPinTooltip, setShowPinTooltip] = useState(false);
+  const [showFavoriteTooltip, setShowFavoriteTooltip] = useState(false);
 
   // Scroll to top when component mounts
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
+  // Show tooltips on first visit
+  useEffect(() => {
+    // Check if tooltips have been shown before
+    const tooltipsShown = localStorage.getItem('deal_tooltips_shown');
+
+    if (!tooltipsShown) {
+      // Show tooltips after a brief delay
+      setTimeout(() => {
+        setShowPinTooltip(true);
+        setShowFavoriteTooltip(true);
+      }, 500);
+
+      // Hide tooltips after 10 seconds
+      setTimeout(() => {
+        setShowPinTooltip(false);
+        setShowFavoriteTooltip(false);
+        localStorage.setItem('deal_tooltips_shown', 'true');
+      }, 10500);
+    }
+  }, []);
+
   // FIX: Use campaign_id instead of id
   const isFullyRedeemed = redeemedIds.has(String(deal.campaign_id));
   const hasBeenClaimed = claimedIds.has(String(deal.campaign_id));
+
+  // Check if deal is pinned when component mounts
+  useEffect(() => {
+    const checkPinStatus = async () => {
+      if (user?.id && deal.campaign_id) {
+        const pinned = await pinnedDealsService.isPinned(user.id, deal.campaign_id);
+        setIsPinned(pinned);
+      }
+    };
+    checkPinStatus();
+  }, [user?.id, deal.campaign_id]);
 
   // FIX: LOGIC - SHOW POPUP ONLY ON "NEXT VISIT" TO PREVENT AGGRESSIVE UX
   useEffect(() => {
     if (hasBeenClaimed && !activeClaimId) {
       // FIX: Use campaign_id
-      const storageKey = `deal_visits_${user.id}_${deal.campaign_id}`; 
+      const storageKey = `deal_visits_${user.id}_${deal.campaign_id}`;
       const visitCount = parseInt(sessionStorage.getItem(storageKey) || '0', 10);
-      
+
       if (visitCount >= 1) {
         // This is at least the "next" visit after initial claim
         setShowAlreadyClaimedPopup(true);
       }
-      
+
       // Increment visit count for this specific deal node
       sessionStorage.setItem(storageKey, (visitCount + 1).toString());
     }
@@ -109,6 +147,43 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
     } catch (e) { return null; }
   };
 
+  const handleTogglePin = async () => {
+    if (!user?.id || !deal.campaign_id || !deal.merchantId) {
+      console.error('[Pin] Missing required data', {
+        userId: user?.id,
+        campaignId: deal.campaign_id,
+        merchantId: deal.merchantId
+      });
+      return;
+    }
+
+    console.log('[Pin] Attempting to toggle pin with:', {
+      userId: user.id,
+      campaignId: deal.campaign_id,
+      merchantId: deal.merchantId
+    });
+
+    setIsPinning(true);
+    try {
+      const { success, isPinned: newPinState } = await pinnedDealsService.togglePin(
+        user.id,
+        deal.campaign_id,
+        deal.merchantId
+      );
+
+      if (success) {
+        setIsPinned(newPinState);
+        console.log(`[Pin] Deal ${newPinState ? 'pinned' : 'unpinned'}`);
+      } else {
+        console.error('[Pin] Failed to toggle pin');
+      }
+    } catch (error) {
+      console.error('[Pin] Error toggling pin:', error);
+    } finally {
+      setIsPinning(false);
+    }
+  };
+
   return (
     <div className={`font-['Inter'] animate-reveal pb-32 transition-colors duration-500 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
        <div className="relative h-[45vh] w-full overflow-hidden bg-slate-900">
@@ -143,7 +218,7 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
        </div>
 
        <div className="px-6 -mt-16 relative z-10 space-y-8">
-          <div className={`relative p-8 rounded-[3rem] border backdrop-blur-3xl shadow-2xl transform transition-all hover:shadow-3xl overflow-hidden ${isDark ? "bg-slate-900/90 border-white/10 shadow-blue-500/10" : "bg-white border-slate-200 shadow-xl"}`}>
+          <div className={`relative p-8 pb-32 rounded-[3rem] border backdrop-blur-3xl shadow-2xl transform transition-all hover:shadow-3xl overflow-visible ${isDark ? "bg-slate-900/90 border-white/10 shadow-blue-500/10" : "bg-white border-slate-200 shadow-xl"}`}>
              {/* Top glow effect */}
              <div className="absolute -top-px left-1/2 -translate-x-1/2 w-1/2 h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
 
@@ -185,17 +260,79 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
              </div>
 
              <div className="relative flex gap-4">
-                {/* Enhanced favorite button */}
-                <button
-                  onClick={() => onToggleFavorite(deal)}
-                  className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all active:scale-95 border-2 shadow-lg ${
-                    isFav
-                      ? 'bg-gradient-to-br from-rose-500/30 to-pink-500/30 text-rose-400 border-rose-500/50 shadow-rose-500/30'
-                      : 'glass text-slate-500 border-white/10 hover:border-rose-500/30 hover:text-rose-400'
-                  }`}
-                >
-                   <Heart className={`w-7 h-7 transition-all ${isFav ? 'fill-current animate-pulse' : ''}`} />
-                </button>
+                {/* Enhanced favorite button with tooltip */}
+                <div className="relative">
+                  <button
+                    onClick={() => onToggleFavorite(deal)}
+                    className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all active:scale-95 border-2 shadow-lg ${
+                      isFav
+                        ? 'bg-gradient-to-br from-rose-500/30 to-pink-500/30 text-rose-400 border-rose-500/50 shadow-rose-500/30'
+                        : 'glass text-slate-500 border-white/10 hover:border-rose-500/30 hover:text-rose-400'
+                    }`}
+                  >
+                     <Heart className={`w-7 h-7 transition-all ${isFav ? 'fill-current animate-pulse' : ''}`} />
+                  </button>
+
+                  {/* Favorite Tooltip */}
+                  {showFavoriteTooltip && (
+                    <div className="absolute top-36 left-0 z-50 animate-bounce">
+                      <div className={`px-5 py-3 rounded-2xl shadow-2xl border-2 whitespace-nowrap min-w-max ${
+                        isDark
+                          ? 'bg-slate-900/95 border-rose-500/50 text-rose-300'
+                          : 'bg-white border-rose-400 text-rose-600'
+                      }`}>
+                        {/* Extended arrow pointing up to favorites icon */}
+                        <div className={`absolute -top-16 left-8 w-0.5 h-16 ${
+                          isDark ? 'bg-rose-500/50' : 'bg-rose-400'
+                        }`}></div>
+                        <div className={`absolute -top-2 left-7 w-5 h-5 rotate-45 border-l-2 border-t-2 ${
+                          isDark
+                            ? 'bg-slate-900/95 border-rose-500/50'
+                            : 'bg-white border-rose-400'
+                        }`}></div>
+                        <p className="text-sm font-bold">Click to save as favorite</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Pin button with tooltip */}
+                <div className="relative">
+                  <button
+                    onClick={handleTogglePin}
+                    disabled={isPinning}
+                    className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all active:scale-95 border-2 shadow-lg ${
+                      isPinned
+                        ? 'bg-gradient-to-br from-blue-500/30 to-indigo-500/30 text-blue-400 border-blue-500/50 shadow-blue-500/30'
+                        : 'glass text-slate-500 border-white/10 hover:border-blue-500/30 hover:text-blue-400'
+                    }`}
+                  >
+                    {isPinning ? (
+                      <Loader2 className="w-7 h-7 animate-spin" />
+                    ) : (
+                      <Pin className={`w-7 h-7 transition-all ${isPinned ? 'fill-current' : ''}`} />
+                    )}
+                  </button>
+
+                  {/* Pin Tooltip */}
+                  {showPinTooltip && (
+                    <div className="absolute top-20 left-0 z-50 animate-bounce">
+                      <div className={`px-5 py-3 rounded-2xl shadow-2xl border-2 whitespace-nowrap min-w-max ${
+                        isDark
+                          ? 'bg-slate-900/95 border-blue-500/50 text-blue-300'
+                          : 'bg-white border-blue-400 text-blue-600'
+                      }`}>
+                        {/* Arrow pointing up */}
+                        <div className={`absolute -top-2 left-8 w-4 h-4 rotate-45 border-l-2 border-t-2 ${
+                          isDark
+                            ? 'bg-slate-900/95 border-blue-500/50'
+                            : 'bg-white border-blue-400'
+                        }`}></div>
+                        <p className="text-sm font-bold">Click to pin this deal</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Enhanced redeem button */}
                 <div className="flex-1">
@@ -325,6 +462,14 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                    <LocationMap theme={theme} targetCoords={{ latitude: deal.latitude, longitude: deal.longitude }} selectedLocation={shopName} targetAddress={storeAddress} />
                    {/* Map overlay gradient */}
                    <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-slate-900/20 to-transparent"></div>
+                </div>
+
+                {/* Google Maps Attribution */}
+                <div className="flex justify-end mt-2 px-4">
+                  <span className={`text-[8px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
+                    Powered by{' '}
+                    <span className="font-semibold text-blue-500">Google Maps</span>
+                  </span>
                 </div>
              </div>
           </div>

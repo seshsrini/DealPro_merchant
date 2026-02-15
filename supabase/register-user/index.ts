@@ -108,7 +108,6 @@ Deno.serve(async (req) => {
       role: role,
       category: 'consumer', // Added as per new requirement
       active_status: true,
-      first_login_at: new Date().toISOString(), // Set first login on registration for consumers
       lang_preference: languagePreference || 'en', // Default to English if not provided
     };
 

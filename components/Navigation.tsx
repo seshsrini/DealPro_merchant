@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Home as HomeIcon, Ticket, Languages, ChevronDown, Search, CheckSquare } from 'lucide-react'; // Added CheckSquare
+import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Ticket, Languages, ChevronDown, Search, CheckSquare, TrendingUp, Image } from 'lucide-react'; // Added CheckSquare, TrendingUp, Image
 import { AppView, Locale, User as UserType } from '../types';
 import { useTranslation } from '../contexts/LanguageContext';
 
@@ -45,25 +45,17 @@ export const Header: React.FC<NavProps> = ({ currentView, setView, onBack, showB
           </button>
         ) : (
           <div className="flex items-center gap-3">
-            {isLoggedIn && (
-               <button onClick={() => setView(homeView)} className="w-12 h-12 glass rounded-[1.25rem] text-blue-500 active:scale-90 shadow-2xl flex items-center justify-center">
-                  <HomeIcon className="w-5 h-5" />
-               </button>
-            )}
-            
-            <div className="flex items-center gap-3">
-               <div className="w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
-                  <img
-                    src="/assets/logo.svg"
-                    alt="Logo"
-                    className="w-full h-full object-contain"
-                    onError={(e) => {
-                      e.currentTarget.src = "https://api.iconify.design/lucide:shopping-bag.svg?color=%23eab308";
-                    }}
-                  />
-               </div>
-               <span className={`font-black text-xl tracking-tighter uppercase leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>Deal<span className="text-yellow-500">Pro</span></span>
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
+              <img
+                src="/assets/logo.svg"
+                alt="Logo"
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  e.currentTarget.src = "https://api.iconify.design/lucide:shopping-bag.svg?color=%23eab308";
+                }}
+              />
             </div>
+            <span className={`font-black text-xl tracking-tighter uppercase leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>Deal<span className="text-yellow-500">Pro</span></span>
           </div>
         )}
       </div>
@@ -102,11 +94,11 @@ export const Header: React.FC<NavProps> = ({ currentView, setView, onBack, showB
   );
 };
 
-export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView) => void; theme: 'light' | 'dark'; user: UserType }> = ({ currentView, setView, theme, user }) => {
+export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView) => void; theme: 'light' | 'dark'; user: UserType; isLocationComplete?: boolean }> = ({ currentView, setView, theme, user, isLocationComplete = false }) => {
   const isDark = theme === 'dark';
   const tabs = [
-    { id: 'deals_of_day', label: "Today's Deal", icon: Zap },
-    { id: 'preferences', label: 'Explore', icon: Home },
+    { id: 'preferences', label: 'Explore', icon: Home }, // Moved to first position
+    { id: 'deals_of_day', label: "Today's Deal", icon: Zap, disabled: !isLocationComplete }, // Moved to second, add disabled state
     // Only show "Search Store" for consumers
     ...(user.role === 'consumer' ? [{ id: 'store_search', label: 'Stores', icon: Search }] : []),
     { id: 'my_redemptions', label: 'Redeemed', icon: Ticket },
@@ -120,13 +112,17 @@ export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = currentView === tab.id;
+            const isDisabled = (tab as any).disabled === true;
 
             return (
               <button
                 key={tab.id}
-                onClick={() => setView(tab.id as AppView)}
+                onClick={() => !isDisabled && setView(tab.id as AppView)}
+                disabled={isDisabled}
                 className={`flex flex-col items-center justify-center gap-1 transition-all duration-400 min-w-[64px] rounded-2xl h-16 ${
-                  isActive
+                  isDisabled
+                    ? 'text-slate-600 opacity-40 cursor-not-allowed'
+                    : isActive
                     ? 'text-white btn-premium h-16 shadow-2xl shadow-yellow-600/50 scale-110'
                     : (isDark ? 'text-slate-200 hover:text-white' : 'text-slate-700 hover:text-slate-900')
                 }`}
@@ -146,6 +142,7 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
   const tabs = [
     { id: 'merchant_dashboard', label: 'Console', icon: LayoutDashboard },
     { id: 'merchant_deals', label: 'My Campaigns', icon: List },
+    { id: 'merchant_deal_of_day', label: 'Deal of Day', icon: Zap },
     { id: 'merchant_analytics', label: 'Intel', icon: BarChart3 },
     { id: 'profile', label: 'Hub', icon: User },
   ];
@@ -182,6 +179,8 @@ export const DealAdminBottomNav: React.FC<{ currentView: AppView; setView: (view
   const tabs = [
     { id: 'dealadmin_review_deals', label: 'Review', icon: CheckSquare },
     { id: 'dealadmin_dashboard', label: 'Console', icon: LayoutDashboard },
+    { id: 'dealadmin_banners', label: 'Banners', icon: Image },
+    { id: 'dealadmin_analytics', label: 'Analytics', icon: TrendingUp },
     { id: 'profile', label: 'Admin', icon: User },
   ];
 

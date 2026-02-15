@@ -60,3 +60,7 @@ Thumbs.db
 # Misc
 *.tsbuildinfo
 .eslintcache
+
+# Firebase Service Account Keys (CRITICAL: Never commit!)
+*-firebase-adminsdk-*.json
+firebase-service-account.json

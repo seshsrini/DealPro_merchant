@@ -1,13 +1,13 @@
 
 
 import React, { useState } from 'react';
-import { 
-  User as UserIcon, 
-  ShieldCheck, 
-  ChevronRight, 
-  MessageSquareText, 
-  PenLine, 
-  Heart, 
+import {
+  User as UserIcon,
+  ShieldCheck,
+  ChevronRight,
+  MessageSquareText,
+  PenLine,
+  Heart,
   Share2,
   Send,
   Loader2,
@@ -19,6 +19,7 @@ import { AppView } from './types';
 import { userService } from './services/userService';
 import { useTranslation } from './contexts/LanguageContext';
 import { dealdetailsService } from './services/dealdetailsService';
+import { generateWhatsAppConsumerReferralLink } from './utils/referralUtils';
 
 const INVITE_COUNTRY_CODES = [
   { code: "+91", country: "India", flag: "🇮🇳" },
@@ -50,27 +51,49 @@ export const ConsumerProfile: React.FC<ConsumerProfileProps> = ({ user, setUser,
   const isPhoneInput = /^[0-9+]/.test(inviteValue);
 
   const handleManualInvite = async () => {
-    if (!inviteValue) return;
-    
     setIsInviting(true);
     setShowInviteSuccess(false);
 
-    // userService.logActivity now calls an Edge Function
-    // Fix: Added 'platform' property to satisfy ActivityLog interface
-    await userService.logActivity({
-      user_id: user.id,
-      event_type: 'click',
-      platform: 'mobile',
-      metadata: { action: 'refer_friend', identifier_type: isPhoneInput ? 'phone' : 'email' }
-    });
-    
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setIsInviting(false);
-    setShowInviteSuccess(true);
-    setInviteValue('');
-    
-    setTimeout(() => setShowInviteSuccess(false), 4000);
+    try {
+      let phoneNumber: string | undefined;
+
+      // If user entered a phone number, use it
+      if (inviteValue && isPhoneInput) {
+        const fullPhoneNumber = `${selectedCountry.code}${inviteValue.replace(/[^0-9]/g, '')}`;
+        phoneNumber = fullPhoneNumber.replace(/[^0-9]/g, '');
+      }
+
+      // Open WhatsApp with pre-filled message
+      const whatsappLink = generateWhatsAppConsumerReferralLink(
+        user.username || 'DealPro User',
+        phoneNumber
+      );
+
+      window.open(whatsappLink, '_blank');
+
+      // Log the activity
+      await userService.logActivity({
+        user_id: user.id,
+        event_type: 'click',
+        platform: 'mobile',
+        metadata: {
+          action: 'refer_friend_whatsapp',
+          has_phone: !!phoneNumber
+        }
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      setIsInviting(false);
+      setShowInviteSuccess(true);
+      setInviteValue('');
+
+      setTimeout(() => setShowInviteSuccess(false), 4000);
+    } catch (err: any) {
+      console.error("Failed to send invite:", err);
+      setIsInviting(false);
+      setShowInviteSuccess(false);
+    }
   };
 
   const handleHubClick = () => {

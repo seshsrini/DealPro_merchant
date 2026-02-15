@@ -1,12 +1,15 @@
 
 import { createClient, SupabaseClient, Session } from '@supabase/supabase-js';
 
-export const supabaseUrl = 'https://gkulyxglzqlhpqxlwjqw.supabase.co'; // Directly using your provided Supabase URL
-// IMPORTANT: Replace 'YOUR_SUPABASE_ANON_KEY' with your actual Supabase Anon Key from your project settings.
-// This key is used for client-side API calls to Supabase, including Edge Functions.
-// Go to your Supabase project settings -> API and copy the 'anon public' key.
-// >>> CRITICAL: Please REPLACE THE FOLLOWING KEY with your actual Supabase Anon Key:
-export const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFhYmFzZSIsInJlZiI6ImdrdWx5eGdsenFsaHBxeGx3anF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NjA4MjIsImV4cCI6MjA4NDQzNjgyMn0.liawuu5aYsaS6IcELQwGGzsho_ZGBTeGpAwPMCm2l7c'; 
+// Load Supabase credentials from environment variables for security
+export const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+// Validate that required environment variables are set
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('[SupabaseClient] CRITICAL: Missing Supabase credentials in environment variables!');
+  console.error('[SupabaseClient] Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in .env.local');
+} 
 
 // Log Supabase configuration for debugging immediately after definition
 console.log(`[SupabaseClient] Initializing with URL: ${supabaseUrl}`);
@@ -23,11 +26,22 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
  */
 export const updateSupabaseSession = async (session: Session | null) => {
   if (session) {
-    // Set the session tokens
-    await supabase.auth.setSession({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-    });
+    try {
+      // Set the session tokens
+      const { error } = await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
+
+      // Log but don't throw on verification errors - session is still set
+      if (error) {
+        console.warn('[SupabaseClient] Session verification warning (session still set):', error.message);
+      }
+    } catch (err: any) {
+      // Catch and log verification errors but don't block session setting
+      console.warn('[SupabaseClient] Session verification failed (session still set):', err.message);
+    }
+
     // Also update the global client's headers for direct RLS-protected table access
     // and for functions.invoke to implicitly include the Authorization header.
     (supabase as any).headers = {

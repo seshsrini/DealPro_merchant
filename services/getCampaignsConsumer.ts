@@ -86,4 +86,51 @@ export const getCampaignsConsumer = {
       throw e;
     }
   },
+
+  /**
+   * Fetches Deal of the Day campaigns based on locality coordinates OR city name.
+   * This function uses a dedicated Edge Function: 'get-deals-of-day'.
+   * Returns ONLY campaigns with is_deal_of_the_day=true, status=active, and today/future dates.
+   */
+  getDealsOfDay: async (searchParams: {
+    latitude?: number;
+    longitude?: number;
+    radius?: number;
+    cityFilter?: string;
+  }): Promise<Deal[]> => {
+    console.log("[getCampaignsConsumer.getDealsOfDay] Fetching Deal of the Day campaigns...");
+    console.log("[getCampaignsConsumer.getDealsOfDay] Search params:", searchParams);
+
+    const payload = {
+      latitude: searchParams.latitude || null,
+      longitude: searchParams.longitude || null,
+      radius: searchParams.radius || 5.0, // Default 5km radius
+      cityFilter: searchParams.cityFilter || null,
+    };
+
+    try {
+      const response = await supabase.functions.invoke('get-deals-of-day', {
+        method: 'POST',
+        body: payload,
+      });
+
+      if (response.error) {
+        console.error("[getCampaignsConsumer.getDealsOfDay] EF Execution Error:", response.error);
+        throw response.error;
+      }
+
+      const deals = response.data || [];
+
+      console.log(`[getCampaignsConsumer.getDealsOfDay] Successfully fetched ${deals.length} Deal of the Day campaigns.`);
+      return deals as Deal[];
+
+    } catch (e: any) {
+      console.error("[getCampaignsConsumer.getDealsOfDay] Critical Catch:", {
+        name: e.name,
+        message: e.message,
+        details: e
+      });
+      throw e;
+    }
+  },
 };

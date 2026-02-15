@@ -22,6 +22,9 @@ import { addCampaignService } from './services/addCampaignService';
 import { getCampaignsConsumer } from './services/getCampaignsConsumer'; // NEW: Import getCampaignsConsumer
 import { OtpVerificationModal } from './OtpVerificationModal'; // New Import
 import { fetchFavoritesService } from './services/fetchFavorites'; // NEW: Import fetchFavoritesService
+import { pinnedDealsService } from './services/pinnedDealsService'; // NEW: Import pinnedDealsService
+import { PrivacyPolicy } from './PrivacyPolicy'; // Privacy Policy component
+import { TermsOfService } from './TermsOfService'; // Terms of Service component
 
 const AppContent: React.FC = () => {
   const [view, setView] = useState<AppView>('splash');
@@ -31,6 +34,7 @@ const AppContent: React.FC = () => {
   const [hasBiometricSession, setHasBiometricSession] = useState(false);
   const [dealIdToEdit, setDealIdToEdit] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [preSelectedTab, setPreSelectedTab] = useState<'review' | 'active' | 'expired' | 'needs review' | null>(null);
 
   // User state now correctly initialized with the User interface structure
   const [user, setUser] = useState<User>({
@@ -42,6 +46,7 @@ const AppContent: React.FC = () => {
     access_token: null,
     refresh_token: null,
     onboarding_complete: false, // Initialize onboarding status
+    hasActiveSubscription: false, // Initialize subscription status
   });
   const [deals, setDeals] = useState<Deal[]>([]); // This will now only hold merchant deals or be an empty array for consumers
   const [adminDeals, setAdminDeals] = useState<Deal[]>([]); // NEW: State for DealAdmin deals
@@ -52,6 +57,9 @@ const AppContent: React.FC = () => {
   // NEW: State to hold full Deal objects for favorites
   const [favoriteDeals, setFavoriteDeals] = useState<Deal[]>([]);
 
+  // NEW: State to hold pinned deals
+  const [pinnedDeals, setPinnedDeals] = useState<any[]>([]);
+
   // OTP Modal State for Consumer Phone Verification during Registration
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpPhoneNumber, setOtpPhoneNumber] = useState('');
@@ -60,9 +68,12 @@ const AppContent: React.FC = () => {
   // New state for registration success message
   const [registrationSuccessMessage, setRegistrationSuccessMessage] = useState<string | null>(null);
 
+  // State to track if consumer has completed location selection
+  const [isLocationComplete, setIsLocationComplete] = useState(false);
+
 
   const navigateTo = (newView: AppView) => {
-    if (['home', 'deals', 'deals_of_day', 'favorites', 'merchant_dashboard', 'merchant_deals', 'profile', 'store_search', 'dealadmin_review_deals', 'dealadmin_dashboard'].includes(newView)) {
+    if (['home', 'deals', 'deals_of_day', 'favorites', 'merchant_dashboard', 'merchant_deals', 'profile', 'store_search', 'dealadmin_review_deals', 'dealadmin_dashboard', 'dealadmin_analytics'].includes(newView)) {
       setLastListView(newView);
     }
     setView(newView);
@@ -98,6 +109,33 @@ const AppContent: React.FC = () => {
       setLoading(false);
     }
   }, [user.role, user.access_token]); // Depend on user.role and access_token
+
+  // NEW: Function to fetch and update consumer pinned deals
+  const updateConsumerPinnedDeals = useCallback(async (consumerId: string) => {
+    if (!consumerId || user.role !== 'consumer') {
+      console.log("[App.tsx updateConsumerPinnedDeals] Not a consumer or user ID missing, skipping pinned deals fetch.");
+      setPinnedDeals([]);
+      return;
+    }
+    try {
+      console.log("[App.tsx updateConsumerPinnedDeals] Fetching pinned deals for consumer ID:", consumerId);
+      const pinsData = await pinnedDealsService.getUserPinnedDeals(consumerId);
+
+      console.log("[App.tsx updateConsumerPinnedDeals] Raw pinned deals data:", pinsData);
+
+      // Sort by created_at descending (newest first)
+      const sortedPins = pinsData.sort((a, b) => {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      setPinnedDeals(sortedPins);
+      console.log("[App.tsx updateConsumerPinnedDeals] Fetched and sorted pinned deals:", sortedPins.length, sortedPins);
+    } catch (err) {
+      console.error("[App.tsx - updateConsumerPinnedDeals] Failed to fetch pinned deals:", err);
+      console.error("[App.tsx - updateConsumerPinnedDeals] Error details:", err);
+      setPinnedDeals([]);
+    }
+  }, [user.role]); // Depend on user.role
 
   // refreshDeals is now primarily for Merchant Deals and consumer-specific redemptions
   const refreshDeals = useCallback(async () => {
@@ -285,6 +323,10 @@ const AppContent: React.FC = () => {
           />
           <main className="flex-1 overflow-y-auto hide-scrollbar pb-32">
             {!user.isLoggedIn ? (
+              view === 'privacy_policy' ?
+                <PrivacyPolicy setView={navigateTo} theme={theme} /> :
+              view === 'terms_of_service' ?
+                <TermsOfService setView={navigateTo} theme={theme} /> :
               view === 'register' ?
                 <MemberJoin
                   setView={navigateTo}
@@ -324,6 +366,8 @@ const AppContent: React.FC = () => {
                 onClearDealIdToEdit={() => setDealIdToEdit(null)}
                 isScanning={isScanning}
                 setIsScanning={setIsScanning}
+                preSelectedTab={preSelectedTab}
+                setPreSelectedTab={setPreSelectedTab}
               />
             ) : user.role === 'dealadmin' ? ( // NEW: Check for 'dealadmin' role
               <DealAdminStack
@@ -358,13 +402,16 @@ const AppContent: React.FC = () => {
                 theme={theme}
                 favoriteDeals={favoriteDeals} // NEW: Pass full favorite deals to ConsumerStack
                 updateConsumerFavorites={updateConsumerFavorites} // NEW: Pass the update function
+                pinnedDeals={pinnedDeals} // NEW: Pass pinned deals to ConsumerStack
+                updateConsumerPinnedDeals={updateConsumerPinnedDeals} // NEW: Pass the update function
+                onLocationComplete={setIsLocationComplete} // NEW: Callback to update location completion status
               />
             )}
           </main>
           {user.isLoggedIn && !['redemption_survey', 'onboarding', 'verify_phone'].includes(view) && (
-            user.role === 'merchant' ? <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} /> : 
+            user.role === 'merchant' ? <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} /> :
             user.role === 'dealadmin' ? <DealAdminBottomNav currentView={view} setView={navigateTo} theme={theme} /> : // NEW: Admin Bottom Nav
-            <BottomNav currentView={view} setView={navigateTo} theme={theme} user={user} />
+            <BottomNav currentView={view} setView={navigateTo} theme={theme} user={user} isLocationComplete={isLocationComplete} />
           )}
 
           <QRscan

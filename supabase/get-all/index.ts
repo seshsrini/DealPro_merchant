@@ -44,7 +44,8 @@ Deno.serve(async (req) => {
         user_lng: longitude,
         search_radius_km: radius,
       });
-      data = rpcData;
+      // Filter out Deal of the Day campaigns from RPC results
+      data = (rpcData || []).filter((d: any) => !d.is_deal_of_the_day);
       fetchError = rpcError;
     } else {
       // Standard fetch querying the VIEW for clean text filtering
@@ -52,10 +53,11 @@ Deno.serve(async (req) => {
         .from('campaigns')
         .select(`
           *,
-          user_profiles:merchant_id (store_name), 
+          user_profiles:merchant_id (store_name),
           merchant_stores:store_id (address, city, state, landmark, latitude, longitude, store_hrs)
         `)
-        .eq('status', 'active');
+        .eq('status', 'active')
+        .or('is_deal_of_the_day.is.null,is_deal_of_the_day.eq.false'); // Exclude Deal of the Day campaigns
 
       if (cityFilter) {
         // Querying the joined merchant_stores city
@@ -137,6 +139,7 @@ Deno.serve(async (req) => {
         city: d.merchant_stores?.city || d.city || '',
         state: d.merchant_stores?.state || d.state || '',
         image_name: d.image_name,
+        is_deal_of_the_day: d.is_deal_of_the_day || false, // Include Deal of the Day flag
         rating: merchantRatings.get(d.merchant_id) || 0
       };
     });

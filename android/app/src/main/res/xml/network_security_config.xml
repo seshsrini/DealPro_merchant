@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Disable cleartext traffic (HTTP) by default for security -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <!-- Trust preinstalled CAs (system certificates) -->
+            <certificates src="system" />
+            <!-- Optionally trust user-added CAs for debugging -->
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Allow cleartext traffic ONLY for localhost (development/debugging) -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+    </domain-config>
+
+    <!-- Enforce HTTPS for all production domains -->
+    <domain-config cleartextTrafficPermitted="false">
+        <!-- Supabase domain - HTTPS only -->
+        <domain includeSubdomains="true">supabase.co</domain>
+        <!-- Google Maps/APIs - HTTPS only -->
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <domain includeSubdomains="true">maps.googleapis.com</domain>
+        <!-- Add any other production domains here -->
+    </domain-config>
+</network-security-config>

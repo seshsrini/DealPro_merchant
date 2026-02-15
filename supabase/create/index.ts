@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
       merchant_id, shop_name, deal_heading, offer_value, category,
       long_description, latlong, start_date, end_date, store_id,
       image_url, image_name, localized_heading, localized_offer,
-      localized_description, localized_shop_name
+      localized_description, localized_shop_name, is_deal_of_the_day
     } = body;
 
     // Validate Input Data
@@ -182,7 +182,7 @@ Deno.serve(async (req) => {
       localized_shop_name,
       status: 'review', // Changed default status to 'review'
       // rating: 4.5, // Removed as per request
-      is_deal_of_the_day: false, // Corrected column name: is_dotd -> is_deal_of_the_day
+      is_deal_of_the_day: is_deal_of_the_day === true, // Use value from request, default to false
     };
 
     const { data, error } = await supabase

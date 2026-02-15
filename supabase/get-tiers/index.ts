@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.49.1';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -49,7 +49,12 @@ Deno.serve(async (req) => {
       .eq('is_active', true)
       .order('subscription_fee', { ascending: true });
 
-    if (tiersError) throw tiersError;
+    if (tiersError) {
+      console.error('[get-tiers EF] Database error:', tiersError);
+      throw tiersError;
+    }
+
+    console.log(`[get-tiers EF] Found ${data?.length || 0} active tiers for user ${user.id}`);
 
     return new Response(JSON.stringify(data || []), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

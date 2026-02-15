@@ -48,7 +48,7 @@ export const DealAdminEditCampaign: React.FC<DealAdminEditCampaignProps> = ({
   const [dealDescription, setDealDescription] = useState('');
   const [dealStartDate, setDealStartDate] = useState(tomorrow);
   const [dealEndDate, setDealEndDate] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('review');
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [comments, setComments] = useState<string>('');
   
   // Store State
@@ -86,7 +86,8 @@ export const DealAdminEditCampaign: React.FC<DealAdminEditCampaignProps> = ({
         setDealDescription(data.longDescription || ''); 
         setDealStartDate(data.start_date || tomorrow);
         setDealEndDate(data.end_date || '');
-        setSelectedStatus(data.status || 'review');
+        // Keep "Select Action" as default - don't pre-fill with existing status
+        // setSelectedStatus(data.status || 'review');
         setComments(data.comments || '');
         // FIX: Use store_id property
         setSelectedStoreId(data.store_id || '');
@@ -329,7 +330,7 @@ export const DealAdminEditCampaign: React.FC<DealAdminEditCampaignProps> = ({
           </div>
 
           <select className="input-premium h-8 text-[10px] px-3" value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
-            <option value="review">In Review</option>
+            <option value="" disabled>Select Action</option>
             <option value="needs review">Needs Review</option>
             <option value="active">Approve</option>
           </select>

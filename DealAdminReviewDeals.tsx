@@ -114,7 +114,7 @@ export const DealAdminReviewDeals: React.FC<DealAdminReviewDealsProps> = ({
   };
 
   return (
-    <div className="px-4 pt-4 pb-24 animate-reveal space-y-4">
+    <div className="px-3 pt-3 pb-24 animate-reveal space-y-3">
       {showApprovalSuccess && (
         <div className="fixed inset-0 z-[500] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-reveal">
           <div className="w-full max-w-xs glass rounded-2xl border-white/10 p-6 relative overflow-hidden shadow-[0_0_30px_rgba(16,185,129,0.2)] text-center">
@@ -129,92 +129,92 @@ export const DealAdminReviewDeals: React.FC<DealAdminReviewDealsProps> = ({
 
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-black uppercase tracking-tighter leading-none text-white">Admin<br/><span className="text-emerald-500">Console</span></h2>
+          <h2 className="text-xl font-black uppercase tracking-tighter leading-none text-white">Admin<br/><span className="text-emerald-500">Console</span></h2>
           <div className="flex items-center gap-1.5 mt-1">
             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-            <p className="text-[9px] font-black text-emerald-600 uppercase tracking-[0.2em]">Campaign Oversight</p>
+            <p className="text-[8px] font-black text-emerald-600 uppercase tracking-[0.2em]">Campaign Oversight</p>
           </div>
         </div>
-        <div className="w-10 h-10 glass rounded-xl flex items-center justify-center border-white/10">
-          <Globe className="w-5 h-5 text-slate-400" />
+        <div className="w-8 h-8 glass rounded-xl flex items-center justify-center border-white/10">
+          <Globe className="w-4 h-4 text-slate-400" />
         </div>
       </div>
 
-      <h3 className="text-base font-black uppercase tracking-tighter text-white">Campaigns in Review</h3>
-      <p className="text-[8px] font-black uppercase tracking-widest text-slate-500 -mt-2">
+      <h3 className="text-sm font-black uppercase tracking-tighter text-white">Campaigns in Review</h3>
+      <p className="text-[7px] font-black uppercase tracking-widest text-slate-500 -mt-2">
         Approve or modify pending campaigns
       </p>
 
       {loading && !activeProcessingDealId ? (
-        <div className="flex flex-col items-center justify-center py-12 gap-3">
-          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-          <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500 animate-pulse">Fetching review campaigns...</p>
+        <div className="flex flex-col items-center justify-center py-8 gap-2">
+          <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+          <p className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-500 animate-pulse">Fetching review campaigns...</p>
         </div>
       ) : deals.length === 0 ? (
-        <div className="text-center py-12 glass rounded-2xl border-white/10 mx-1 bg-slate-950/40">
-          <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto mb-3" />
-          <p className="text-[10px] font-bold text-slate-300 mb-3 px-6 leading-relaxed">
+        <div className="text-center py-8 glass rounded-2xl border-white/10 mx-1 bg-slate-950/40">
+          <ShieldCheck className="w-6 h-6 text-emerald-500 mx-auto mb-2" />
+          <p className="text-[9px] font-bold text-slate-300 mb-2 px-4 leading-relaxed">
             All campaigns are up-to-date and approved. No pending reviews.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           {deals.map(deal => (
-            <div key={deal.campaign_id} className="deal-card group animate-reveal flex flex-col bg-white/[0.03] border border-white/10 rounded-xl overflow-hidden shadow-xl">
-              <div className="relative aspect-[16/9] overflow-hidden bg-slate-800">
+            <div key={deal.campaign_id} className="deal-card group animate-reveal flex flex-col bg-white/[0.03] border border-white/10 rounded-lg overflow-hidden shadow-xl">
+              <div className="relative aspect-[4/3] overflow-hidden bg-slate-800">
                 <img src={getCampaignImage(deal)} alt={deal.shopName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
 
-                <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-blue-600/90 backdrop-blur-md border border-white/20 text-white text-[8px] font-black uppercase tracking-wider shadow-md">
+                <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-blue-600/90 backdrop-blur-md border border-white/20 text-white text-[7px] font-black uppercase tracking-wide shadow-md">
                   {deal.category}
                 </div>
 
-                <div className="absolute bottom-2 left-2 right-2">
-                  <p className="text-[8px] font-black uppercase tracking-[0.15em] text-blue-400 mb-0.5">{deal.shopName}</p>
-                  <h3 className="text-sm font-black text-white leading-tight uppercase line-clamp-2">
+                <div className="absolute bottom-1.5 left-1.5 right-1.5">
+                  <p className="text-[7px] font-black uppercase tracking-[0.1em] text-blue-400 mb-0.5 truncate">{deal.shopName}</p>
+                  <h3 className="text-[10px] font-black text-white leading-tight uppercase line-clamp-2">
                     {getLocalizedText(deal.localized_heading, deal.deal_heading || deal.details)}
                   </h3>
-                  <p className="text-amber-400 text-[9px] font-black uppercase tracking-wider mt-0.5">
+                  <p className="text-amber-400 text-[8px] font-black uppercase tracking-wide mt-0.5 truncate">
                     {getLocalizedText(deal.localized_offer, deal.offer_value)}
                   </p>
                 </div>
               </div>
 
-              <div className="p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 px-2 py-1 glass rounded-md border-white/10">
-                    <Calendar className="w-2.5 h-2.5 text-slate-500" />
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tight">
-                       Starts: {formatDate(deal.start_date)}
+              <div className="p-2 space-y-1.5">
+                <div className="flex items-center justify-between gap-1">
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 glass rounded border-white/10">
+                    <Calendar className="w-2 h-2 text-slate-500" />
+                    <span className="text-[6px] font-black text-slate-400 uppercase tracking-tight">
+                       {formatDate(deal.start_date)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 px-2 py-1 glass rounded-md border-white/10">
-                    <Clock className="w-2.5 h-2.5 text-slate-500" />
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tight">
-                       Ends: {formatDate(deal.end_date)}
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 glass rounded border-white/10">
+                    <Clock className="w-2 h-2 text-slate-500" />
+                    <span className="text-[6px] font-black text-slate-400 uppercase tracking-tight">
+                       {formatDate(deal.end_date)}
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center justify-end">
-                  <span className="flex items-center gap-1 text-amber-500 text-[9px]"><AlertCircle className="w-2.5 h-2.5" /> In Review</span>
+                <div className="flex items-center justify-center">
+                  <span className="flex items-center gap-0.5 text-amber-500 text-[7px]"><AlertCircle className="w-2 h-2" /> In Review</span>
                 </div>
 
-                <div className="flex gap-2 pt-1">
+                <div className="flex gap-1.5 pt-0.5">
                   <button
                     onClick={() => handleApproveCampaign(deal)}
                     disabled={loading && activeProcessingDealId === deal.campaign_id}
-                    className="flex-1 btn-premium bg-emerald-600/20 text-emerald-400 shadow-none border border-emerald-500/30 h-9 rounded-lg flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                    className="flex-1 btn-premium bg-emerald-600/20 text-emerald-400 shadow-none border border-emerald-500/30 h-7 rounded-lg flex items-center justify-center gap-1 active:scale-[0.98]"
                   >
-                    {loading && activeProcessingDealId === deal.campaign_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                    <span className="text-[9px] font-black uppercase tracking-wider">Approve</span>
+                    {loading && activeProcessingDealId === deal.campaign_id ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
+                    <span className="text-[7px] font-black uppercase tracking-wider">Approve</span>
                   </button>
                   <button
                     onClick={() => handleEditCampaign(deal)}
                     disabled={loading && activeProcessingDealId === deal.campaign_id}
-                    className="flex-1 btn-premium bg-indigo-600/20 text-indigo-400 shadow-none border border-indigo-500/30 h-9 rounded-lg flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                    className="flex-1 btn-premium bg-indigo-600/20 text-indigo-400 shadow-none border border-indigo-500/30 h-7 rounded-lg flex items-center justify-center gap-1 active:scale-[0.98]"
                   >
-                    <Edit2 className="w-3 h-3" />
-                    <span className="text-[9px] font-black uppercase tracking-wider">Edit</span>
+                    <Edit2 className="w-2.5 h-2.5" />
+                    <span className="text-[7px] font-black uppercase tracking-wider">Edit</span>
                   </button>
                 </div>
               </div>

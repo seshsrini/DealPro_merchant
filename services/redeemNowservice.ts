@@ -2,11 +2,11 @@
 import { supabase } from "./supabaseClient";
 
 export const redeemNowservice = {
-  createClaim: async (consumerId: string, merchantId: string, campaignId: string, claimNo: string) => {
-    console.log('[redeemNowservice] Creating claim with:', { consumerId, merchantId, campaignId, claimNo });
+  createClaim: async (consumerId: string, merchantId: string, campaignId: string, claimNo: string, isDealOfDay: boolean = false) => {
+    console.log('[redeemNowservice] Creating claim with:', { consumerId, merchantId, campaignId, claimNo, isDealOfDay });
 
     const { data, error } = await supabase.functions.invoke('create-claim', {
-      body: { consumerId, merchantId, campaignId, claimNo },
+      body: { consumerId, merchantId, campaignId, claimNo, isDealOfDay },
     });
 
     if (error) {

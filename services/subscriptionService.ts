@@ -10,9 +10,7 @@ export const subscriptionService = {
   getSubscriptionTiers: async (): Promise<SubscriptionTier[]> => {
     console.log("[subscriptionService] Invoking 'get-tiers' Edge Function.");
     try {
-      const { data, error } = await supabase.functions.invoke('get-tiers', {
-        method: 'GET', // Or POST if passing parameters later
-      });
+      const { data, error } = await supabase.functions.invoke('get-tiers');
 
       if (error) {
         console.error("[subscriptionService] Edge Function returned error:", error);

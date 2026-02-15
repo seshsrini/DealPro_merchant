@@ -103,6 +103,23 @@ Deno.serve(async (req) => {
       return createResponse({ error: 'Profile data incomplete or not found after authentication.' }, 404);
     }
 
+    // 4. Update first_login_at if this is the user's first actual login
+    if (!profileData.first_login_at) {
+      const { error: updateError } = await adminClient
+        .from('user_profiles')
+        .update({ first_login_at: new Date().toISOString() })
+        .eq('id', authData.user.id);
+
+      if (updateError) {
+        console.error('Login: Error updating first_login_at:', updateError.message);
+        // Don't fail the login if this update fails, just log it
+      } else {
+        // Update the profileData to include the new first_login_at value
+        profileData.first_login_at = new Date().toISOString();
+        console.log(`Login: Set first_login_at for user ${authData.user.id}`);
+      }
+    }
+
     // Return the combined user data including the role directly from user_profiles
     return createResponse({
       user: { ...profileData }, // profileData already contains 'role'

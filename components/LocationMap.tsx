@@ -1,6 +1,6 @@
 
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Navigation, ZoomIn, ZoomOut, LocateFixed, Compass } from 'lucide-react';
 
 interface LocationMapProps {
@@ -13,9 +13,9 @@ interface LocationMapProps {
   onRefreshLocation?: () => void;
 }
 
-export const LocationMap: React.FC<LocationMapProps> = ({ 
-  selectedLocation, 
-  theme, 
+export const LocationMap: React.FC<LocationMapProps> = ({
+  selectedLocation,
+  theme,
   userCoords,
   targetCoords,
   targetAddress,
@@ -26,6 +26,91 @@ export const LocationMap: React.FC<LocationMapProps> = ({
   const userMarkerRef = useRef<any | null>(null);
   const targetMarkerRef = useRef<any | null>(null);
   const isDark = theme === 'dark';
+  const [isGoogleMapsReady, setIsGoogleMapsReady] = useState(false);
+  const [mapLoadError, setMapLoadError] = useState<string | null>(null);
+  const checkIntervalRef = useRef<number | null>(null);
+  const timeoutRef = useRef<number | null>(null);
+
+  // Wait for Google Maps to load with timeout and retry
+  useEffect(() => {
+    let checkCount = 0;
+    const MAX_CHECKS = 50; // Check for 10 seconds (50 * 200ms)
+
+    const checkGoogleMaps = () => {
+      checkCount++;
+
+      if ((window as any).google && (window as any).google.maps) {
+        console.log('[LocationMap] Google Maps is ready');
+        setIsGoogleMapsReady(true);
+        setMapLoadError(null);
+
+        // Clear interval and timeout
+        if (checkIntervalRef.current) {
+          clearInterval(checkIntervalRef.current);
+          checkIntervalRef.current = null;
+        }
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+
+        return true;
+      }
+
+      if (checkCount >= MAX_CHECKS) {
+        console.error('[LocationMap] Google Maps failed to load after timeout');
+        setMapLoadError('Map service unavailable. Please refresh the page.');
+
+        if (checkIntervalRef.current) {
+          clearInterval(checkIntervalRef.current);
+          checkIntervalRef.current = null;
+        }
+
+        return false;
+      }
+
+      return false;
+    };
+
+    // Check immediately
+    if (!checkGoogleMaps()) {
+      // Start periodic checking
+      console.log('[LocationMap] Starting Google Maps availability checks');
+      checkIntervalRef.current = window.setInterval(() => {
+        checkGoogleMaps();
+      }, 200) as unknown as number;
+
+      // Set timeout for error
+      timeoutRef.current = window.setTimeout(() => {
+        if (!isGoogleMapsReady) {
+          console.error('[LocationMap] Google Maps timeout');
+          setMapLoadError('Map loading timeout. Please refresh the page.');
+          if (checkIntervalRef.current) {
+            clearInterval(checkIntervalRef.current);
+            checkIntervalRef.current = null;
+          }
+        }
+      }, 10000) as unknown as number; // 10 second timeout
+    }
+
+    // Listen for the custom event as backup
+    const handleGoogleMapsLoaded = () => {
+      console.log('[LocationMap] Google Maps loaded event received');
+      checkGoogleMaps();
+    };
+
+    window.addEventListener('google-maps-loaded', handleGoogleMapsLoaded);
+
+    return () => {
+      window.removeEventListener('google-maps-loaded', handleGoogleMapsLoaded);
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
+      }
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [isGoogleMapsReady]);
 
   const handleOpenNativeMap = () => {
     if (!targetAddress) return;
@@ -83,50 +168,108 @@ export const LocationMap: React.FC<LocationMapProps> = ({
   };
 
   useEffect(() => {
-    if (!mapContainerRef.current || mapInstanceRef.current || !(window as any).google) return;
+    if (!isGoogleMapsReady || !mapContainerRef.current || mapInstanceRef.current) return;
 
-    const initialLat = targetCoords?.latitude || userCoords?.latitude || 12.9716;
-    const initialLng = targetCoords?.longitude || userCoords?.longitude || 77.5946;
+    // Prioritize user coordinates, then target, then default to Bangalore
+    const initialLat = userCoords?.latitude || targetCoords?.latitude || 12.9716;
+    const initialLng = userCoords?.longitude || targetCoords?.longitude || 77.5946;
 
     try {
+      console.log('[LocationMap] Initializing map with coords:', { lat: initialLat, lng: initialLng, hasUserCoords: !!userCoords });
+
       const map = new (window as any).google.maps.Map(mapContainerRef.current, {
         center: { lat: initialLat, lng: initialLng },
-        zoom: 15,
+        zoom: userCoords ? 15 : 14, // Zoom in more if we have user location
         disableDefaultUI: true,
         mapId: 'DEMO_MAP_ID',
+        gestureHandling: 'greedy', // Better mobile experience
+        zoomControl: false,
+        mapTypeControl: false,
+        scaleControl: false,
+        streetViewControl: false,
+        rotateControl: false,
+        fullscreenControl: false
       });
+
       mapInstanceRef.current = map;
+      console.log('[LocationMap] Map initialized successfully');
     } catch (e) {
-      console.error("Map initialization failed", e);
+      console.error('[LocationMap] Map initialization failed:', e);
+      setMapLoadError('Failed to initialize map. Please refresh the page.');
     }
-  }, []);
+  }, [isGoogleMapsReady, userCoords, targetCoords]);
 
   useEffect(() => {
     const g = (window as any).google;
-    if (!mapInstanceRef.current || !userCoords || !g?.maps?.marker) return;
+
+    if (!mapInstanceRef.current) {
+      console.log('[LocationMap] Map instance not ready for user marker');
+      return;
+    }
+
+    if (!userCoords) {
+      console.log('[LocationMap] No user coordinates available for marker');
+      return;
+    }
+
+    // Wait for markers library to be ready
+    if (!g?.maps?.marker?.AdvancedMarkerElement) {
+      console.warn('[LocationMap] AdvancedMarkerElement not yet available for user marker, will retry when ready');
+
+      // Retry after a short delay
+      const retryTimer = setTimeout(() => {
+        console.log('[LocationMap] Retrying user marker creation...');
+      }, 500);
+
+      return () => clearTimeout(retryTimer);
+    }
+
     const pos = { lat: userCoords.latitude, lng: userCoords.longitude };
+
     try {
       if (userMarkerRef.current) {
+        console.log('[LocationMap] Updating user marker position:', pos);
         userMarkerRef.current.position = pos;
       } else {
+        console.log('[LocationMap] Creating NEW user marker at:', pos);
         userMarkerRef.current = new g.maps.marker.AdvancedMarkerElement({
           position: pos,
           map: mapInstanceRef.current,
           content: createUserMarkerContent(),
-          title: "You",
+          title: "Your Location",
         });
+        console.log('[LocationMap] User marker created successfully!');
       }
-    } catch (e) {}
-  }, [userCoords]);
+
+      // Center map on user location if no target
+      if (!targetCoords) {
+        console.log('[LocationMap] Centering map on user location');
+        mapInstanceRef.current.panTo(pos);
+        mapInstanceRef.current.setZoom(15);
+      }
+    } catch (e) {
+      console.error('[LocationMap] Error creating/updating user marker:', e);
+    }
+  }, [userCoords, targetCoords]);
 
   useEffect(() => {
     const g = (window as any).google;
-    if (!mapInstanceRef.current || !targetCoords || !g?.maps?.marker) return;
+    if (!mapInstanceRef.current || !targetCoords) return;
+
+    // Wait for markers library to be ready
+    if (!g?.maps?.marker?.AdvancedMarkerElement) {
+      console.warn('[LocationMap] AdvancedMarkerElement not yet available for target marker');
+      return;
+    }
+
     const pos = { lat: targetCoords.latitude, lng: targetCoords.longitude };
+
     try {
       if (targetMarkerRef.current) {
+        console.log('[LocationMap] Updating target marker position:', pos);
         targetMarkerRef.current.position = pos;
       } else {
+        console.log('[LocationMap] Creating target marker at:', pos);
         targetMarkerRef.current = new g.maps.marker.AdvancedMarkerElement({
           position: pos,
           map: mapInstanceRef.current,
@@ -134,8 +277,12 @@ export const LocationMap: React.FC<LocationMapProps> = ({
           title: selectedLocation,
         });
       }
+
+      // Center map on target location
       mapInstanceRef.current.panTo(pos);
-    } catch (e) {}
+    } catch (e) {
+      console.error('[LocationMap] Error creating/updating target marker:', e);
+    }
   }, [targetCoords, selectedLocation]);
 
   const handleZoomIn = () => mapInstanceRef.current?.setZoom(mapInstanceRef.current.getZoom() + 1);
@@ -149,6 +296,36 @@ export const LocationMap: React.FC<LocationMapProps> = ({
   return (
     <div className={`relative w-full h-full rounded-3xl border-2 overflow-hidden shadow-2xl transition-all duration-500 ${isDark ? 'border-slate-800' : 'border-blue-100'}`}>
       <div ref={mapContainerRef} className="w-full h-full z-0"></div>
+
+      {/* Loading/Error Indicator */}
+      {!isGoogleMapsReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90 z-[100]">
+          <div className="text-center px-6">
+            {mapLoadError ? (
+              <>
+                <div className="w-12 h-12 rounded-full bg-red-500/20 border-2 border-red-500 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <p className="text-red-400 text-xs font-bold mb-2">{mapLoadError}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-blue-600 text-white text-xs font-black uppercase tracking-wider rounded-xl active:scale-95 transition-transform"
+                >
+                  Refresh Page
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="text-white text-[10px] font-black uppercase tracking-widest">Loading Map...</p>
+                <p className="text-slate-500 text-[8px] font-medium mt-2">This may take a few seconds</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       
       {/* Zoom Controls Overlay */}
       <div className="absolute top-4 left-4 flex flex-col gap-2 z-[20]">

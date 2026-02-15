@@ -186,35 +186,113 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
       </div>
       
       <div className="space-y-6">
-        <div className="glass p-8 rounded-[3rem] border-white/5 bg-slate-900/40 shadow-2xl">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20">
-                <Target className="w-6 h-6 text-yellow-500" />
+        <div className="glass p-6 rounded-[2rem] border-white/5 bg-slate-900/40 shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20">
+                <Target className="w-4 h-4 text-yellow-500" />
               </div>
-              <p className={`font-black text-[12px] uppercase tracking-widest ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>{t('loc_radius')}</p>
+              <p className={`font-bold text-[11px] uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('loc_radius')}</p>
             </div>
-            <div className="text-right">
-              <span className="text-yellow-500 font-black tracking-tighter text-3xl">{searchRadius.toFixed(1)}</span>
-              <span className="text-[10px] font-black text-slate-600 uppercase ml-1">KM</span>
+            <div className="flex items-baseline gap-1">
+              <span className="text-yellow-500 font-bold text-2xl">{searchRadius.toFixed(1)}</span>
+              <span className="text-[9px] font-bold text-slate-500 uppercase">km</span>
             </div>
           </div>
-          <input
-            type="range" min="1.0" max="10.0" step="0.5"
-            value={searchRadius}
-            onChange={(e) => setSearchRadius(parseFloat(e.target.value))}
-            className="w-full accent-yellow-500 h-2 bg-slate-800 rounded-full appearance-none cursor-pointer"
-          />
+
+          {/* Sleek Minimalist Slider */}
+          <div className="relative py-2">
+            <input
+              type="range"
+              min="1.0"
+              max="5.0"
+              step="0.5"
+              value={searchRadius}
+              onChange={(e) => setSearchRadius(parseFloat(e.target.value))}
+              className="slider-modern w-full h-1.5 appearance-none bg-slate-800/50 rounded-full cursor-pointer outline-none"
+              style={{
+                background: `linear-gradient(to right, rgb(234 179 8) 0%, rgb(234 179 8) ${((searchRadius - 1) / (5 - 1)) * 100}%, rgb(30 41 59 / 0.5) ${((searchRadius - 1) / (5 - 1)) * 100}%, rgb(30 41 59 / 0.5) 100%)`
+              }}
+            />
+          </div>
+
+          {/* Minimal Distance Markers */}
+          <div className="flex justify-between px-0.5 mt-2">
+            {[1, 2, 3, 4, 5].map((label) => (
+              <span
+                key={label}
+                className={`text-[8px] font-bold transition-all duration-200 ${
+                  searchRadius === label
+                    ? 'text-yellow-500'
+                    : 'text-slate-600'
+                }`}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
 
+        <style jsx>{`
+          .slider-modern::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgb(250 204 21), rgb(234 179 8));
+            cursor: pointer;
+            border: 3px solid rgb(15 23 42);
+            box-shadow: 0 2px 8px rgba(234, 179, 8, 0.4);
+            transition: all 0.2s ease;
+          }
+
+          .slider-modern::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(234, 179, 8, 0.5);
+          }
+
+          .slider-modern::-webkit-slider-thumb:active {
+            transform: scale(1.05);
+          }
+
+          .slider-modern::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgb(250 204 21), rgb(234 179 8));
+            cursor: pointer;
+            border: 3px solid rgb(15 23 42);
+            box-shadow: 0 2px 8px rgba(234, 179, 8, 0.4);
+            transition: all 0.2s ease;
+          }
+
+          .slider-modern::-moz-range-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(234, 179, 8, 0.5);
+          }
+
+          .slider-modern::-moz-range-thumb:active {
+            transform: scale(1.05);
+          }
+        `}</style>
+
         <div className="h-64 w-full rounded-[3rem] overflow-hidden border border-white/5 shadow-2xl relative group">
-            <LocationMap 
-              theme={theme} 
-              userCoords={userCoords || undefined} 
-              targetCoords={manualCoords || undefined} 
+            <LocationMap
+              theme={theme}
+              userCoords={userCoords || undefined}
+              targetCoords={manualCoords || undefined}
               selectedLocation={isAutoDetect ? (resolvedAddress || 'GPS Center') : (localities.find(l => l.id === selectedLocalityId)?.display_name || 'Manual Selection')}
               onRefreshLocation={requestGpsPosition}
             />
+        </div>
+
+        {/* Google Maps Attribution */}
+        <div className="flex justify-end mt-2">
+          <span className={`text-[8px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
+            Powered by{' '}
+            <span className="font-semibold text-blue-500">Google Maps</span>
+          </span>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

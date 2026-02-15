@@ -3,11 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { AppView } from './types';
 import { userService } from './services/userService';
 import { biometricService } from './services/biometricService';
+import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { ForgotPwd } from './forgotpwd';
 import { useTranslation } from './contexts/LanguageContext';
-import { 
-  User as UserIcon, 
-  Lock, 
+import {
+  User as UserIcon,
+  Lock,
   Loader2,
   Eye,
   EyeOff,
@@ -38,9 +39,8 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
   const { t, setLocale } = useTranslation();
   const isDark = theme === 'dark';
 
-  const handlePostLoginNavigation = (userProfile: any, session: any) => {
+  const handlePostLoginNavigation = async (userProfile: any, session: any) => {
     const userRole = userProfile.role || 'consumer';
-    const onboardingDone = userProfile.onboarding_complete;
 
     // Set language preference from user profile
     if (userProfile.lang_preference) {
@@ -48,20 +48,34 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
       setLocale(userProfile.lang_preference);
     }
 
+    // Check subscription status for merchants
+    let subscriptionInfo: { hasActiveSubscription: boolean; subscription_status?: string; current_tier_id?: number } = {
+      hasActiveSubscription: false
+    };
+    if (userRole === 'merchant') {
+      subscriptionInfo = await merchantSubscriptionService.checkActiveSubscription(userProfile.id);
+      console.log('[AuthStack] Merchant subscription check:', subscriptionInfo);
+    }
+
     const updatedUser = {
       ...userProfile,
       isLoggedIn: true,
       access_token: session.access_token,
       refresh_token: session.refresh_token,
+      hasActiveSubscription: subscriptionInfo.hasActiveSubscription,
+      subscription_status: subscriptionInfo.subscription_status,
+      current_tier_id: subscriptionInfo.current_tier_id,
     };
     setUser(updatedUser);
 
     if (userRole === 'merchant') {
-      setView('merchant_dashboard');
+      // Route to subscriptions if no active subscription
+      setView(subscriptionInfo.hasActiveSubscription ? 'merchant_dashboard' : 'merchant_subscriptions');
     } else if (userRole === 'dealadmin') {
       setView('dealadmin_review_deals');
     } else { // 'consumer' role
-      setView(onboardingDone ? 'home' : 'onboarding');
+      // ALWAYS show onboarding/hoardings on login (not just first time)
+      setView('onboarding');
     }
   };
 
@@ -188,10 +202,31 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
           </button>
         </form>
 
+        {/* Terms of Service and Privacy Policy Notice */}
+        <div className="mt-6 text-center px-4">
+          <p className={`text-[9px] leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-700'}`}>
+            By continuing, you agree to our{' '}
+            <button
+              onClick={() => setView('terms_of_service')}
+              className={`underline ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} transition-colors`}
+            >
+              Terms of Service
+            </button>{' '}
+            and acknowledge that you have read our{' '}
+            <button
+              onClick={() => setView('privacy_policy')}
+              className={`underline ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} transition-colors`}
+            >
+              Privacy Policy
+            </button>{' '}
+            to learn how we collect, use and share your data.
+          </p>
+        </div>
+
         <div className="mt-8 text-center space-y-4 pb-20">
-          <button onClick={() => setView('forgot_password')} className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-slate-500' : 'text-slate-800'}`}>{t('login_forgot') || 'Lost Credentials?'}</button>
+          <button onClick={() => setView('forgot_password')} className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-slate-500' : 'text-slate-800'}`}>{t('login_forgot') || 'Forgot Password?'}</button>
           <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-slate-500' : 'text-slate-800'}`}>
-            {t('login_register_hint') || 'New to the Grid?'} <button onClick={() => setView('register')} className={`ml-1 border-b ${isDark ? 'text-white border-white/20' : 'text-yellow-600 border-yellow-600/30'}`}>{t('login_register_action') || 'Join Now'}</button>
+            {t('login_register_hint') || 'New to the Grid?'} <button onClick={() => setView('register')} className={`ml-1 border-b ${isDark ? 'text-white border-white/20' : 'text-yellow-600 border-yellow-600/30'}`}>{t('login_register_action') || 'Signup'}</button>
           </p>
         </div>
       </div>

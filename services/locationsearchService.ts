@@ -211,11 +211,25 @@ export const locationsearchService = {
   // Remains client-side (Google Maps API)
   geocodeAddressWithAI: async (address: string): Promise<{ latitude: number, longitude: number } | null> => {
     const gWindow = window as any;
-    if (!gWindow.google || !gWindow.google.maps) {
-      console.error("Google Maps SDK not loaded");
+
+    // Wait for Google Maps to load (max 10 seconds)
+    const waitForGoogleMaps = async (): Promise<boolean> => {
+      for (let i = 0; i < 20; i++) { // 20 attempts * 500ms = 10 seconds
+        if (gWindow.google && gWindow.google.maps && gWindow.google.maps.Geocoder) {
+          console.log('[LocationSearch] Google Maps is ready for geocoding');
+          return true;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      return false;
+    };
+
+    const isReady = await waitForGoogleMaps();
+    if (!isReady) {
+      console.error("Google Maps SDK not loaded after waiting");
       return null;
     }
-    
+
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         console.error("Geocoding timed out for address:", address);

@@ -46,21 +46,28 @@ export const QRscan: React.FC<QRscanProps> = ({ isOpen, onClose, user, theme }) 
   }, [isHardwareActive]);
 
   const startHardwareScan = async () => {
+    console.log('[QRscan] Starting hardware scan, platform:', platform);
+
     if (platform === 'web') {
       alert("Hardware scanning is only available on native builds. Optical sensors are simulated via manual input in the browser environment.");
       return;
     }
 
     try {
+      console.log('[QRscan] Checking camera permissions...');
       const status = await BarcodeScanner.checkPermissions();
+      console.log('[QRscan] Permission status:', status);
       let cameraStatus = status.camera;
 
       if (cameraStatus === 'prompt' || cameraStatus === 'prompt-with-rationale') {
+        console.log('[QRscan] Requesting camera permissions...');
         const request = await BarcodeScanner.requestPermissions();
+        console.log('[QRscan] Permission request result:', request);
         cameraStatus = request.camera;
       }
 
       if (cameraStatus === 'denied') {
+        console.warn('[QRscan] Camera permission denied');
         const confirmSettings = confirm("Camera access is blocked. Authorize sensor in device settings?");
         if (confirmSettings) {
           await BarcodeScanner.openSettings();
@@ -69,27 +76,53 @@ export const QRscan: React.FC<QRscanProps> = ({ isOpen, onClose, user, theme }) 
       }
 
       if (cameraStatus === 'granted') {
+        console.log('[QRscan] Camera permission granted, initializing scanner...');
         setIsHardwareActive(true);
+
+        console.log('[QRscan] Hiding background...');
         await BarcodeScanner.hideBackground();
+        console.log('[QRscan] Background hidden, starting scan...');
 
         const { barcodes } = await BarcodeScanner.scan({
           formats: [BarcodeFormat.QrCode],
         });
+        console.log('[QRscan] Scan completed, barcodes found:', barcodes.length);
 
+        console.log('[QRscan] Showing background...');
         setIsHardwareActive(false);
         await BarcodeScanner.showBackground();
+        console.log('[QRscan] Background shown');
 
         if (barcodes.length > 0) {
           const value = barcodes[0].displayValue;
+          console.log('[QRscan] Processing scanned value:', value);
           handleProcessScan(value);
+        } else {
+          console.log('[QRscan] No barcodes detected');
         }
+      } else {
+        console.error('[QRscan] Unexpected camera status:', cameraStatus);
       }
-    } catch (e) {
-      console.error('Hardware Scan Failed:', e);
+    } catch (e: any) {
+      console.error('[QRscan] Hardware Scan Failed:', {
+        error: e,
+        message: e?.message,
+        code: e?.code,
+        stack: e?.stack
+      });
       setIsHardwareActive(false);
-      await BarcodeScanner.showBackground();
+
+      // Attempt to recover UI state
+      try {
+        console.log('[QRscan] Attempting to restore background...');
+        await BarcodeScanner.showBackground();
+        console.log('[QRscan] Background restored');
+      } catch (recoveryError) {
+        console.error('[QRscan] Failed to restore background:', recoveryError);
+      }
+
       document.body.classList.remove('barcode-scanner-active');
-      alert("Optical sensor uplink failed.");
+      alert(`Optical sensor uplink failed: ${e?.message || 'Unknown error'}`);
     }
   };
 
@@ -127,9 +160,34 @@ export const QRscan: React.FC<QRscanProps> = ({ isOpen, onClose, user, theme }) 
     try {
       let dataToVerify: any = input;
 
+      // Enhanced JSON validation to prevent injection attacks
       if (input.startsWith('{')) {
         try {
           const payload = JSON.parse(input);
+
+          // Validate payload structure - only allow expected properties
+          const allowedKeys = ['campaign_id', 'merchant_id', 'user_id', 'timestamp'];
+          const payloadKeys = Object.keys(payload);
+
+          // Check for unexpected properties (potential injection)
+          const hasUnexpectedKeys = payloadKeys.some(key => !allowedKeys.includes(key));
+          if (hasUnexpectedKeys) {
+            console.warn('[QRscan] Suspicious payload with unexpected keys:', payloadKeys);
+            setScanResult('invalid');
+            setErrorMessage("Invalid voucher format detected.");
+            setIsProcessingScan(false);
+            return;
+          }
+
+          // Validate data types
+          if (payload.campaign_id && typeof payload.campaign_id !== 'string') {
+            throw new Error('Invalid campaign_id type');
+          }
+          if (payload.merchant_id && typeof payload.merchant_id !== 'string') {
+            throw new Error('Invalid merchant_id type');
+          }
+
+          // Check merchant authorization
           if (payload.campaign_id && payload.merchant_id) {
             if (payload.merchant_id !== user.id) {
               setScanResult('unauthorized');
@@ -140,6 +198,8 @@ export const QRscan: React.FC<QRscanProps> = ({ isOpen, onClose, user, theme }) 
           }
           dataToVerify = payload;
         } catch (e) {
+          console.error('[QRscan] JSON parsing failed:', e);
+          // If JSON parsing fails, treat as plain text input
           dataToVerify = input;
         }
       }

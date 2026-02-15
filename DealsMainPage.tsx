@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Loader2, MapPin as MapPinIcon, Cloud, Zap, Compass, Star, Clock, Tag, Sparkles, Filter, Store } from 'lucide-react';
+import { Loader2, MapPin as MapPinIcon, Cloud, Zap, Compass, Star, Clock, Tag, Sparkles, Filter, Store, Search } from 'lucide-react';
 import { Deal, AppView, User } from './types'; // Import User type
 import { useTranslation } from './contexts/LanguageContext';
 import { addCampaignService } from './services/addCampaignService'; // Import addCampaignService to fetch categories
@@ -25,6 +25,7 @@ interface DealsMainPageProps {
   cityForFilterButton: string | null; // NEW: Explicit city name for the button
   selectedStoreNameForSearch: string | null; // NEW: Prop for selected store name
   theme?: 'dark' | 'light';
+  onNewLocationSearch?: () => void; // NEW: Callback for clearing location cache and starting new search
 }
 
 const DEFAULT_DEAL_IMAGE = 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=600&q=80';
@@ -51,7 +52,8 @@ export const DealsMainPage: React.FC<DealsMainPageProps> = ({
   onShowCityDeals,
   cityForFilterButton,
   selectedStoreNameForSearch, // Destructure new prop
-  theme
+  theme,
+  onNewLocationSearch // Destructure new callback
 }) => {
   const [internalActiveView, setInternalActiveView] = useState<string>(view);
   const { t, getLocalizedText } = useTranslation();
@@ -134,24 +136,39 @@ export const DealsMainPage: React.FC<DealsMainPageProps> = ({
   return (
     <div className="px-6 pt-6 pb-32 animate-reveal">
       {(view === 'home' || view === 'deals' || view === 'deals_of_day') && (
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <h2 className="text-3xl font-black uppercase tracking-tighter leading-none text-white">
-              {selectedStoreNameForSearch ? selectedStoreNameForSearch : (view === 'deals_of_day' ? t('home_daily_waves') : t('home_deals'))}<br />
-              <span className="text-blue-500">{selectedStoreNameForSearch ? t('home_deals') : (view === 'deals_of_day' ? '' : t('home_near_you'))}</span>
-            </h2>
-            <div className="flex items-center gap-2 mt-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-              <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em]">{t('home_your_sector')}</p>
+        <>
+          {/* NEW: New Search Link */}
+          {onNewLocationSearch && (
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={onNewLocationSearch}
+                className="text-blue-500 text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center gap-1.5 px-3 py-2 glass rounded-xl border-white/10 bg-blue-500/5 shadow-inner hover:bg-blue-500/10"
+              >
+                <Search className="w-3.5 h-3.5" />
+                New Search
+              </button>
             </div>
-          </div>
-          {/* Hide adjust location button if a specific store is selected */}
-          {!selectedStoreNameForSearch && (
-            <button onClick={onAdjustLocation} className="text-blue-500 text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all">
-              <Zap className="w-4 h-4 inline-block mr-1" />{locationLabel.toUpperCase()}
-            </button>
           )}
-        </div>
+
+          <div className="flex items-end justify-between mb-8">
+            <div>
+              <h2 className="text-3xl font-black uppercase tracking-tighter leading-none text-white">
+                {selectedStoreNameForSearch ? selectedStoreNameForSearch : (view === 'deals_of_day' ? t('home_daily_waves') : t('home_deals'))}<br />
+                <span className="text-blue-500">{selectedStoreNameForSearch ? t('home_deals') : (view === 'deals_of_day' ? '' : t('home_near_you'))}</span>
+              </h2>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em]">{t('home_your_sector')}</p>
+              </div>
+            </div>
+            {/* Hide adjust location button if a specific store is selected */}
+            {!selectedStoreNameForSearch && (
+              <button onClick={onAdjustLocation} className="text-blue-500 text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all">
+                <Zap className="w-4 h-4 inline-block mr-1" />{locationLabel.toUpperCase()}
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       {view === 'profile' && user && (
@@ -239,11 +256,28 @@ export const DealsMainPage: React.FC<DealsMainPageProps> = ({
                   <div className="absolute top-3 left-3 px-2 py-1 rounded-md bg-blue-600/90 backdrop-blur-md border border-white/20 text-white text-[8px] font-black uppercase tracking-widest shadow-md">
                     {deal.category}
                   </div>
-                  {deal.isDealOfTheDay && (
-                    <div className="absolute top-3 right-3 px-2 py-1 rounded-md bg-amber-500/90 backdrop-blur-md border border-white/20 text-white text-[8px] font-black uppercase tracking-widest shadow-md flex items-center gap-1">
-                      <Sparkles className="w-2.5 h-2.5 fill-white" />DOTD
-                    </div>
-                  )}
+                  {(() => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const startDate = new Date(deal.start_date);
+                    startDate.setHours(0, 0, 0, 0);
+                    const isFuture = startDate > today;
+
+                    if (isFuture) {
+                      return (
+                        <div className="absolute top-3 right-3 px-2 py-1 rounded-md bg-green-500/90 backdrop-blur-md border border-white/20 text-white text-[8px] font-black uppercase tracking-widest shadow-md flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5" />Coming Soon
+                        </div>
+                      );
+                    } else if (deal.isDealOfTheDay) {
+                      return (
+                        <div className="absolute top-3 right-3 px-2 py-1 rounded-md bg-amber-500/90 backdrop-blur-md border border-white/20 text-white text-[8px] font-black uppercase tracking-widest shadow-md flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5 fill-white" />DOTD
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   <div className="absolute bottom-3 left-3 right-3">
                     <p className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-400 mb-1">{getLocalizedText(deal.localized_shop_name, deal.shopName)}</p>
                     <h3 className="text-sm font-black text-white leading-tight uppercase line-clamp-2">

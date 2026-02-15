@@ -8,7 +8,9 @@ import { getCampaignsConsumer } from './services/getCampaignsConsumer';
 import { redemptionHistoryService } from './services/redemptionHistoryService';
 import { LocationSearch } from './LocationSearch';
 import { DealsMainPage } from './DealsMainPage';
+import { DealOfTheDayPage } from './DealOfTheDayPage'; // NEW: Import Deal of the Day component
 import { CampaignDetails } from './CampaignDetails.tsx';
+import { DealOfTheDayDetails } from './DealOfTheDayDetails.tsx';
 import { MyRedemptions } from './myredemption';
 import { EditProfile } from './EditProfile';
 import { CampaignSurvey } from './CampaignSurvey';
@@ -20,6 +22,7 @@ import { RedemptionSurvey } from './RedemptionSurvey';
 import { locationsearchService } from './services/locationsearchService'; // Import for reverse geocoding
 import { StoreSearchScreen } from './StoreSearchScreen'; // NEW: Import StoreSearchScreen
 import { RatingPopup } from './RatingPopup'; // Import RatingPopup
+import { HelpFeedback } from './HelpFeedback'; // Import HelpFeedback
 
 const calculateDistance = (lat1: number | null, lon1: number | null, lat2: number | null, lon2: number | null) => {
   if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return Infinity;
@@ -33,17 +36,20 @@ const calculateDistance = (lat1: number | null, lon1: number | null, lat2: numbe
 interface ConsumerStackProps {
   view: AppView;
   setView: (view: AppView) => void;
-  user: User; 
-  setUser: (user: User) => void; 
+  user: User;
+  setUser: (user: User) => void;
   deals: Deal[]; // This `deals` prop is largely unused by ConsumerStack now, as deal fetching is handled internally.
   favoriteIds: Map<string, string>;
   setFavoriteIds: React.Dispatch<React.SetStateAction<Map<string, string>>>;
   redeemedIds: Set<string>;
   setRedeemedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
-  loading: boolean; 
+  loading: boolean;
   theme: 'light' | 'dark';
-  favoriteDeals: Deal[]; 
-  updateConsumerFavorites: (userId: string) => Promise<void>; 
+  favoriteDeals: Deal[];
+  updateConsumerFavorites: (userId: string) => Promise<void>;
+  pinnedDeals: any[]; // NEW: Pinned deals from parent
+  updateConsumerPinnedDeals: (userId: string) => Promise<void>; // NEW: Function to update pinned deals
+  onLocationComplete?: (isComplete: boolean) => void; // NEW: Callback to notify when location is set
 }
 
 const generateCustomClaimId = (): string => {
@@ -70,17 +76,20 @@ const generateCustomClaimId = (): string => {
   return result;
 };
 
-export const ConsumerStack: React.FC<ConsumerStackProps> = ({ 
+export const ConsumerStack: React.FC<ConsumerStackProps> = ({
   view, setView, user, setUser, deals, favoriteIds, setFavoriteIds, redeemedIds, setRedeemedIds, loading, theme,
-  favoriteDeals, updateConsumerFavorites 
+  favoriteDeals, updateConsumerFavorites, pinnedDeals, updateConsumerPinnedDeals, onLocationComplete
 }) => {
   const [consumerDeals, setConsumerDeals] = useState<Deal[]>([]);
+  const [dealOfDayDeals, setDealOfDayDeals] = useState<Deal[]>([]); // NEW: Separate state for Deal of the Day
   const [isDealsLoading, setIsDealsLoading] = useState(false);
+  const [isDealOfDayLoading, setIsDealOfDayLoading] = useState(false); // NEW: Separate loading for Deal of the Day
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null); // Initial value set to null directly
+  const [isDealOfTheDayDetail, setIsDealOfTheDayDetail] = useState(false); // Track if viewing Deal of the Day details
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [activeClaimId, setActiveClaimId] = useState<string | null>(null);
   const [activeClaimIdFromInteraction, setActiveClaimIdFromInteraction] = useState<string | null>(null);
-  const [searchRadius, setSearchRadius] = useState<number>(2.0); 
+  const [searchRadius, setSearchRadius] = useState<number>(2.0);
   const [locationLabel, setLocationLabel] = useState('Local Area');
   const [isAutoDetect, setIsAutoDetect] = useState(true);
   const [cityFilter, setCityFilter] = useState<string | null>(null); // This drives the backend API call
@@ -98,6 +107,58 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
   const [fullHistory, setFullHistory] = useState<CampaignInteraction[]>(new Array<CampaignInteraction>()); // Fix: Corrected initialization of fullHistory
   const [showRatingPopup, setShowRatingPopup] = useState(false);
   const [hasCheckedRatings, setHasCheckedRatings] = useState(false);
+  const [hasLoadedCachedLocation, setHasLoadedCachedLocation] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [hasCheckedVideoStatus, setHasCheckedVideoStatus] = useState(false);
+
+  // Load cached location preferences on mount
+  useEffect(() => {
+    if (hasLoadedCachedLocation) return;
+
+    try {
+      const cached = localStorage.getItem(`location_prefs_${user.id}`);
+      if (cached) {
+        const prefs = JSON.parse(cached);
+        console.log('[ConsumerStack] Loading cached location preferences:', prefs);
+
+        setIsAutoDetect(prefs.isAutoDetect);
+        setSearchRadius(prefs.searchRadius);
+        setUserCoords(prefs.userCoords);
+        setLocationLabel(prefs.locationLabel);
+        setCityFilter(prefs.cityFilter || null);
+        setCityForFilterButton(prefs.cityForFilterButton || null);
+      }
+      setHasLoadedCachedLocation(true);
+    } catch (e) {
+      console.error('[ConsumerStack] Failed to load cached location:', e);
+      setHasLoadedCachedLocation(true);
+    }
+  }, [user.id, hasLoadedCachedLocation]);
+
+  // REMOVED: Automatic redirect to home when location is detected
+  // User should manually click "Scan Deals" button to proceed
+  // This prevents the page from auto-submitting when GPS location is acquired
+
+  // Save location preferences to cache whenever they change
+  useEffect(() => {
+    if (!hasLoadedCachedLocation || !userCoords) return;
+
+    try {
+      const prefs = {
+        isAutoDetect,
+        searchRadius,
+        userCoords,
+        locationLabel,
+        cityFilter,
+        cityForFilterButton,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(`location_prefs_${user.id}`, JSON.stringify(prefs));
+      console.log('[ConsumerStack] Saved location preferences to cache');
+    } catch (e) {
+      console.error('[ConsumerStack] Failed to save location preferences:', e);
+    }
+  }, [hasLoadedCachedLocation, user.id, isAutoDetect, searchRadius, userCoords, locationLabel, cityFilter, cityForFilterButton]);
 
   const syncHistory = useCallback(async () => {
     if (!user.id || user.role !== 'consumer') return;
@@ -125,8 +186,25 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
   useEffect(() => {
     if (view === 'favorites' && user.id) {
       updateConsumerFavorites(user.id);
+      updateConsumerPinnedDeals(user.id); // NEW: Also fetch pinned deals
     }
-  }, [view, user.id, updateConsumerFavorites]);
+  }, [view, user.id, updateConsumerFavorites, updateConsumerPinnedDeals]);
+
+  // Check if intro video should be shown (once per session, right after login)
+  useEffect(() => {
+    if (!hasCheckedVideoStatus && user.id && (view === 'onboarding' || view === 'home' || view === 'deals' || view === 'preferences')) {
+      setHasCheckedVideoStatus(true);
+
+      // Check sessionStorage to see if video was already shown in this session
+      const videoShownKey = `intro_video_shown_${user.id}`;
+      const videoWasShown = sessionStorage.getItem(videoShownKey);
+
+      if (!videoWasShown) {
+        console.log('[ConsumerStack] Showing intro video immediately after login');
+        setShowVideoModal(true);
+      }
+    }
+  }, [view, user.id, hasCheckedVideoStatus]);
 
   // Show rating popup right after onboarding (on preferences view or home)
   useEffect(() => {
@@ -291,20 +369,66 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
       }
     }
     
-    setLocationLabel(newLocationLabel); 
+    setLocationLabel(newLocationLabel);
     setCityFilter(effectiveCityFilter); // Update the cityFilter state which is used for backend calls
     setCityForFilterButton(newCityForFilterButton); // Set the display city for the button
     // Removed unconditional clearing of selectedStoreIdForSearch and selectedStoreNameForSearch
     // They are now explicitly cleared when a non-store-specific search path is taken above.
+
+    // DEBUG: Log fetched deals with is_deal_of_the_day field
+    console.log(`[ConsumerStack] Fetched ${fetched.length} deals from backend`);
+    fetched.forEach((deal, index) => {
+      console.log(`[Deal ${index + 1}] ${deal.deal_heading}: is_deal_of_the_day=${deal.is_deal_of_the_day}, status=${deal.status}, start_date=${deal.start_date}`);
+    });
+
     setConsumerDeals(fetched);
     setIsDealsLoading(false);
 
   }, [
-    user.id, locationLoading, locationError, isAutoDetect, capacitorCoords, capacitorResolvedCity, userCoords, 
+    user.id, locationLoading, locationError, isAutoDetect, capacitorCoords, capacitorResolvedCity, userCoords,
     searchRadius, cityFilter, locationLabel, cityForFilterButton,
     selectedStoreIdForSearch, setSelectedStoreIdForSearch, selectedStoreNameForSearch, // Add new store search states to dependencies
     updateCityForFilterButtonFromCoords
   ]);
+
+  // NEW: Separate function to fetch Deal of the Day campaigns using locality coordinates
+  const fetchDealOfDayDeals = useCallback(async () => {
+    if (!user.id || user.role !== 'consumer') return;
+    if (locationLoading) {
+      console.log("[ConsumerStack] Location still loading, deferring Deal of Day fetch.");
+      return;
+    }
+
+    if (!userCoords) {
+      console.log("[ConsumerStack] No coordinates available for Deal of Day fetch.");
+      return;
+    }
+
+    setIsDealOfDayLoading(true);
+    setDealOfDayDeals([]); // Clear previous deals
+
+    console.log("[ConsumerStack] Fetching Deal of the Day campaigns with locality coords:", userCoords);
+
+    try {
+      const fetched = await getCampaignsConsumer.getDealsOfDay({
+        latitude: userCoords.latitude,
+        longitude: userCoords.longitude,
+        radius: searchRadius,
+      });
+
+      console.log(`[ConsumerStack] Fetched ${fetched.length} Deal of the Day campaigns`);
+      fetched.forEach((deal, index) => {
+        console.log(`[DOTD ${index + 1}] ${deal.deal_heading}: start_date=${deal.start_date}, status=${deal.status}`);
+      });
+
+      setDealOfDayDeals(fetched);
+    } catch (error) {
+      console.error("[ConsumerStack] Error fetching Deal of the Day:", error);
+      setDealOfDayDeals([]);
+    } finally {
+      setIsDealOfDayLoading(false);
+    }
+  }, [user.id, user.role, locationLoading, userCoords, searchRadius]);
 
   useEffect(() => {
     if (isAutoDetect) {
@@ -316,14 +440,25 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
     }
   }, [isAutoDetect, capacitorCoords]);
 
+  // Notify parent when location is complete (userCoords is set)
+  useEffect(() => {
+    if (onLocationComplete) {
+      onLocationComplete(userCoords !== null);
+    }
+  }, [userCoords, onLocationComplete]);
 
   useEffect(() => {
-    // Only trigger fetch if location has finished loading or an error occurred.
-    // And if it's the home view.
-    if ((view === 'home' || view === 'deals' || view === 'deals_of_day') && !locationLoading) {
+    // Fetch appropriate deals based on current view
+    if (!locationLoading) {
+      if (view === 'deals_of_day') {
+        // Fetch Deal of the Day campaigns using separate endpoint
+        fetchDealOfDayDeals();
+      } else if (view === 'home' || view === 'deals') {
+        // Fetch regular campaigns (excluding Deal of the Day)
         fetchConsumerDeals();
+      }
     }
-  }, [fetchConsumerDeals, view, locationLoading]); // Trigger on fetchConsumerDeals change or when location loading is complete
+  }, [fetchConsumerDeals, fetchDealOfDayDeals, view, locationLoading]); // Trigger when view or location changes
 
   const handleLocationSearch = useCallback(async (searchData: {
     isAutoDetect: boolean; 
@@ -367,6 +502,51 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
     console.log(`[ConsumerStack] Filtering deals for city: ${city}`);
   }, [setView, setSelectedStoreIdForSearch, setSelectedStoreNameForSearch]);
 
+  const handleShowAllCityDealOfDay = useCallback(async (city: string) => {
+    console.log(`[ConsumerStack] Fetching ALL Deal of the Day campaigns in city: ${city}`);
+    setIsDealOfDayLoading(true);
+    setLocationLabel(`All deals in ${city}`); // Update label
+
+    try {
+      const fetched = await getCampaignsConsumer.getDealsOfDay({
+        cityFilter: city,
+      });
+
+      console.log(`[ConsumerStack] Fetched ${fetched.length} Deal of the Day campaigns in ${city}`);
+      setDealOfDayDeals(fetched);
+    } catch (error) {
+      console.error("[ConsumerStack] Error fetching city-wide Deal of the Day:", error);
+      setDealOfDayDeals([]);
+    } finally {
+      setIsDealOfDayLoading(false);
+    }
+  }, []);
+
+  const handleNewLocationSearch = useCallback(() => {
+    console.log('[ConsumerStack] Clearing location cache and starting new search');
+
+    // Clear location preferences from localStorage
+    try {
+      localStorage.removeItem(`location_prefs_${user.id}`);
+      console.log('[ConsumerStack] Location cache cleared successfully');
+    } catch (e) {
+      console.error('[ConsumerStack] Failed to clear location cache:', e);
+    }
+
+    // Reset all location-related state
+    setIsAutoDetect(true);
+    setSearchRadius(2.0);
+    setUserCoords(null);
+    setLocationLabel('Local Area');
+    setCityFilter(null);
+    setCityForFilterButton(null);
+    setSelectedStoreIdForSearch(null);
+    setSelectedStoreNameForSearch(null);
+    setHasLoadedCachedLocation(false);
+
+    // Navigate to location search page
+    setView('preferences');
+  }, [user.id, setView, setSelectedStoreIdForSearch, setSelectedStoreNameForSearch]);
 
   const handleRedeemNow = useCallback(async (deal: Deal) => {
     if (!user.id) {
@@ -400,7 +580,7 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
 
         try {
           // Fix: Use campaign_id instead of id
-          const response = await redeemNowservice.createClaim(user.id, deal.merchantId, deal.campaign_id, generatedClaimId);
+          const response = await redeemNowservice.createClaim(user.id, deal.merchantId, deal.campaign_id, generatedClaimId, deal.is_deal_of_the_day || false);
           generatedClaimId = response.claimNo; // Use backend-confirmed claimNo if available
           success = true; // Mark as successful if no error thrown
         } catch (claimErr: any) {
@@ -498,7 +678,13 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
     setActiveClaimId(null);
     setSelectedDeal(null);
     // After closing claim, go to redemptions to show it
-    setView('my_redemptions'); 
+    setView('my_redemptions');
+  };
+
+  const handleCloseVideo = () => {
+    setShowVideoModal(false);
+    // Mark video as shown for this session
+    sessionStorage.setItem(`intro_video_shown_${user.id}`, 'true');
   };
 
   const handleShowDealDetails = useCallback(async (deal: Deal) => {
@@ -514,6 +700,7 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
       });
 
       setSelectedDeal(detailedDeal);
+      setIsDealOfTheDayDetail(false); // Regular deal
       setView('detail'); // Navigate to detail view
 
       userService.logActivity({
@@ -528,17 +715,160 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
       console.error('[ConsumerStack] Failed to fetch deal details:', error);
       // Fallback to using the existing deal object if fetch fails
       setSelectedDeal(deal);
+      setIsDealOfTheDayDetail(false); // Regular deal
       setView('detail');
     }
   }, [setView, user.id]);
 
-  if (view === 'onboarding') return <Onboarding setView={setView} user={user} setUser={setUser} />;
-  if (view === 'preferences') return <LocationSearch theme={theme} userCoords={userCoords} resolvedAddress={"Current Location"} isAutoDetect={isAutoDetect} setIsAutoDetect={setIsAutoDetect} onSearch={handleLocationSearch} onRefreshLocation={refreshCapacitorLocation} />;
+  const handleShowDealOfTheDayDetails = useCallback(async (deal: Deal) => {
+    try {
+      // Fetch fresh deal details with proper fallbacks
+      console.log(`[ConsumerStack] Fetching Deal of the Day details for campaign: ${deal.campaign_id}`);
+      const detailedDeal = await dealDetailsService.fetchDealDetails(deal.campaign_id);
+
+      console.log(`[ConsumerStack] Fetched Deal of the Day details:`, {
+        address: detailedDeal.address,
+        landmark: detailedDeal.landmark,
+        storeHrs: detailedDeal.storeHrs
+      });
+
+      setSelectedDeal(detailedDeal);
+      setIsDealOfTheDayDetail(true); // Deal of the Day
+      setView('detail'); // Navigate to detail view
+
+      userService.logActivity({
+        user_id: user.id,
+        event_type: 'view',
+        merchant_id: deal.merchantId,
+        campaign_id: deal.campaign_id,
+        platform: 'mobile',
+        metadata: { view_type: 'deal_of_day_detail', deal_heading: deal.deal_heading }
+      });
+    } catch (error) {
+      console.error('[ConsumerStack] Failed to fetch Deal of the Day details:', error);
+      // Fallback to using the existing deal object if fetch fails
+      setSelectedDeal(deal);
+      setIsDealOfTheDayDetail(true); // Deal of the Day
+      setView('detail');
+    }
+  }, [setView, user.id]);
+
+  // Select appropriate deals based on view
+  // - Deal of the Day view: Use dealOfDayDeals (fetched from dedicated endpoint)
+  // - Regular views: Use consumerDeals (fetched from get-all endpoint, excludes Deal of the Day)
+  // IMPORTANT: This useMemo must be before any conditional returns to follow React's Rules of Hooks
+  const displayDeals = useMemo(() => {
+    if (view === 'deals_of_day') {
+      console.log(`[ConsumerStack] Using dealOfDayDeals: ${dealOfDayDeals.length} campaigns`);
+      return dealOfDayDeals;
+    } else {
+      console.log(`[ConsumerStack] Using consumerDeals: ${consumerDeals.length} campaigns`);
+      return consumerDeals;
+    }
+  }, [consumerDeals, dealOfDayDeals, view]);
+
+  if (view === 'onboarding') {
+    return (
+      <>
+        <Onboarding setView={setView} user={user} setUser={setUser} />
+
+        {/* Intro Video Modal */}
+        {showVideoModal && (
+          <div className="fixed inset-0 z-[999] bg-black flex items-center justify-center">
+            <div className="relative w-full h-full max-w-md mx-auto flex flex-col">
+              {/* Close Button */}
+              <button
+                onClick={handleCloseVideo}
+                className="absolute top-6 right-6 z-[1000] w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 transition-transform"
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              {/* Video Player */}
+              <div className="flex-1 flex items-center justify-center p-4">
+                <video
+                  autoPlay
+                  controls
+                  className="w-full h-auto max-h-[80vh] rounded-2xl shadow-2xl"
+                  onEnded={handleCloseVideo}
+                >
+                  <source src="/assets/Free_South_Indian_Cartoon_App_Video.mp4" type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+
+              {/* Skip Button */}
+              <div className="p-6">
+                <button
+                  onClick={handleCloseVideo}
+                  className="w-full h-14 rounded-2xl bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition-transform"
+                >
+                  Skip Video
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (view === 'preferences') {
+    return (
+      <>
+        <LocationSearch theme={theme} userCoords={userCoords} resolvedAddress={"Current Location"} isAutoDetect={isAutoDetect} setIsAutoDetect={setIsAutoDetect} onSearch={handleLocationSearch} onRefreshLocation={refreshCapacitorLocation} />
+
+        {/* Intro Video Modal */}
+        {showVideoModal && (
+          <div className="fixed inset-0 z-[999] bg-black flex items-center justify-center">
+            <div className="relative w-full h-full max-w-md mx-auto flex flex-col">
+              {/* Close Button */}
+              <button
+                onClick={handleCloseVideo}
+                className="absolute top-6 right-6 z-[1000] w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 transition-transform"
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              {/* Video Player */}
+              <div className="flex-1 flex items-center justify-center p-4">
+                <video
+                  autoPlay
+                  controls
+                  className="w-full h-auto max-h-[80vh] rounded-2xl shadow-2xl"
+                  onEnded={handleCloseVideo}
+                >
+                  <source src="/assets/Free_South_Indian_Cartoon_App_Video.mp4" type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+
+              {/* Skip Button */}
+              <div className="p-6">
+                <button
+                  onClick={handleCloseVideo}
+                  className="w-full h-14 rounded-2xl bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition-transform"
+                >
+                  Skip Video
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   if (view === 'edit_profile') return <EditProfile user={user} setUser={setUser} setView={setView} />;
   if (view === 'my_redemptions') return <MyRedemptions user={user} setView={setView} theme={theme} />;
   if (view === 'campaign_survey') return <CampaignSurvey setView={setView} user={user} />;
   if (view === 'redemption_survey') return <RedemptionSurvey setView={setView} user={user} />;
-  
+  if (view === 'help_feedback') return <HelpFeedback user={user} setView={setView} theme={theme} />;
+
   // NEW: Render StoreSearchScreen
   if (view === 'store_search') {
     return (
@@ -551,13 +881,33 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
     );
   }
 
-  // New: If the view is 'detail' and a deal is selected, render CampaignDetails
+  // New: If the view is 'detail' and a deal is selected, render appropriate details page
   if (view === 'detail' && selectedDeal) {
+    // Use premium Deal of the Day details page for Deal of the Day campaigns
+    if (isDealOfTheDayDetail) {
+      return (
+        <DealOfTheDayDetails
+          deal={selectedDeal}
+          user={user}
+          onRedeem={handleRedeemNow}
+          onToggleFavorite={handleToggleFavorite}
+          isFavorite={favoriteIds.has(selectedDeal.campaign_id)}
+          isRedeemed={redeemedIds.has(selectedDeal.campaign_id)}
+          isClaimed={claimedIds.has(String(selectedDeal.campaign_id))}
+          isRedeeming={isRedeeming}
+          activeClaimId={activeClaimId}
+          onCloseClaim={handleCloseClaim}
+          theme={theme}
+        />
+      );
+    }
+
+    // Use regular campaign details for standard deals
     return (
-      <CampaignDetails 
-        deal={selectedDeal} 
-        user={user} 
-        theme={theme} 
+      <CampaignDetails
+        deal={selectedDeal}
+        user={user}
+        theme={theme}
         isFav={favoriteIds.has(selectedDeal.campaign_id)} // Fix: Use campaign_id
         isRedeeming={isRedeeming}
         activeClaimId={activeClaimId}
@@ -579,15 +929,86 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
         onSelectDeal={handleShowDealDetails}
         onToggleFavorite={handleToggleFavorite}
         theme={theme}
+        user={user}
+        pinnedDeals={pinnedDeals}
+        updatePinnedDeals={() => updateConsumerPinnedDeals(user.id)}
       />
     );
   }
 
+  // NEW: Render Deal of the Day page with dedicated component
+  if (view === 'deals_of_day') {
+    return (
+      <>
+        <DealOfTheDayPage
+          deals={displayDeals} // Uses dealOfDayDeals from dedicated endpoint
+          loading={isDealOfDayLoading || locationLoading} // Use Deal of Day specific loading state
+          onSelectDeal={handleShowDealOfTheDayDetails} // Use premium Deal of the Day details page
+          onAdjustLocation={() => setView('preferences')}
+          onViewAllDeals={cityForFilterButton ? () => handleShowAllCityDealOfDay(cityForFilterButton) : undefined} // NEW: View all Deal of Day in city
+          locationLabel={locationLabel}
+          cityName={cityForFilterButton || undefined} // NEW: Pass city name for display
+          theme={theme}
+        />
+
+        {/* Intro Video Modal */}
+        {showVideoModal && (
+          <div className="fixed inset-0 z-[999] bg-black flex items-center justify-center">
+            <div className="relative w-full h-full max-w-md mx-auto flex flex-col">
+              {/* Close Button */}
+              <button
+                onClick={handleCloseVideo}
+                className="absolute top-6 right-6 z-[1000] w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 transition-transform"
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              {/* Video Player */}
+              <div className="flex-1 flex items-center justify-center p-4">
+                <video
+                  autoPlay
+                  controls
+                  className="w-full h-auto max-h-[80vh] rounded-2xl shadow-2xl"
+                  onEnded={handleCloseVideo}
+                >
+                  <source src="/assets/Free_South_Indian_Cartoon_App_Video.mp4" type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+
+              {/* Skip Button */}
+              <div className="p-6">
+                <button
+                  onClick={handleCloseVideo}
+                  className="w-full h-14 rounded-2xl bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition-transform"
+                >
+                  Skip Video
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Rating Popup for redeemed but unrated claims */}
+        {showRatingPopup && (
+          <RatingPopup
+            userId={user.id}
+            onClose={() => setShowRatingPopup(false)}
+            theme={theme}
+          />
+        )}
+      </>
+    );
+  }
+
+  // Render regular deals page (DealsMainPage)
   return (
     <>
       <DealsMainPage
         view={view === 'onboarding' ? 'onboarding' : view}
-        deals={consumerDeals} // Pass consumerDeals to DealsMainPage
+        deals={displayDeals} // Pass filtered deals based on view (excludes Deal of the Day)
         loading={isDealsLoading || locationLoading} // Combine loading states
         userCoords={userCoords}
         searchRadius={searchRadius}
@@ -603,7 +1024,48 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
         cityForFilterButton={cityForFilterButton} // NEW: Pass the determined city name for the button
         selectedStoreNameForSearch={selectedStoreNameForSearch} // NEW: Pass selected store name
         theme={theme}
+        onNewLocationSearch={handleNewLocationSearch} // NEW: Pass handler for clearing location cache
       />
+
+      {/* Intro Video Modal */}
+      {showVideoModal && (
+        <div className="fixed inset-0 z-[999] bg-black flex items-center justify-center">
+          <div className="relative w-full h-full max-w-md mx-auto flex flex-col">
+            {/* Close Button */}
+            <button
+              onClick={handleCloseVideo}
+              className="absolute top-6 right-6 z-[1000] w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 transition-transform"
+            >
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Video Player */}
+            <div className="flex-1 flex items-center justify-center p-4">
+              <video
+                autoPlay
+                controls
+                className="w-full h-auto max-h-[80vh] rounded-2xl shadow-2xl"
+                onEnded={handleCloseVideo}
+              >
+                <source src="/assets/Free_South_Indian_Cartoon_App_Video.mp4" type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+            </div>
+
+            {/* Skip Button */}
+            <div className="p-6">
+              <button
+                onClick={handleCloseVideo}
+                className="w-full h-14 rounded-2xl bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-black text-sm uppercase tracking-wider shadow-lg active:scale-95 transition-transform"
+              >
+                Skip Video
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Rating Popup for redeemed but unrated claims */}
       {showRatingPopup && (

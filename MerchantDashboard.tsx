@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { AppView, Deal } from './types';
-import { mDashboardService } from './services/mDashboardService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import {
   Store,
@@ -13,15 +12,8 @@ import {
   Clock,
   Calculator,
   Edit2,
-  MousePointer2,
-  TicketCheck,
-  BarChart, // For analytics report
-  HeartHandshake, // For referrals
   Award, // For general metrics
-  CheckCircle2,
   ShieldCheck,
-  Building2, // New icon for Total Campaigns
-  Percent, // New icon for Conversion Rate
   Gift, // New icon for the festival banner
   ChevronRight
 } from 'lucide-react';
@@ -123,20 +115,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 }) => {
   const isDark = theme === 'dark';
 
-  // Individual states for each analytics metric
-  const [totalLifetimeDeals, setTotalLifetimeDeals] = useState(0);
-  const [totalLifetimeClicks, setTotalLifetimeClicks] = useState(0);
-  const [totalLifetimeRedemptions, setTotalLifetimeRedemptions] = useState(0);
-  const [totalInvitesSent, setTotalInvitesSent] = useState(0);
-  const [totalInvitesAccepted, setTotalInvitesAccepted] = useState(0);
-
-  // Individual loading states
-  const [loadingTotalDeals, setLoadingTotalDeals] = useState(false);
-  const [loadingTotalClicks, setLoadingTotalClicks] = useState(false);
-  const [loadingTotalRedemptions, setLoadingTotalRedemptions] = useState(false);
-  const [loadingInvitesSent, setLoadingInvitesSent] = useState(false);
-  const [loadingInvitesAccepted, setLoadingInvitesAccepted] = useState(false);
-
   // Campaign usage state
   const [campaignUsage, setCampaignUsage] = useState({
     campaigns_used: 0,
@@ -145,16 +123,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     dotd_limit: 0,
     has_subscription: false,
   });
-
-  // Derived state for lifetime conversion rate
-  const lifetimeConversionRate = useMemo(() => {
-    return totalLifetimeClicks > 0
-      ? ((totalLifetimeRedemptions / totalLifetimeClicks) * 100).toFixed(1) + '%'
-      : '0%';
-  }, [totalLifetimeRedemptions, totalLifetimeClicks]);
-
-  // Overall loading for the analytics section
-  const isAnyAnalyticsLoading = loadingTotalDeals || loadingTotalClicks || loadingTotalRedemptions || loadingInvitesSent || loadingInvitesAccepted;
 
   // State for nearest upcoming festival
   const [nearestFestival, setNearestFestival] = useState<Festival>({ name: 'Special Event', month: 1, day: 1, themeKey: 'defaultBlue' });
@@ -172,96 +140,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   }, [deals]);
 
   // Fetch individual Lifetime Analytics metrics
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      if (!user?.id) {
-        console.log("[MerchantDashboard] User ID not available for analytics, skipping fetch.");
-        return;
-      }
-
-      const merchantId = user.id;
-
-      const fetches = [
-        (async () => {
-          setLoadingTotalDeals(true);
-          try {
-            console.log("[MerchantDashboard] Fetching totalLifetimeDeals for user ID:", merchantId);
-            const { count } = await mDashboardService.getTotalLifetimeDeals(merchantId);
-            setTotalLifetimeDeals(count || 0); // Ensure count is a number
-            console.log("[MerchantDashboard] totalLifetimeDeals fetched:", count);
-          } catch (error) {
-            console.error("[MerchantDashboard] Error fetching totalLifetimeDeals:", error);
-            setTotalLifetimeDeals(0); // Set to 0 on error
-          } finally {
-            setLoadingTotalDeals(false);
-          }
-        })(),
-        (async () => {
-          setLoadingTotalClicks(true);
-          try {
-            console.log("[MerchantDashboard] Fetching totalLifetimeClicks for user ID:", merchantId);
-            const { count } = await mDashboardService.getTotalLifetimeClicks(merchantId);
-            setTotalLifetimeClicks(count || 0); // Ensure count is a number
-            console.log("[MerchantDashboard] totalLifetimeClicks fetched:", count);
-          } catch (error) {
-            console.error("[MerchantDashboard] Error fetching totalLifetimeClicks:", error);
-            setTotalLifetimeClicks(0); // Set to 0 on error
-          } finally {
-            setLoadingTotalClicks(false);
-          }
-        })(),
-        (async () => {
-          setLoadingTotalRedemptions(true);
-          try {
-            console.log("[MerchantDashboard] Fetching totalLifetimeRedemptions for user ID:", merchantId);
-            const { count } = await mDashboardService.getTotalLifetimeRedemptions(merchantId);
-            setTotalLifetimeRedemptions(count || 0); // Ensure count is a number
-            console.log("[MerchantDashboard] totalLifetimeRedemptions fetched:", count);
-          } catch (error) {
-            console.error("[MerchantDashboard] Error fetching totalLifetimeRedemptions:", error);
-            setTotalLifetimeRedemptions(0); // Set to 0 on error
-          } finally {
-            setLoadingTotalRedemptions(false);
-          }
-        })(),
-        (async () => {
-          setLoadingInvitesSent(true);
-          try {
-            console.log("[MerchantDashboard] Fetching totalInvitesSent for user ID:", merchantId);
-            const { count } = await mDashboardService.getTotalInvitesSent(merchantId);
-            setTotalInvitesSent(count || 0); // Ensure count is a number
-            console.log("[MerchantDashboard] totalInvitesSent fetched:", count);
-          } catch (error) {
-            console.error("[MerchantDashboard] Error fetching totalInvitesSent:", error);
-            setTotalInvitesSent(0); // Set to 0 on error
-          } finally {
-            setLoadingInvitesSent(false);
-          }
-        })(),
-        (async () => {
-          setLoadingInvitesAccepted(true);
-          try {
-            console.log("[MerchantDashboard] Fetching totalInvitesAccepted for user ID:", merchantId);
-            const { count } = await mDashboardService.getTotalInvitesAccepted(merchantId);
-            setTotalInvitesAccepted(count || 0); // Ensure count is a number
-            console.log("[MerchantDashboard] totalInvitesAccepted fetched:", count);
-          } catch (error) {
-            console.error("[MerchantDashboard] Error fetching totalInvitesAccepted:", error);
-            setTotalInvitesAccepted(0); // Set to 0 on error
-          } finally {
-            setLoadingInvitesAccepted(false);
-          }
-        })(),
-      ];
-
-      // Use Promise.allSettled to allow all fetches to complete independently
-      await Promise.allSettled(fetches);
-      console.log("[MerchantDashboard] All lifetime analytics fetches attempted.");
-    };
-
-    fetchAnalytics();
-  }, [user?.id]); // Depend on user.id to trigger on user login/profile load
-
   // Fetch campaign usage
   useEffect(() => {
     const fetchCampaignUsage = async () => {
@@ -533,108 +411,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
           <ChevronRight className={`w-6 h-6 ml-auto shrink-0 relative z-10 ${isDark ? 'text-blue-400' : 'text-blue-700'} group-hover:translate-x-1 transition-transform duration-300`} />
       </button>
 
-      {/* Lifetime Analytics Report */}
-      <div className="mt-16 space-y-6">
-        <div className="flex items-center justify-between px-2">
-          <h3 className={`text-[11px] font-black uppercase tracking-[0.4em] ${isDark ? 'text-slate-500' : 'text-slate-700'}`}>Lifetime Analytics Report</h3>
-          <div className={`px-2 py-1 glass rounded-lg ${isDark ? 'border-white/5' : 'border-slate-200'}`}>
-            <span className="text-[10px] font-black text-blue-500">Overall</span>
-          </div>
-        </div>
-
-        {isAnyAnalyticsLoading ? (
-          <div className={`p-12 rounded-[2.5rem] border ${isDark ? 'border-white/5 bg-slate-900/20' : 'border-slate-200 bg-white shadow-md'} text-center animate-reveal`}>
-            <BarChart className={`w-8 h-8 mx-auto mb-4 ${isDark ? 'text-slate-800' : 'text-slate-400'}`} />
-            <p className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-slate-600' : 'text-slate-700'}`}>Fetching Lifetime Data...</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Total Campaigns */}
-            <div className={`group glass p-5 rounded-[2.5rem] flex flex-col items-start gap-4 border overflow-hidden relative ${
-              isDark ? 'border-blue-500/20 bg-gradient-to-br from-blue-900/10 to-blue-500/5 shadow-2xl shadow-blue-500/10' : 'border-blue-200 bg-blue-50 shadow-md'
-            }`}>
-              <div className={`absolute -right-8 -bottom-8 w-24 h-24 rounded-full opacity-10 group-hover:opacity-20 transition-opacity duration-300 ${isDark ? 'bg-blue-500' : 'bg-blue-700'}`}></div>
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-200'}`}>
-                <Building2 className="w-6 h-6 text-blue-500" />
-              </div>
-              <div>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Total Campaigns</p>
-                <p className={`text-3xl font-black ${isDark ? 'text-white' : 'text-blue-900'}`}>{totalLifetimeDeals.toLocaleString()}</p>
-              </div>
-            </div>
-
-            {/* Total Redemptions */}
-            <div className={`group glass p-5 rounded-[2.5rem] flex flex-col items-start gap-4 border overflow-hidden relative ${
-              isDark ? 'border-emerald-500/20 bg-gradient-to-br from-emerald-900/10 to-emerald-500/5 shadow-2xl shadow-emerald-500/10' : 'border-emerald-200 bg-emerald-50 shadow-md'
-            }`}>
-              <div className={`absolute -right-8 -bottom-8 w-24 h-24 rounded-full opacity-10 group-hover:opacity-20 transition-opacity duration-300 ${isDark ? 'bg-emerald-500' : 'bg-emerald-700'}`}></div>
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-200'}`}>
-                <TicketCheck className="w-6 h-6 text-emerald-500" />
-              </div>
-              <div>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Total Redemptions</p>
-                <p className={`text-3xl font-black ${isDark ? 'text-white' : 'text-emerald-900'}`}>{totalLifetimeRedemptions.toLocaleString()}</p>
-              </div>
-            </div>
-
-            {/* Total Clicks */}
-            <div className={`group glass p-5 rounded-[2.5rem] flex flex-col items-start gap-4 border overflow-hidden relative ${
-              isDark ? 'border-amber-500/20 bg-gradient-to-br from-amber-900/10 to-amber-500/5 shadow-2xl shadow-amber-500/10' : 'border-amber-200 bg-amber-50 shadow-md'
-            }`}>
-              <div className={`absolute -right-8 -bottom-8 w-24 h-24 rounded-full opacity-10 group-hover:opacity-20 transition-opacity duration-300 ${isDark ? 'bg-amber-500' : 'bg-amber-700'}`}></div>
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDark ? 'bg-amber-500/10' : 'bg-amber-200'}`}>
-                <MousePointer2 className="w-6 h-6 text-amber-500" />
-              </div>
-              <div>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Total Clicks</p>
-                <p className={`text-3xl font-black ${isDark ? 'text-white' : 'text-amber-900'}`}>{totalLifetimeClicks.toLocaleString()}</p>
-              </div>
-            </div>
-
-            {/* Lifetime Conversion Rate */}
-            <div className={`group glass p-5 rounded-[2.5rem] flex flex-col items-start gap-4 border overflow-hidden relative ${
-              isDark ? 'border-orange-500/20 bg-gradient-to-br from-orange-900/10 to-orange-500/5 shadow-2xl shadow-orange-500/10' : 'border-orange-200 bg-orange-50 shadow-md'
-            }`}>
-              <div className={`absolute -right-8 -bottom-8 w-24 h-24 rounded-full opacity-10 group-hover:opacity-20 transition-opacity duration-300 ${isDark ? 'bg-orange-500' : 'bg-orange-700'}`}></div>
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDark ? 'bg-orange-500/10' : 'bg-emerald-200'}`}>
-                <Percent className="w-6 h-6 text-orange-500" />
-              </div>
-              <div>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Conversion Rate</p>
-                <p className={`text-3xl font-black ${isDark ? 'text-white' : 'text-orange-900'}`}>{lifetimeConversionRate}</p>
-              </div>
-            </div>
-
-            {/* Referral Invites Sent */}
-            <div className={`group glass p-5 rounded-[2.5rem] flex flex-col items-start gap-4 border overflow-hidden relative ${
-              isDark ? 'border-indigo-500/20 bg-gradient-to-br from-indigo-900/10 to-indigo-500/5 shadow-2xl shadow-indigo-500/10' : 'border-indigo-200 bg-indigo-50 shadow-md'
-            }`}>
-              <div className={`absolute -right-8 -bottom-8 w-24 h-24 rounded-full opacity-10 group-hover:opacity-20 transition-opacity duration-300 ${isDark ? 'bg-indigo-500' : 'bg-indigo-700'}`}></div>
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDark ? 'bg-indigo-500/10' : 'bg-indigo-200'}`}>
-                <HeartHandshake className="w-6 h-6 text-indigo-500" />
-              </div>
-              <div>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Referral Invites Sent</p>
-                <p className={`text-3xl font-black ${isDark ? 'text-white' : 'text-indigo-900'}`}>{totalInvitesSent.toLocaleString()}</p>
-              </div>
-            </div>
-
-            {/* Referral Invites Accepted */}
-            <div className={`group glass p-5 rounded-[2.5rem] flex flex-col items-start gap-4 border overflow-hidden relative ${
-              isDark ? 'border-purple-500/20 bg-gradient-to-br from-purple-900/10 to-purple-500/5 shadow-2xl shadow-purple-500/10' : 'border-purple-200 bg-purple-50 shadow-md'
-            }`}>
-              <div className={`absolute -right-8 -bottom-8 w-24 h-24 rounded-full opacity-10 group-hover:opacity-20 transition-opacity duration-300 ${isDark ? 'bg-purple-500' : 'bg-purple-700'}`}></div>
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDark ? 'bg-purple-500/10' : 'bg-purple-200'}`}>
-                <CheckCircle2 className="w-6 h-6 text-purple-500" />
-              </div>
-              <div>
-                <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Referral Invites Accepted</p>
-                <p className={`text-3xl font-black ${isDark ? 'text-white' : 'text-purple-900'}`}>{totalInvitesAccepted.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 };

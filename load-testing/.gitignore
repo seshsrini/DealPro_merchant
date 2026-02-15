@@ -1,0 +1,18 @@
+# k6 test results
+results.json
+results.csv
+*.har
+
+# Test data
+test-data/
+
+# Local configuration
+config.local.js
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db

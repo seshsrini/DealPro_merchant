@@ -18,8 +18,15 @@ android {
     }
     buildTypes {
         release {
+            // Enable code obfuscation and shrinking for security
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // Debug builds should NOT be obfuscated for easier debugging
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            debuggable true
         }
     }
 }

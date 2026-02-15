@@ -1,7 +1,7 @@
 
 export type Locale = 'en' | 'kn' | 'hi' | 'ta' | 'te' | 'ml' | 'bn' | 'mr' | 'gu';
 
-export type AppView = 'splash' | 'language_selection' | 'login' | 'onboarding' | 'preferences' | 'home' | 'detail' | 'deals_of_day' | 'favorites' | 'profile' | 'merchant_dashboard' | 'merchant_analytics' | 'merchant_deals' | 'forgot_password' | 'register' | 'edit_profile' | 'deals' | 'help_feedback' | 'merchant_subscriptions' | 'redemption_survey' | 'campaign_survey' | 'my_redemptions' | 'verify_email' | 'verify_phone' | 'payment_plans' | 'bank_verification' | 'store_search' | 'dealadmin_dashboard' | 'dealadmin_review_deals' | 'dealadmin_edit_deal';
+export type AppView = 'splash' | 'language_selection' | 'login' | 'onboarding' | 'preferences' | 'home' | 'detail' | 'deals_of_day' | 'favorites' | 'profile' | 'merchant_dashboard' | 'merchant_analytics' | 'merchant_deals' | 'merchant_deal_of_day' | 'forgot_password' | 'register' | 'edit_profile' | 'deals' | 'help_feedback' | 'merchant_subscriptions' | 'redemption_survey' | 'campaign_survey' | 'my_redemptions' | 'verify_email' | 'verify_phone' | 'payment_plans' | 'bank_verification' | 'store_search' | 'dealadmin_dashboard' | 'dealadmin_review_deals' | 'dealadmin_edit_deal' | 'dealadmin_analytics' | 'dealadmin_banners' | 'privacy_policy' | 'terms_of_service';
 
 export interface LocalizedNames {
   en: string;
@@ -110,6 +110,7 @@ export interface Deal {
   end_date?: string;   // Changed from 'endDate'
   daysLeft?: number;
   isDealOfTheDay?: boolean;
+  is_deal_of_the_day?: boolean; // Database field name (snake_case)
   city?: string; // Still used for internal logic/fallback
   state?: string; // Still used for internal logic/fallback
   
@@ -165,6 +166,11 @@ export interface User {
   account_type?: 'savings' | 'current' | 'other';
   penny_drop_status?: PennyDropStatus;
   gst_registration_type?: 'Registered' | 'Unregistered' | 'Composition';
+
+  // NEW: Subscription fields for merchants
+  hasActiveSubscription?: boolean; // Whether merchant has an active subscription
+  subscription_status?: string; // active, cancelled, expired, etc.
+  current_tier_id?: number; // Current subscription tier ID
 }
 
 export interface ActivityLog {

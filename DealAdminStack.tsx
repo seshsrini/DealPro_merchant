@@ -6,6 +6,8 @@ import { DealAdminReviewDeals } from './DealAdminReviewDeals'; // NEW: Import De
 // Removed: import { MerchantMyCampaigns } from './MerchantMyCampaigns.tsx'; // Reusing for admin editing
 import { DealAdminEditCampaign } from './DealAdminEditCampaign'; // NEW: Import new admin-specific edit component
 import { EditProfile } from './EditProfile'; // NEW: Import EditProfile
+import { DealAdminAnalytics } from './DealAdminAnalytics'; // NEW: Import Analytics
+import { DealAdminBanners } from './DealAdminBanners'; // NEW: Import Banners
 
 interface DealAdminStackProps {
   view: AppView;
@@ -65,6 +67,15 @@ export const DealAdminStack: React.FC<DealAdminStackProps> = ({
     return <EditProfile user={user} setUser={setUser} setView={setView} />;
   }
 
+  // Admin Analytics view
+  if (view === 'dealadmin_analytics') {
+    return <DealAdminAnalytics user={user} theme={theme} />;
+  }
+
+  // Admin Banners view
+  if (view === 'dealadmin_banners') {
+    return <DealAdminBanners user={user} theme={theme} />;
+  }
 
   return null;
 };

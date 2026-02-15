@@ -86,7 +86,6 @@ Deno.serve(async (req) => {
         category,
         gstin,
         pan,
-        first_login_at: new Date().toISOString(),
         lang_preference: languagePreference || 'en', // Default to English if not provided
       }])
       .select()

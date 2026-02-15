@@ -11,13 +11,20 @@
 /* BARCODE SCANNER TRANSPARENCY PROTOCOL */
 body.barcode-scanner-active {
     background-color: transparent !important;
+    visibility: visible !important;
 }
 body.barcode-scanner-active #root {
     background-color: transparent !important;
-    opacity: 0.2; /* Dims the UI to show camera clearly */
+    opacity: 1 !important; /* Keep UI fully visible */
+}
+/* Make all app content except scanner overlay transparent when scanning */
+body.barcode-scanner-active #root > * {
+    background-color: transparent !important;
+    opacity: 0.1 !important; /* Dim other content */
 }
 body.barcode-scanner-active .scanner-ui-overlay {
-    opacity: 1 !important;
+    opacity: 1 !important; /* Keep scanner UI fully visible */
+    background-color: rgba(0, 0, 0, 0.5) !important; /* Semi-transparent dark background for UI */
 }
 
 .light-mode {
