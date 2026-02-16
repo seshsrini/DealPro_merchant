@@ -1318,7 +1318,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
             <div className="relative">
               <input
                 type="text"
-                placeholder="Locality / Area (type to search)"
+                placeholder="Enter your area (Ex. Indira Nagar)"
                 className="input-premium"
                 value={consumerLocality}
                 onChange={(e) => {
