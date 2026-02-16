@@ -117,6 +117,47 @@ serve(async (req) => {
         return new Response(JSON.stringify({ success: true, isPinned: !!data }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      case 'toggle': {
+        if (!merchantId) throw new Error('merchantId required for toggling');
+
+        // First check if it's currently pinned
+        const { data: existingPin, error: checkError } = await supabase
+          .from('pinned_deals')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('campaign_id', campaignId)
+          .maybeSingle();
+
+        if (checkError) throw checkError;
+
+        if (existingPin) {
+          // Already pinned, so unpin it
+          const { error: deleteError } = await supabase
+            .from('pinned_deals')
+            .delete()
+            .eq('user_id', userId)
+            .eq('campaign_id', campaignId);
+
+          if (deleteError) throw deleteError;
+          return new Response(JSON.stringify({ success: true, isPinned: false }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        } else {
+          // Not pinned, so pin it
+          const { data: newPin, error: insertError } = await supabase
+            .from('pinned_deals')
+            .upsert({
+              user_id: userId,
+              campaign_id: campaignId,
+              merchant_id: merchantId,
+              active_status: true
+            }, { onConflict: 'user_id, campaign_id' })
+            .select()
+            .single();
+
+          if (insertError) throw insertError;
+          return new Response(JSON.stringify({ success: true, isPinned: true, data: newPin }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
