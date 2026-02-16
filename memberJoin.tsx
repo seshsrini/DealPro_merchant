@@ -55,10 +55,22 @@ const LANGUAGE_OPTIONS = [
   { code: 'gu', name: 'ગુજરાતી' }
 ];
 
-const GST_REGEX = /^[0-9]{2}[A-Z0-9]{10}[0-9]{1}Z[A-Z0-9]{1}$/;
+// GSTIN Format: 27AAAPA1234A1Z5
+// - Digits 1-2: State Code (01-37)
+// - Digits 3-12: PAN (5 letters + 4 digits + 1 letter)
+// - Digit 13: Entity number (0-9 or A-Z)
+// - Digit 14: Z (default character)
+// - Digit 15: Checksum (0-9 or A-Z)
+const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[A-Z0-9]{1}$/;
 const isGstValid = (gst: string): boolean => GST_REGEX.test(gst);
 
-const PAN_REGEX = /^[A-Z]{3}[PCHFATBLJG][A-Z][0-9]{4}[A-Z]$/;
+// PAN Card Format: AFZPK7190K (for merchants)
+// - Characters 1-3: Random alphabetical series (AAA to ZZZ)
+// - Character 4: Holder type - C (Company), F (Firm), P (Person), or B (Body of Individuals)
+// - Character 5: First letter of surname/name
+// - Characters 6-9: Sequential number (0001 to 9999)
+// - Character 10: Alphabetic check digit
+const PAN_REGEX = /^[A-Z]{3}[CFPB][A-Z][0-9]{4}[A-Z]$/;
 const isPanValid = (pan: string): boolean => PAN_REGEX.test(pan);
 
 const isValidPassword = (password: string): boolean => {
@@ -104,6 +116,14 @@ interface MemberJoinProps {
   isPhoneVerifiedForRegistration: boolean; // New prop to track if phone is verified
   setRegistrationSuccessMessage: (msg: string | null) => void; // New prop
   theme: 'light' | 'dark'; // Add theme prop
+  termsAccepted: boolean; // Terms acceptance state from parent
+  setTermsAccepted: (accepted: boolean) => void; // Terms acceptance setter
+  privacyAccepted: boolean; // Privacy acceptance state from parent
+  setPrivacyAccepted: (accepted: boolean) => void; // Privacy acceptance setter
+  signupRole: 'user' | 'merchant'; // Role selection state from parent
+  setSignupRole: (role: 'user' | 'merchant') => void; // Role selection setter
+  showRoleSelector: boolean; // Show role selector state from parent
+  setShowRoleSelector: (show: boolean) => void; // Show role selector setter
 }
 
 export const MemberJoin: React.FC<MemberJoinProps> = ({
@@ -115,15 +135,23 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   otpPhoneNumber, // Destructure the prop
   isPhoneVerifiedForRegistration,
   setRegistrationSuccessMessage, // Destructure the new prop
-  theme // Destructure theme prop
+  theme, // Destructure theme prop
+  termsAccepted, // Destructure terms acceptance state
+  setTermsAccepted, // Destructure terms acceptance setter
+  privacyAccepted, // Destructure privacy acceptance state
+  setPrivacyAccepted, // Destructure privacy acceptance setter
+  signupRole: regRole, // Destructure and rename to regRole for internal use
+  setSignupRole: setRegRole, // Destructure and rename to setRegRole
+  showRoleSelector, // Destructure show role selector state
+  setShowRoleSelector // Destructure show role selector setter
 }) => {
   const { t, locale } = useTranslation();
   const isDark = theme === 'dark';
 
   const [gstinValue, setGstinValue] = useState('');
   const [panValue, setPanValue] = useState('');
-  const [regRole, setRegRole] = useState<'user' | 'merchant'>('user');
-  const [showRoleSelector, setShowRoleSelector] = useState(true); // New state for role selection modal
+  const [gstinValidated, setGstinValidated] = useState<boolean | null>(null); // null = not validated, true = valid, false = invalid
+  const [panValidated, setPanValidated] = useState<boolean | null>(null); // null = not validated, true = valid, false = invalid
 
   const [isPhoneVerified, setIsPhoneVerified] = useState(false); // Local verification status
   const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -139,7 +167,15 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const [dbCategories, setDbCategories] = useState<string[]>([]);
   const [isCatsLoading, setIsCatsLoading] = useState(false);
   const [languagePreference, setLanguagePreference] = useState('en'); // Default to English
-  
+
+  // Consumer locality state
+  const [consumerLocality, setConsumerLocality] = useState('');
+  const [consumerPincode, setConsumerPincode] = useState('');
+  const [consumerCity, setConsumerCity] = useState('');
+  const [consumerState, setConsumerState] = useState('');
+  const [consumerLocalitySuggestions, setConsumerLocalitySuggestions] = useState<DBLocality[]>([]);
+  const [showConsumerLocalityDropdown, setShowConsumerLocalityDropdown] = useState(false);
+
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -148,21 +184,33 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const [usernameTaken, setUsernameTaken] = useState<boolean | null>(null);
   const [emailTaken, setEmailTaken] = useState<boolean | null>(null);
   const [phoneTaken, setPhoneTaken] = useState<boolean | null>(null);
+  const [gstinTaken, setGstinTaken] = useState<boolean | null>(null);
+  const [panTaken, setPanTaken] = useState<boolean | null>(null);
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+  const [isCheckingGstin, setIsCheckingGstin] = useState(false);
+  const [isCheckingPan, setIsCheckingPan] = useState(false);
 
 
   const [merchantStores, setMerchantStores] = useState<StoreLocation[]>([
-    { store_name: '', street: '', state: '', city: '', landmark: '', coords: null, isGeocoding: false, shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, pincode: '', isPincodeSearching: false }
+    { store_name: '', street: '', pincode: '', locality: '', state: '', city: '', landmark: '', coords: null, isGeocoding: false, shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, isPincodeSearching: false }
   ]);
 
   const geocodeDebounceRef = useRef<Record<number, number | null>>({});
   const pincodeDebounceRef = useRef<Record<number, number | null>>({}); // New debounce ref for pincode
+  const localityDebounceRef = useRef<Record<number, number | null>>({}); // New debounce ref for locality search
+
+  // State for locality autocomplete
+  const [localitySuggestions, setLocalitySuggestions] = useState<Record<number, DBLocality[]>>({});
+  const [showLocalityDropdown, setShowLocalityDropdown] = useState<Record<number, boolean>>({});
+
   // Ref for debounce timeouts
   const usernameDebounceRef = useRef<number | null>(null);
   const emailDebounceRef = useRef<number | null>(null);
   const phoneDebounceRef = useRef<number | null>(null);
+  const gstinDebounceRef = useRef<number | null>(null);
+  const panDebounceRef = useRef<number | null>(null);
 
 
   // Real-time username validation
@@ -280,6 +328,83 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     }
   };
 
+  // Real-time GSTIN validation
+  const validateGstin = useCallback(async (value: string) => {
+    if (!value || value.trim().length === 0) {
+      setGstinTaken(null);
+      setIsCheckingGstin(false);
+      return;
+    }
+    if (!isGstValid(value)) {
+      setGstinTaken(null);
+      setIsCheckingGstin(false);
+      return;
+    }
+    setIsCheckingGstin(true);
+    try {
+      // Encrypt the GSTIN before checking for duplicates (database stores encrypted values)
+      const encryptedGstin = encryptionService.encryptGST(value).encrypted;
+      const isTaken = await userService.validateMerchantField('gstin', encryptedGstin);
+      setGstinTaken(isTaken);
+    } catch (e) {
+      console.error("GSTIN validation failed:", e);
+      setGstinTaken(null); // Set to null on error
+    } finally {
+      setIsCheckingGstin(false);
+    }
+  }, []);
+
+  const handleGstinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.toUpperCase();
+    setGstinValue(value);
+    setGstinTaken(null); // Reset on change
+    setIsCheckingGstin(false);
+    setGstinValidated(null);
+
+    if (gstinDebounceRef.current) {
+      clearTimeout(gstinDebounceRef.current as number);
+    }
+    gstinDebounceRef.current = setTimeout(() => validateGstin(value), 500) as unknown as number;
+  };
+
+  // Real-time PAN validation
+  const validatePan = useCallback(async (value: string) => {
+    if (!value || value.trim().length === 0) {
+      setPanTaken(null);
+      setIsCheckingPan(false);
+      return;
+    }
+    if (!isPanValid(value)) {
+      setPanTaken(null);
+      setIsCheckingPan(false);
+      return;
+    }
+    setIsCheckingPan(true);
+    try {
+      // Encrypt the PAN before checking for duplicates (database stores encrypted values)
+      const encryptedPan = encryptionService.encryptPAN(value).encrypted;
+      const isTaken = await userService.validateMerchantField('pan', encryptedPan);
+      setPanTaken(isTaken);
+    } catch (e) {
+      console.error("PAN validation failed:", e);
+      setPanTaken(null); // Set to null on error
+    } finally {
+      setIsCheckingPan(false);
+    }
+  }, []);
+
+  const handlePanChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.toUpperCase();
+    setPanValue(value);
+    setPanTaken(null); // Reset on change
+    setIsCheckingPan(false);
+    setPanValidated(null);
+
+    if (panDebounceRef.current) {
+      clearTimeout(panDebounceRef.current as number);
+    }
+    panDebounceRef.current = setTimeout(() => validatePan(value), 500) as unknown as number;
+  };
 
   // Dynamic Address-to-LatLong Resolver (existing logic)
   useEffect(() => {
@@ -379,7 +504,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           setMerchantStores(prev => {
             const next = [...prev];
             // Clear city/state/coords *before* lookup to show loading and prepare for new data
-            next[index] = { ...next[index], isPincodeSearching: true, coords: null, city: '', state: '' }; 
+            next[index] = { ...next[index], isPincodeSearching: true, coords: null, city: '', state: '' };
             return next;
           });
 
@@ -389,6 +514,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
             if (result) {
               setMerchantStores(prev => {
                 const next = [...prev];
+                // Only populate city and state, NOT locality (user will type/select locality)
                 next[index] = { ...next[index], city: result.city, state: result.state };
                 return next;
               });
@@ -418,10 +544,10 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           }
         }, 800) as number; // Debounce time
       } else {
-        // If pincode is not 6 digits, clear city/state fields and reset lookup status if they were previously populated by pincode
+        // If pincode is not 6 digits, clear city/state fields (keep locality as user-entered)
         setMerchantStores(prev => {
           const next = [...prev];
-          if ((next[index].city && next[index].state) && next[index].pincode.length !== 6) {
+          if ((next[index].city || next[index].state) && next[index].pincode.length !== 6) {
             next[index] = { ...next[index], city: '', state: '', coords: null };
           }
           if (next[index].isPincodeSearching) {
@@ -467,26 +593,176 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       const newStores = [...prev];
       if (field === 'is24hrs') {
         newStores[index] = { ...newStores[index], is24hrs: value, shift1: value ? '00:00 AM' : '9:00 AM', shift2: value ? '10:00 PM' : '10:00 PM' };
+      } else if (field === 'locality') {
+        // When locality is manually changed, clear related fields for fresh data
+        newStores[index] = {
+          ...newStores[index],
+          locality: value,
+          pincode: '',
+          city: '',
+          state: '',
+          coords: null
+        };
       } else {
         newStores[index] = { ...newStores[index], [field]: value };
       }
       // If address related fields change (store_name, street, city, state, or pincode) clear coords
       if (['store_name', 'street', 'city', 'state', 'pincode'].includes(field as string) && !newStores[index].isGeocoding) {
-        newStores[index].coords = null; 
+        newStores[index].coords = null;
       }
       return newStores;
     });
+
+    // If locality field changed, trigger autocomplete search
+    if (field === 'locality' && typeof value === 'string') {
+      handleLocalitySearch(index, value);
+    }
   };
+
+  // Search localities as user types
+  const handleLocalitySearch = useCallback((index: number, query: string) => {
+    // Clear previous timeout
+    if (localityDebounceRef.current[index]) {
+      clearTimeout(localityDebounceRef.current[index] as number);
+    }
+
+    // If query is empty, hide dropdown
+    if (!query || query.length < 2) {
+      setShowLocalityDropdown(prev => ({ ...prev, [index]: false }));
+      setLocalitySuggestions(prev => ({ ...prev, [index]: [] }));
+      return;
+    }
+
+    // Get the pincode for this store to filter results
+    const store = merchantStores[index];
+    const pincode = store?.pincode;
+
+    // Debounce the search
+    localityDebounceRef.current[index] = setTimeout(async () => {
+      try {
+        console.log(`[LocalitySearch] Searching for "${query}" with pincode ${pincode}`);
+        const results = await locationsearchService.searchLocalities(query, locale);
+
+        // Filter by pincode if available
+        const filtered = pincode && pincode.length === 6
+          ? results.filter(loc => loc.pincode === pincode)
+          : results;
+
+        console.log(`[LocalitySearch] Found ${filtered.length} localities matching "${query}" for pincode ${pincode}`);
+
+        setLocalitySuggestions(prev => ({ ...prev, [index]: filtered }));
+        setShowLocalityDropdown(prev => ({ ...prev, [index]: filtered.length > 0 }));
+      } catch (error) {
+        console.error('[LocalitySearch] Error searching localities:', error);
+        setLocalitySuggestions(prev => ({ ...prev, [index]: [] }));
+        setShowLocalityDropdown(prev => ({ ...prev, [index]: false }));
+      }
+    }, 300) as any; // 300ms debounce
+  }, [merchantStores, locale]);
+
+  // Handle selecting a locality from dropdown
+  const handleSelectLocality = useCallback((index: number, locality: DBLocality) => {
+    const localizedName = locality.display_name || locality.names[locale] || locality.names.en;
+
+    setMerchantStores(prev => {
+      const next = [...prev];
+      // Set both locality and pincode - pincode will trigger city/state lookup automatically
+      next[index] = { ...next[index], locality: localizedName, pincode: locality.pincode };
+      return next;
+    });
+
+    // Hide dropdown
+    setShowLocalityDropdown(prev => ({ ...prev, [index]: false }));
+    console.log(`[LocalitySearch] Selected locality: ${localizedName} with pincode: ${locality.pincode}`);
+  }, [locale]);
+
+  // Consumer locality search handler
+  const handleConsumerLocalitySearch = useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setShowConsumerLocalityDropdown(false);
+      setConsumerLocalitySuggestions([]);
+      return;
+    }
+
+    try {
+      console.log(`[ConsumerLocalitySearch] Searching for "${query}"`);
+      const results = await locationsearchService.searchLocalities(query, locale);
+      console.log(`[ConsumerLocalitySearch] Found ${results.length} localities`);
+
+      setConsumerLocalitySuggestions(results);
+      setShowConsumerLocalityDropdown(results.length > 0);
+    } catch (error) {
+      console.error('[ConsumerLocalitySearch] Error:', error);
+      setConsumerLocalitySuggestions([]);
+      setShowConsumerLocalityDropdown(false);
+    }
+  }, [locale]);
+
+  // Consumer locality selection handler
+  const handleConsumerLocalitySelect = useCallback((locality: DBLocality) => {
+    const localizedName = locality.display_name || locality.names[locale] || locality.names.en;
+    setConsumerLocality(localizedName);
+    setConsumerPincode(locality.pincode);
+
+    // Fetch city and state from pincode
+    locationsearchService.reverseGeocodePincode(locality.pincode)
+      .then(result => {
+        if (result) {
+          setConsumerCity(result.city);
+          setConsumerState(result.state);
+        }
+      })
+      .catch(err => console.error('[ConsumerLocalitySelect] Error fetching city/state:', err));
+
+    setShowConsumerLocalityDropdown(false);
+    console.log(`[ConsumerLocalitySelect] Selected: ${localizedName} (${locality.pincode})`);
+  }, [locale]);
 
   const handleAddStore = () => {
     setMerchantStores(prev => [
       ...prev,
-      { store_name: '', street: '', state: '', city: '', landmark: '', coords: null, isGeocoding: false, shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, pincode: '', isPincodeSearching: false }
+      { store_name: '', street: '', pincode: '', locality: '', state: '', city: '', landmark: '', coords: null, isGeocoding: false, shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, isPincodeSearching: false }
     ]);
   };
 
   const handleRemoveStore = (indexToRemove: number) => {
     setMerchantStores(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
+  const handleValidateGstin = () => {
+    if (!gstinValue || gstinValue.length === 0) {
+      setGstinValidated(null);
+      return;
+    }
+
+    const isValid = isGstValid(gstinValue);
+    setGstinValidated(isValid);
+
+    if (!isValid) {
+      setOtpError('Invalid GSTIN format. Please check and try again.');
+      setTimeout(() => setOtpError(null), 3000);
+    } else {
+      // Clear any previous error
+      setOtpError(null);
+    }
+  };
+
+  const handleValidatePan = () => {
+    if (!panValue || panValue.length === 0) {
+      setPanValidated(null);
+      return;
+    }
+
+    const isValid = isPanValid(panValue);
+    setPanValidated(isValid);
+
+    if (!isValid) {
+      setOtpError('Invalid PAN format. Allowed types: Company (C), Firm (F), Person (P), or Body of Individuals (B).');
+      setTimeout(() => setOtpError(null), 3000);
+    } else {
+      // Clear any previous error
+      setOtpError(null);
+    }
   };
 
   const handleGetGpsForStore = async (index: number) => {
@@ -576,6 +852,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           phone: finalRegPhone,
           role: 'consumer',
           languagePreference,
+          home_location: consumerLocality || null, // Add consumer home location
         };
         console.log('[memberJoin] Attempting to register consumer with:', consumerRegData);
 
@@ -638,13 +915,14 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           stores: merchantStores.map(s => ({
             store_name: s.store_name, // Pass individual store name
             address: s.street,
+            pincode: s.pincode,
+            locality: s.locality, // Add locality to the payload
             city: s.city,
             state: s.state,
             landmark: s.landmark,
             latitude: s.coords?.latitude || 0,
             longitude: s.coords?.longitude || 0,
             store_hrs: s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`,
-            pincode: s.pincode, // CRITICAL FIX: Add pincode to the payload
           })),
         };
         console.log('[memberJoin] Attempting to register merchant (GST/PAN encrypted):', {
@@ -681,7 +959,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
   const canSubmit = useMemo(() => {
     // Universal validations
-    if (loading || isCheckingUsername || isCheckingEmail || isCheckingPhone) {
+    if (loading || isCheckingUsername || isCheckingEmail || isCheckingPhone || isCheckingGstin || isCheckingPan) {
       return false; // Always block if any check is in progress
     }
     // CRITICAL FIX: Block if validation is inconclusive (null state)
@@ -711,7 +989,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       }
     }
     // Check if identifiers are actually available (not taken)
-    if (usernameTaken === true || emailTaken === true || phoneTaken === true) {
+    if (usernameTaken === true || emailTaken === true || phoneTaken === true || gstinTaken === true || panTaken === true) {
       return false;
     }
 
@@ -719,6 +997,16 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     if (regRole === 'user') {
       // For user, phone is optional. If provided, it should meet length requirement and not be taken.
       if (regPhone.length > 0 && regPhone.length < 7) return false;
+
+      // Locality validation: If user started typing locality, all fields must be resolved
+      // If consumerLocality is not empty, then pincode, city, and state must also be populated
+      if (consumerLocality.trim().length > 0) {
+        // User started typing locality, so all related fields must be populated from autocomplete
+        if (!consumerPincode || !consumerCity || !consumerState) {
+          return false; // Locality not fully resolved
+        }
+      }
+
       return true;
     } else { // regRole === 'merchant'
       // Merchant-specific validations
@@ -729,6 +1017,10 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
         return false;
       }
       if (!isPanValid(panValue)) { // Moved up for earlier feedback
+        return false;
+      }
+      // Require both Terms of Service and Privacy Policy acceptance
+      if (!termsAccepted || !privacyAccepted) {
         return false;
       }
       if (!isPhoneVerified) { // Phone must be verified for merchants
@@ -752,11 +1044,13 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       return allStoresValid;
     }
   }, [
-    loading, isCheckingUsername, isCheckingEmail, isCheckingPhone,
-    usernameTaken, emailTaken, phoneTaken,
+    loading, isCheckingUsername, isCheckingEmail, isCheckingPhone, isCheckingGstin, isCheckingPan,
+    usernameTaken, emailTaken, phoneTaken, gstinTaken, panTaken,
     username, email, password,
     regRole, fullName, storeName, category, gstinValue, panValue, regPhone,
-    isGstValid, isPanValid, isValidPassword, isPhoneVerified, merchantStores
+    isGstValid, isPanValid, isValidPassword, isPhoneVerified, merchantStores,
+    consumerLocality, consumerPincode, consumerCity, consumerState,
+    termsAccepted, privacyAccepted
   ]);
 
   const renderRoleSelector = () => (
@@ -982,6 +1276,74 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
           </div>
+
+          {/* Consumer Locality Field - Only for user role */}
+          {regRole === 'user' && (
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Locality / Area (type to search)"
+                className="input-premium"
+                value={consumerLocality}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setConsumerLocality(newValue);
+                  // Clear pincode, city, and state when user manually types (not selecting from dropdown)
+                  // This ensures partial entries don't show stale data
+                  setConsumerPincode('');
+                  setConsumerCity('');
+                  setConsumerState('');
+                  handleConsumerLocalitySearch(newValue);
+                }}
+                onFocus={() => {
+                  if (consumerLocalitySuggestions.length > 0) {
+                    setShowConsumerLocalityDropdown(true);
+                  }
+                }}
+                onBlur={() => {
+                  setTimeout(() => setShowConsumerLocalityDropdown(false), 200);
+                }}
+              />
+
+              {/* Autocomplete dropdown */}
+              {showConsumerLocalityDropdown && consumerLocalitySuggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                  {consumerLocalitySuggestions.map((locality) => {
+                    const displayName = locality.display_name || locality.names[locale] || locality.names.en;
+                    return (
+                      <div
+                        key={locality.id}
+                        className="px-4 py-3 hover:bg-blue-600/20 cursor-pointer border-b border-white/5 last:border-b-0 transition-colors"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleConsumerLocalitySelect(locality);
+                        }}
+                      >
+                        <div className="text-sm font-medium text-white">{displayName}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">Pincode: {locality.pincode}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Display pincode, city, state below */}
+              {consumerPincode && consumerCity && consumerState && (
+                <div className="mt-2 ml-1 space-y-0.5">
+                  <p className="text-xs text-slate-400">
+                    <span className="font-semibold text-blue-400">Pincode:</span> {consumerPincode}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    <span className="font-semibold text-blue-400">City:</span> {consumerCity}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    <span className="font-semibold text-blue-400">State:</span> {consumerState}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="relative group">
             <select
               value={languagePreference}
@@ -1055,8 +1417,54 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                   onChange={(e) => handleStoreChange(index, 'street', e.target.value)}
                   required 
                 />
-                
-                {/* NEW: Pincode input */}
+
+                {/* Locality input with autocomplete */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Locality / Area (type to search)"
+                    className="input-premium"
+                    value={store.locality}
+                    onChange={(e) => handleStoreChange(index, 'locality', e.target.value)}
+                    onFocus={() => {
+                      // Show dropdown if there are suggestions
+                      if (localitySuggestions[index]?.length > 0) {
+                        setShowLocalityDropdown(prev => ({ ...prev, [index]: true }));
+                      }
+                    }}
+                    onBlur={() => {
+                      // Hide dropdown after a short delay to allow clicking on items
+                      setTimeout(() => {
+                        setShowLocalityDropdown(prev => ({ ...prev, [index]: false }));
+                      }, 200);
+                    }}
+                    required
+                  />
+
+                  {/* Autocomplete dropdown */}
+                  {showLocalityDropdown[index] && localitySuggestions[index]?.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                      {localitySuggestions[index].map((locality) => {
+                        const displayName = locality.display_name || locality.names[locale] || locality.names.en;
+                        return (
+                          <div
+                            key={locality.id}
+                            className="px-4 py-3 hover:bg-blue-600/20 cursor-pointer border-b border-white/5 last:border-b-0 transition-colors"
+                            onMouseDown={(e) => {
+                              e.preventDefault(); // Prevent onBlur from hiding dropdown before click
+                              handleSelectLocality(index, locality);
+                            }}
+                          >
+                            <div className="text-sm font-medium text-white">{displayName}</div>
+                            <div className="text-xs text-slate-400 mt-0.5">Pincode: {locality.pincode}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Pincode input */}
                 <div className="relative group">
                   <input
                     type="text"
@@ -1072,13 +1480,13 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                   )}
                 </div>
 
-                <input 
-                  type="text" 
-                  placeholder={t('reg_city')} 
-                  className="input-premium" 
+                <input
+                  type="text"
+                  placeholder={t('reg_city')}
+                  className="input-premium"
                   value={store.city}
                   onChange={(e) => handleStoreChange(index, 'city', e.target.value)}
-                  required 
+                  required
                   readOnly={store.pincode.length === 6 && !!store.city && !store.isPincodeSearching}
                   disabled={store.pincode.length === 6 && !!store.city && !store.isPincodeSearching}
                 />
@@ -1173,31 +1581,160 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
               <span className="text-xs font-black uppercase tracking-widest">{t('reg_add_outlet')}</span>
             </button>
 
-            <input 
-              type="text" 
-              placeholder={t('reg_gstin')} 
-              className={`input-premium ${gstinValue.length > 0 && !isGstValid(gstinValue) ? 'border-rose-500' : ''}`}
-              value={gstinValue}
-              onChange={(e) => setGstinValue(e.target.value)}
-              required 
-            />
-            {gstinValue.length > 0 && !isGstValid(gstinValue) && (
-              <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-            )}
+            {/* GSTIN Input with Validate Button */}
+            <div className="relative">
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    placeholder={t('reg_gstin')}
+                    className={`input-premium ${
+                      gstinTaken === true ? 'border-rose-500' :
+                      gstinTaken === false && gstinValidated === true ? 'border-emerald-500' :
+                      gstinValidated === false ? 'border-rose-500' :
+                      gstinValidated === true ? 'border-emerald-500' :
+                      gstinValue.length > 0 && !isGstValid(gstinValue) ? 'border-rose-500' : ''
+                    }`}
+                    value={gstinValue}
+                    onChange={handleGstinChange}
+                    required
+                  />
+                  {isCheckingGstin && (
+                    <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-blue-500" />
+                  )}
+                  {!isCheckingGstin && gstinTaken === true && (
+                    <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
+                  )}
+                  {!isCheckingGstin && gstinValidated === false && gstinTaken !== true && (
+                    <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
+                  )}
+                  {!isCheckingGstin && gstinValidated === true && gstinTaken === false && (
+                    <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleValidateGstin}
+                  disabled={!gstinValue || gstinValue.length === 0 || !isGstValid(gstinValue)}
+                  className="px-4 py-3 rounded-xl bg-amber-600/20 border border-amber-500/30 text-amber-500 font-black text-xs uppercase tracking-wider hover:bg-amber-600/30 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  Validate
+                </button>
+              </div>
+              {gstinTaken === true && (
+                <p className="text-rose-500 text-[10px] font-bold mt-1 ml-1">✗ GSTIN already registered</p>
+              )}
+              {gstinValidated === true && gstinTaken === false && (
+                <p className="text-emerald-500 text-[10px] font-bold mt-1 ml-1">✓ Valid GSTIN format and available</p>
+              )}
+            </div>
 
-            <input 
-              type="text" 
-              placeholder={t('reg_pan')} 
-              className={`input-premium ${panValue.length > 0 && !isPanValid(panValue) ? 'border-rose-500' : ''}`}
-              value={panValue}
-              onChange={(e) => setPanValue(e.target.value)}
-              required 
-            />
+            {/* PAN Input with Validate Button */}
+            <div className="relative">
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    placeholder={t('reg_pan')}
+                    className={`input-premium ${
+                      panTaken === true ? 'border-rose-500' :
+                      panTaken === false && panValidated === true ? 'border-emerald-500' :
+                      panValidated === false ? 'border-rose-500' :
+                      panValidated === true ? 'border-emerald-500' :
+                      panValue.length > 0 && !isPanValid(panValue) ? 'border-rose-500' : ''
+                    }`}
+                    value={panValue}
+                    onChange={handlePanChange}
+                    required
+                  />
+                  {isCheckingPan && (
+                    <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-blue-500" />
+                  )}
+                  {!isCheckingPan && panTaken === true && (
+                    <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
+                  )}
+                  {!isCheckingPan && panValidated === false && panTaken !== true && (
+                    <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
+                  )}
+                  {!isCheckingPan && panValidated === true && panTaken === false && (
+                    <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleValidatePan}
+                  disabled={!panValue || panValue.length === 0 || !isPanValid(panValue)}
+                  className="px-4 py-3 rounded-xl bg-amber-600/20 border border-amber-500/30 text-amber-500 font-black text-xs uppercase tracking-wider hover:bg-amber-600/30 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  Validate
+                </button>
+              </div>
+              {panTaken === true && (
+                <p className="text-rose-500 text-[10px] font-bold mt-1 ml-1">✗ PAN already registered</p>
+              )}
+              {panValidated === true && panTaken === false && (
+                <p className="text-emerald-500 text-[10px] font-bold mt-1 ml-1">✓ Valid PAN format and available</p>
+              )}
+            </div>
             {panValue.length > 0 && !isPanValid(panValue) && (
               <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
             )}
 
-            
+            {/* Terms of Service and Privacy Policy Checkboxes */}
+            <div className="space-y-3 mt-4">
+              {/* Terms of Service Checkbox */}
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="termsCheckbox"
+                  checked={termsAccepted}
+                  disabled
+                  readOnly
+                  className={`mt-1 w-5 h-5 rounded cursor-not-allowed transition-all ${
+                    termsAccepted
+                      ? 'accent-emerald-500 bg-emerald-500 border-emerald-500 opacity-100 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20'
+                      : 'accent-slate-600 bg-slate-900/50 border-white/20 opacity-40'
+                  }`}
+                />
+                <label className="text-sm text-white/80 select-none">
+                  I have read and accept the{' '}
+                  <button
+                    type="button"
+                    onClick={() => setView('terms_of_service_signup')}
+                    className="text-amber-500 underline hover:text-amber-400 transition-colors"
+                  >
+                    Terms of Service
+                  </button>
+                </label>
+              </div>
+
+              {/* Privacy Policy Checkbox */}
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="privacyCheckbox"
+                  checked={privacyAccepted}
+                  disabled
+                  readOnly
+                  className={`mt-1 w-5 h-5 rounded cursor-not-allowed transition-all ${
+                    privacyAccepted
+                      ? 'accent-emerald-500 bg-emerald-500 border-emerald-500 opacity-100 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20'
+                      : 'accent-slate-600 bg-slate-900/50 border-white/20 opacity-40'
+                  }`}
+                />
+                <label className="text-sm text-white/80 select-none">
+                  I have read and accept the{' '}
+                  <button
+                    type="button"
+                    onClick={() => setView('privacy_policy_signup')}
+                    className="text-amber-500 underline hover:text-amber-400 transition-colors"
+                  >
+                    Privacy Policy
+                  </button>
+                </label>
+              </div>
+            </div>
+
           </div>
         )}
 

@@ -25,6 +25,8 @@ import { fetchFavoritesService } from './services/fetchFavorites'; // NEW: Impor
 import { pinnedDealsService } from './services/pinnedDealsService'; // NEW: Import pinnedDealsService
 import { PrivacyPolicy } from './PrivacyPolicy'; // Privacy Policy component
 import { TermsOfService } from './TermsOfService'; // Terms of Service component
+import { PrivacyPolicySignup } from './PrivacyPolicySignup'; // Privacy Policy for signup
+import { TermsOfServiceSignup } from './TermsOfServiceSignup'; // Terms of Service for signup
 
 const AppContent: React.FC = () => {
   const [view, setView] = useState<AppView>('splash');
@@ -70,6 +72,14 @@ const AppContent: React.FC = () => {
 
   // State to track if consumer has completed location selection
   const [isLocationComplete, setIsLocationComplete] = useState(false);
+
+  // Terms and Privacy acceptance state (lifted up from MemberJoin to share with Terms/Privacy pages)
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+
+  // Role selection state for signup (persist across navigation)
+  const [signupRole, setSignupRole] = useState<'user' | 'merchant'>('user');
+  const [showRoleSelector, setShowRoleSelector] = useState(true);
 
 
   const navigateTo = (newView: AppView) => {
@@ -327,6 +337,10 @@ const AppContent: React.FC = () => {
                 <PrivacyPolicy setView={navigateTo} theme={theme} /> :
               view === 'terms_of_service' ?
                 <TermsOfService setView={navigateTo} theme={theme} /> :
+              view === 'privacy_policy_signup' ?
+                <PrivacyPolicySignup setView={navigateTo} theme={theme} setPrivacyAccepted={setPrivacyAccepted} /> :
+              view === 'terms_of_service_signup' ?
+                <TermsOfServiceSignup setView={navigateTo} theme={theme} setTermsAccepted={setTermsAccepted} /> :
               view === 'register' ?
                 <MemberJoin
                   setView={navigateTo}
@@ -338,6 +352,14 @@ const AppContent: React.FC = () => {
                   isPhoneVerifiedForRegistration={isPhoneVerifiedForRegistration}
                   setRegistrationSuccessMessage={setRegistrationSuccessMessage} // Pass setter here
                   theme={theme} // Pass theme to MemberJoin
+                  termsAccepted={termsAccepted}
+                  setTermsAccepted={setTermsAccepted}
+                  privacyAccepted={privacyAccepted}
+                  setPrivacyAccepted={setPrivacyAccepted}
+                  signupRole={signupRole}
+                  setSignupRole={setSignupRole}
+                  showRoleSelector={showRoleSelector}
+                  setShowRoleSelector={setShowRoleSelector}
                 /> :
               // The OtpVerificationModal no longer relies on a specific `setView` directly
               <AuthStack

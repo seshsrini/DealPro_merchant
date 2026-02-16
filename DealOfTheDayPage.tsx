@@ -222,13 +222,13 @@ export const DealOfTheDayPage: React.FC<DealOfTheDayPageProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="mb-6 flex gap-3">
+      <div className="mb-6 glass p-1.5 rounded-2xl border-white/5 bg-white/5 flex gap-2">
         <button
           onClick={() => setActiveTab('live')}
-          className={`flex-1 p-4 rounded-2xl font-black text-sm uppercase tracking-wider transition-all ${
+          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
             activeTab === 'live'
-              ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-xl shadow-orange-500/30'
-              : 'glass text-slate-400 hover:text-white'
+              ? 'bg-orange-600 text-white shadow-xl shadow-orange-500/20'
+              : 'text-slate-500 hover:text-slate-300'
           }`}
         >
           <div className="flex items-center justify-center gap-2">
@@ -245,10 +245,10 @@ export const DealOfTheDayPage: React.FC<DealOfTheDayPageProps> = ({
         </button>
         <button
           onClick={() => setActiveTab('upcoming')}
-          className={`flex-1 p-4 rounded-2xl font-black text-sm uppercase tracking-wider transition-all ${
+          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
             activeTab === 'upcoming'
-              ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-xl shadow-blue-500/30'
-              : 'glass text-slate-400 hover:text-white'
+              ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20'
+              : 'text-slate-500 hover:text-slate-300'
           }`}
         >
           <div className="flex items-center justify-center gap-2">

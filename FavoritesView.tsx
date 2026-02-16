@@ -101,27 +101,27 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-3 mb-8">
+      <div className="mb-8 glass p-1.5 rounded-2xl border-white/5 bg-white/5 flex gap-2">
         <button
           onClick={() => setActiveTab('favorites')}
-          className={`flex-1 px-6 py-4 rounded-2xl font-black uppercase text-sm tracking-wider transition-all border-2 ${
+          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
             activeTab === 'favorites'
-              ? 'bg-gradient-to-r from-rose-500/20 to-pink-500/20 border-rose-500/50 text-rose-400 shadow-lg shadow-rose-500/20'
-              : 'glass border-white/10 text-slate-500 hover:border-rose-500/30'
+              ? 'bg-rose-600 text-white shadow-xl shadow-rose-500/20'
+              : 'text-slate-500 hover:text-slate-300'
           }`}
         >
-          <Heart className={`w-5 h-5 inline-block mr-2 ${activeTab === 'favorites' ? 'fill-current' : ''}`} />
+          <Heart className={`w-4 h-4 inline-block mr-2 ${activeTab === 'favorites' ? 'fill-current' : ''}`} />
           Favorites
         </button>
         <button
           onClick={() => setActiveTab('pinned')}
-          className={`flex-1 px-6 py-4 rounded-2xl font-black uppercase text-sm tracking-wider transition-all border-2 ${
+          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
             activeTab === 'pinned'
-              ? 'bg-gradient-to-r from-blue-500/20 to-indigo-500/20 border-blue-500/50 text-blue-400 shadow-lg shadow-blue-500/20'
-              : 'glass border-white/10 text-slate-500 hover:border-blue-500/30'
+              ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20'
+              : 'text-slate-500 hover:text-slate-300'
           }`}
         >
-          <Pin className={`w-5 h-5 inline-block mr-2 ${activeTab === 'pinned' ? 'fill-current' : ''}`} />
+          <Pin className={`w-4 h-4 inline-block mr-2 ${activeTab === 'pinned' ? 'fill-current' : ''}`} />
           Pinned
         </button>
       </div>

@@ -102,13 +102,38 @@ export const userService = {
         // For now, let's return false and let the UI manage `null` state if needed.
         return false;
       }
-      
+
       // If data is null or undefined, assume not found (isValid: false)
       return data?.isValid || false;
     } catch (e: any) {
       console.error("[userService] Identifier validation failed (client-side catch):", e);
       // Catch-all for network errors or unexpected client-side issues
       return false; // Cannot determine, assume not taken to avoid blocking if network is down
+    }
+  },
+
+  /**
+   * Validates if GSTIN or PAN already exists in the system.
+   * @param field Either 'gstin' or 'pan'
+   * @param value The GSTIN or PAN value to check
+   * @returns Promise<boolean> true if value exists (taken), false otherwise.
+   */
+  validateMerchantField: async (field: 'gstin' | 'pan', value: string): Promise<boolean> => {
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('validate-merchant-field', {
+        body: { field, value },
+      });
+
+      if (invokeError) {
+        console.error(`[userService] ${field.toUpperCase()} validation failed:`, invokeError);
+        return false;
+      }
+
+      // Returns true if the field value is taken
+      return data?.isTaken || false;
+    } catch (e: any) {
+      console.error(`[userService] ${field.toUpperCase()} validation failed (client-side catch):`, e);
+      return false;
     }
   },
 

@@ -135,6 +135,14 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
     }
   }, [user.id, hasLoadedCachedLocation]);
 
+  // Auto-redirect to home if navigating to preferences but cached location already exists
+  useEffect(() => {
+    if (view === 'preferences' && hasLoadedCachedLocation && userCoords) {
+      console.log('[ConsumerStack] Cached location found, redirecting to home instead of showing location search');
+      setView('home');
+    }
+  }, [view, hasLoadedCachedLocation, userCoords, setView]);
+
   // REMOVED: Automatic redirect to home when location is detected
   // User should manually click "Scan Deals" button to proceed
   // This prevents the page from auto-submitting when GPS location is acquired

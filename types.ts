@@ -1,7 +1,7 @@
 
 export type Locale = 'en' | 'kn' | 'hi' | 'ta' | 'te' | 'ml' | 'bn' | 'mr' | 'gu';
 
-export type AppView = 'splash' | 'language_selection' | 'login' | 'onboarding' | 'preferences' | 'home' | 'detail' | 'deals_of_day' | 'favorites' | 'profile' | 'merchant_dashboard' | 'merchant_analytics' | 'merchant_deals' | 'merchant_deal_of_day' | 'forgot_password' | 'register' | 'edit_profile' | 'deals' | 'help_feedback' | 'merchant_subscriptions' | 'redemption_survey' | 'campaign_survey' | 'my_redemptions' | 'verify_email' | 'verify_phone' | 'payment_plans' | 'bank_verification' | 'store_search' | 'dealadmin_dashboard' | 'dealadmin_review_deals' | 'dealadmin_edit_deal' | 'dealadmin_analytics' | 'dealadmin_banners' | 'privacy_policy' | 'terms_of_service';
+export type AppView = 'splash' | 'language_selection' | 'login' | 'onboarding' | 'preferences' | 'home' | 'detail' | 'deals_of_day' | 'favorites' | 'profile' | 'merchant_dashboard' | 'merchant_analytics' | 'merchant_deals' | 'merchant_deal_of_day' | 'forgot_password' | 'register' | 'edit_profile' | 'deals' | 'help_feedback' | 'merchant_subscriptions' | 'redemption_survey' | 'campaign_survey' | 'my_redemptions' | 'verify_email' | 'verify_phone' | 'payment_plans' | 'bank_verification' | 'store_search' | 'dealadmin_dashboard' | 'dealadmin_review_deals' | 'dealadmin_edit_deal' | 'dealadmin_analytics' | 'dealadmin_banners' | 'privacy_policy' | 'terms_of_service' | 'privacy_policy_signup' | 'terms_of_service_signup';
 
 export interface LocalizedNames {
   en: string;
@@ -209,6 +209,8 @@ export interface CampaignInteraction {
 export interface StoreLocation {
   store_name: string; // Added store_name here
   street: string;
+  pincode: string;
+  locality: string; // Added locality field
   state: string;
   city: string;
   landmark: string;
@@ -217,6 +219,5 @@ export interface StoreLocation {
   shift1: string;
   shift2: string;
   is24hrs: boolean;
-  pincode: string; // Added pincode
   isPincodeSearching: boolean; // Added for loading state
 }

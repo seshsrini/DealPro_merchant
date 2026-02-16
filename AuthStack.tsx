@@ -4,6 +4,7 @@ import { AppView } from './types';
 import { userService } from './services/userService';
 import { biometricService } from './services/biometricService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
+import { fcmService } from './services/fcmService';
 import { ForgotPwd } from './forgotpwd';
 import { useTranslation } from './contexts/LanguageContext';
 import {
@@ -46,6 +47,15 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     if (userProfile.lang_preference) {
       console.log('[AuthStack] Setting language preference from user profile:', userProfile.lang_preference);
       setLocale(userProfile.lang_preference);
+    }
+
+    // Initialize push notifications for all users
+    try {
+      await fcmService.initialize(userProfile.id);
+      console.log('[AuthStack] Push notifications initialized for user:', userProfile.id);
+    } catch (error) {
+      console.error('[AuthStack] Failed to initialize push notifications:', error);
+      // Don't block login if FCM fails
     }
 
     // Check subscription status for merchants
@@ -224,9 +234,9 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
         </div>
 
         <div className="mt-8 text-center space-y-4 pb-20">
-          <button onClick={() => setView('forgot_password')} className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-slate-500' : 'text-slate-800'}`}>{t('login_forgot') || 'Forgot Password?'}</button>
-          <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-slate-500' : 'text-slate-800'}`}>
-            {t('login_register_hint') || 'New to the Grid?'} <button onClick={() => setView('register')} className={`ml-1 border-b ${isDark ? 'text-white border-white/20' : 'text-yellow-600 border-yellow-600/30'}`}>{t('login_register_action') || 'Signup'}</button>
+          <button onClick={() => setView('forgot_password')} className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-white' : 'text-slate-800'}`}>{t('login_forgot') || 'Forgot Password?'}</button>
+          <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-white' : 'text-slate-800'}`}>
+            {t('login_register_hint') || 'New to DealPro?'} <button onClick={() => setView('register')} className={`ml-1 border-b ${isDark ? 'text-white border-white/20' : 'text-yellow-600 border-yellow-600/30'}`}>{t('login_register_action') || 'Signup'}</button>
           </p>
         </div>
       </div>
