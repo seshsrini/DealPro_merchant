@@ -167,22 +167,23 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     return div;
   };
 
+  // Initialize map once (don't depend on coords changes)
   useEffect(() => {
     if (!isGoogleMapsReady || !mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Prioritize user coordinates, then target, then default to Bangalore
-    const initialLat = userCoords?.latitude || targetCoords?.latitude || 12.9716;
-    const initialLng = userCoords?.longitude || targetCoords?.longitude || 77.5946;
+    // Start with default Bangalore coordinates
+    const initialLat = 12.9716;
+    const initialLng = 77.5946;
 
     try {
-      console.log('[LocationMap] Initializing map with coords:', { lat: initialLat, lng: initialLng, hasUserCoords: !!userCoords });
+      console.log('[LocationMap] Initializing map at default location');
 
       const map = new (window as any).google.maps.Map(mapContainerRef.current, {
         center: { lat: initialLat, lng: initialLng },
-        zoom: userCoords ? 15 : 14, // Zoom in more if we have user location
+        zoom: 12,
         disableDefaultUI: true,
         mapId: 'DEMO_MAP_ID',
-        gestureHandling: 'greedy', // Better mobile experience
+        gestureHandling: 'greedy',
         zoomControl: false,
         mapTypeControl: false,
         scaleControl: false,
@@ -197,8 +198,22 @@ export const LocationMap: React.FC<LocationMapProps> = ({
       console.error('[LocationMap] Map initialization failed:', e);
       setMapLoadError('Failed to initialize map. Please refresh the page.');
     }
-  }, [isGoogleMapsReady, userCoords, targetCoords]);
+  }, [isGoogleMapsReady]);
 
+  // Separate effect to handle centering when coords change
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    const coords = userCoords || targetCoords;
+    if (coords) {
+      const pos = { lat: coords.latitude, lng: coords.longitude };
+      console.log('[LocationMap] Centering map on new coordinates:', pos);
+      mapInstanceRef.current.panTo(pos);
+      mapInstanceRef.current.setZoom(15);
+    }
+  }, [userCoords, targetCoords]);
+
+  // Handle user marker creation/update with retry logic
   useEffect(() => {
     const g = (window as any).google;
 
@@ -209,48 +224,67 @@ export const LocationMap: React.FC<LocationMapProps> = ({
 
     if (!userCoords) {
       console.log('[LocationMap] No user coordinates available for marker');
+      // Clean up existing marker if coords are removed
+      if (userMarkerRef.current) {
+        userMarkerRef.current.map = null;
+        userMarkerRef.current = null;
+        console.log('[LocationMap] User marker removed');
+      }
       return;
     }
 
-    // Wait for markers library to be ready
-    if (!g?.maps?.marker?.AdvancedMarkerElement) {
-      console.warn('[LocationMap] AdvancedMarkerElement not yet available for user marker, will retry when ready');
-
-      // Retry after a short delay
-      const retryTimer = setTimeout(() => {
-        console.log('[LocationMap] Retrying user marker creation...');
-      }, 500);
-
-      return () => clearTimeout(retryTimer);
-    }
-
-    const pos = { lat: userCoords.latitude, lng: userCoords.longitude };
-
-    try {
-      if (userMarkerRef.current) {
-        console.log('[LocationMap] Updating user marker position:', pos);
-        userMarkerRef.current.position = pos;
-      } else {
-        console.log('[LocationMap] Creating NEW user marker at:', pos);
-        userMarkerRef.current = new g.maps.marker.AdvancedMarkerElement({
-          position: pos,
-          map: mapInstanceRef.current,
-          content: createUserMarkerContent(),
-          title: "Your Location",
-        });
-        console.log('[LocationMap] User marker created successfully!');
+    const createOrUpdateMarker = () => {
+      // Wait for markers library to be ready
+      if (!g?.maps?.marker?.AdvancedMarkerElement) {
+        console.warn('[LocationMap] AdvancedMarkerElement not yet available');
+        return false;
       }
 
-      // Center map on user location if no target
-      if (!targetCoords) {
-        console.log('[LocationMap] Centering map on user location');
-        mapInstanceRef.current.panTo(pos);
-        mapInstanceRef.current.setZoom(15);
+      const pos = { lat: userCoords.latitude, lng: userCoords.longitude };
+
+      try {
+        if (userMarkerRef.current) {
+          console.log('[LocationMap] Updating user marker position:', pos);
+          userMarkerRef.current.position = pos;
+        } else {
+          console.log('[LocationMap] Creating NEW user marker at:', pos);
+          userMarkerRef.current = new g.maps.marker.AdvancedMarkerElement({
+            position: pos,
+            map: mapInstanceRef.current,
+            content: createUserMarkerContent(),
+            title: "Your Location",
+          });
+          console.log('[LocationMap] User marker created successfully!');
+        }
+        return true;
+      } catch (e) {
+        console.error('[LocationMap] Error creating/updating user marker:', e);
+        return false;
       }
-    } catch (e) {
-      console.error('[LocationMap] Error creating/updating user marker:', e);
+    };
+
+    // Try to create marker immediately
+    if (!createOrUpdateMarker()) {
+      // If failed, retry with intervals
+      let retryCount = 0;
+      const maxRetries = 10;
+
+      const retryTimer = setInterval(() => {
+        retryCount++;
+        console.log(`[LocationMap] Retry ${retryCount}/${maxRetries} for user marker`);
+
+        if (createOrUpdateMarker()) {
+          clearInterval(retryTimer);
+          console.log('[LocationMap] User marker created after retry!');
+        } else if (retryCount >= maxRetries) {
+          clearInterval(retryTimer);
+          console.error('[LocationMap] Failed to create user marker after all retries');
+        }
+      }, 300);
+
+      return () => clearInterval(retryTimer);
     }
-  }, [userCoords, targetCoords]);
+  }, [userCoords]);
 
   useEffect(() => {
     const g = (window as any).google;
