@@ -846,17 +846,21 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           throw new Error("Phone number not verified.");
         }
 
+        // Generate username and email from phone number for backend compatibility
+        const phoneUsername = `user_${regPhone}`;
+        const phoneEmail = `${regPhone}@dealpro.app`;
+
         const consumerRegData = {
-          fullName: username || email.split('@')[0], // Use username or email prefix as display name
-          username: username || null, // Username is optional, can be null
-          email,
+          fullName: phoneUsername, // Use phone-based identifier as display name
+          username: phoneUsername, // Generated from phone
+          email: phoneEmail, // Generated email for backend compatibility
           password,
           phone: finalRegPhone,
           role: 'consumer',
           languagePreference,
           home_location: consumerLocality || null, // Add consumer home location
         };
-        console.log('[memberJoin] Attempting to register consumer with:', consumerRegData);
+        console.log('[memberJoin] Attempting to register consumer with phone-based credentials');
 
         const { user: registeredUser, session } = await userService.registerUser(consumerRegData);
 
@@ -965,10 +969,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       return false; // Always block if any check is in progress
     }
 
-    // For consumers: username is optional, but if provided must be validated
-    if (regRole === 'user' && username.length > 0 && usernameTaken === null) {
-      return false; // Username entered but validation not complete
-    }
     // For merchants: username is required and must be validated
     if (regRole === 'merchant' && usernameTaken === null) {
       return false;
@@ -979,10 +979,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       return false; // Phone entered but validation not complete
     }
 
-    // For users, email is required and must be validated
-    if (regRole === 'user' && emailTaken === null) {
-      return false;
-    }
     // For merchants, only validate email if it's provided
     if (regRole === 'merchant' && email.length > 0 && emailTaken === null) {
       return false;
@@ -990,12 +986,8 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
     // Basic fields must be filled and valid format
     if (regRole === 'user') {
-      // For consumers: phone is required, username is optional, email is required
-      if (email.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !isValidPassword(password)) {
-        return false;
-      }
-      // Username is optional, but if provided must be >= 3 chars
-      if (username.length > 0 && username.length < 3) {
+      // For consumers: only phone and password are required
+      if (!isValidPassword(password)) {
         return false;
       }
       // Phone is required and must meet minimum length
@@ -1173,7 +1165,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       <form onSubmit={handleRegister} className="space-y-6 flex-1">
         {/* Basic User Info (Applies to both roles) */}
         <div className="space-y-4">
-          {/* Phone Number - Moved to top for consumers, required with OTP */}
+          {/* Phone Number - First field for consumers, required with OTP */}
           <div className="relative flex group">
              {/* Country Code Picker */}
              <div className={`relative ${showCountryPicker ? 'z-[1000]' : ''}`}>
@@ -1250,47 +1242,51 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
              </div>
           </div>
 
-          {/* Username - Now optional for consumers */}
-          <div className="relative group">
-            <input
-              type="text"
-              placeholder={regRole === 'user' ? 'Username (Optional)' : t('reg_username')}
-              className="input-premium"
-              value={username}
-              onChange={handleUsernameChange}
-              required={regRole === 'merchant'}
-            />
-            {isCheckingUsername && (
-              <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
-            )}
-            {usernameTaken === false && !isCheckingUsername && username.length >= 3 && (
-              <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-            )}
-            {usernameTaken === true && !isCheckingUsername && (
-              <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-            )}
-          </div>
+          {/* Username - Only for merchants */}
+          {regRole === 'merchant' && (
+            <div className="relative group">
+              <input
+                type="text"
+                placeholder={t('reg_username')}
+                className="input-premium"
+                value={username}
+                onChange={handleUsernameChange}
+                required
+              />
+              {isCheckingUsername && (
+                <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
+              )}
+              {usernameTaken === false && !isCheckingUsername && username.length >= 3 && (
+                <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
+              )}
+              {usernameTaken === true && !isCheckingUsername && (
+                <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
+              )}
+            </div>
+          )}
 
-          {/* Email */}
-          <div className="relative group">
-            <input
-              type="email"
-              placeholder={regRole === 'merchant' ? 'Email Address (Optional)' : t('reg_email')}
-              className="input-premium"
-              value={email}
-              onChange={handleEmailChange}
-              required={regRole === 'user'}
-            />
-            {isCheckingEmail && (
-              <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
-            )}
-            {emailTaken === false && !isCheckingEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (
-              <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-            )}
-            {emailTaken === true && !isCheckingEmail && (
-              <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-            )}
-          </div>
+          {/* Email - Only for merchants */}
+          {regRole === 'merchant' && (
+            <div className="relative group">
+              <input
+                type="email"
+                placeholder="Email Address (Optional)"
+                className="input-premium"
+                value={email}
+                onChange={handleEmailChange}
+                required={false}
+              />
+              {isCheckingEmail && (
+                <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
+              )}
+              {emailTaken === false && !isCheckingEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (
+                <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
+              )}
+              {emailTaken === true && !isCheckingEmail && (
+                <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
+              )}
+            </div>
+          )}
 
           {/* Full Name - Only for merchants */}
           {regRole === 'merchant' && (
