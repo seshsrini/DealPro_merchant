@@ -66,6 +66,8 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
   // Locality selection handler - auto-populates pincode, city, state
   const handleLocalitySelect = useCallback(async (selectedLocality: DBLocality) => {
     const localizedName = selectedLocality.display_name || selectedLocality.names[locale] || selectedLocality.names.en;
+    // IMPORTANT: Always use English name for geocoding to get accurate coordinates
+    const englishName = selectedLocality.names.en;
 
     setLocality(localizedName);
     setPincode(selectedLocality.pincode);
@@ -79,8 +81,10 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
         setCity(result.city);
         setState(result.state);
 
-        // Geocode the full address for map display
-        const fullAddress = `${localizedName}, ${result.city}, ${result.state}, India`;
+        // CRITICAL: Use English locality name for geocoding to ensure accurate coordinates
+        // The database and Google Maps work best with English addresses
+        const fullAddress = `${englishName}, ${result.city}, ${result.state}, India`;
+        console.log(`[LocationSearch] Geocoding address (English): ${fullAddress}`);
         const coords = await locationsearchService.geocodeAddressWithAI(fullAddress);
         setManualCoords(coords);
       }
@@ -93,7 +97,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
       setIsGeocoding(false);
     }
 
-    console.log(`[LocationSearch] Selected: ${localizedName} (${selectedLocality.pincode})`);
+    console.log(`[LocationSearch] Selected: ${localizedName} (display) / ${englishName} (geocoding) - ${selectedLocality.pincode}`);
   }, [locale]);
 
   const requestGpsPosition = async () => {
