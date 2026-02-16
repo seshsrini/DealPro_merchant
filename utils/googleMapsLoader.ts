@@ -48,8 +48,10 @@ export const loadGoogleMaps = (): Promise<void> => {
     };
 
     // Create script element with async loading parameter
+    // IMPORTANT: language=en ensures geocoding results (city, state, locality names) are always in English
+    // This is critical for database matching, as our database stores location names in English
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&v=weekly&loading=async&callback=initGoogleMaps`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&v=weekly&loading=async&language=en&callback=initGoogleMaps`;
     script.async = true;
     script.defer = true;
     script.onerror = (error) => {
