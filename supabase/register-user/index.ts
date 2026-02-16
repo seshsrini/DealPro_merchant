@@ -7,21 +7,14 @@ declare const Deno: {
 };
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { validateInput, validatePassword, validateUsername, validateIndianPhone } from '../_shared/validation.ts';
+import { applyRateLimit, RateLimitTiers } from '../_shared/rateLimiter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS', // Simplified methods
   'Access-Control-Max-Age': '86400', // Cache preflight for 24 hours
-};
-
-// Validation Helpers (more comprehensive)
-const validate = {
-  isValidEmail: (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
-  isValidPhoneNumber: (phone: string) => /^\+?[1-9]\d{1,14}(?:[-\s]\d+)*$/.test(phone),
-  isValidPassword: (pw: string) => /^(?=.*[A-Z])(?=.*\d)[^\s]{8,15}$/.test(pw),
-  isValidUsername: (un: string) => /^[a-zA-Z0-9_.-]{3,20}$/.test(un), // Example: 3-20 alphanumeric, underscore, dot, hyphen
-  isString: (value: any): boolean => typeof value === 'string',
 };
 
 Deno.serve(async (req) => {
@@ -34,6 +27,13 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Apply strict rate limiting for registration (5 requests per minute)
+  const rateLimit = applyRateLimit(req, RateLimitTiers.STRICT);
+  if (!rateLimit.allowed) {
+    console.warn('[RegisterUser] Rate limit exceeded');
+    return rateLimit.response!;
+  }
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -43,19 +43,61 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { fullName, username, email, password, phone, role, languagePreference } = body; // phone is now optional
 
-    // 1. Basic Input Validation
-    // fullName is now optional for consumers
-    if (fullName && (!validate.isString(fullName) || fullName.length < 1)) {
-      throw new Error('Full name must be a non-empty string if provided.');
+    // 1. Validate input using shared validation utilities
+    const validation = validateInput(body, {
+      required: ['username', 'email', 'password'],
+      email: 'email',
+      minLength: { username: 3, fullName: 1 },
+      maxLength: { username: 30, fullName: 100, email: 100 }
+    });
+
+    if (!validation.valid) {
+      console.warn('[RegisterUser] Validation failed:', validation.error);
+      return new Response(JSON.stringify({ error: validation.error }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
     }
-    if (!validate.isValidUsername(username)) throw new Error('Username invalid: 3-20 chars, alphanumeric, _.-');
-    if (!validate.isValidEmail(email)) throw new Error('Invalid email format.');
-    if (!validate.isValidPassword(password)) throw new Error('Password invalid: 8-15 chars, 1 uppercase, 1 number, no spaces.');
-    // Phone is optional for consumers, only validate if provided
-    if (phone && !validate.isValidPhoneNumber(phone as string)) throw new Error('Invalid phone number format.');
-    if (role !== 'consumer') throw new Error('Invalid role for this registration. Must be "consumer".');
+
+    const { fullName, username, email, password, phone, role, languagePreference, home_location } = validation.sanitizedData;
+
+    // Validate username format
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+      return new Response(JSON.stringify({ error: usernameValidation.error }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return new Response(JSON.stringify({ error: passwordValidation.error }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+
+    // Validate phone if provided
+    if (phone) {
+      const phoneValidation = validateIndianPhone(phone);
+      if (!phoneValidation.valid) {
+        return new Response(JSON.stringify({ error: phoneValidation.error }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        });
+      }
+    }
+
+    // Validate role
+    if (role !== 'consumer') {
+      return new Response(JSON.stringify({ error: 'Invalid role for this registration. Must be "consumer".' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
 
     const cleanEmail = email.trim().toLowerCase();
 
@@ -109,6 +151,7 @@ Deno.serve(async (req) => {
       category: 'consumer', // Added as per new requirement
       active_status: true,
       lang_preference: languagePreference || 'en', // Default to English if not provided
+      home_location: home_location || null, // Add consumer home location
     };
 
     const { data: profileData, error: profileInsertError } = await adminClient

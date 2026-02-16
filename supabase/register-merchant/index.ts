@@ -5,6 +5,8 @@ declare const Deno: {
 };
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.49.1';
+import { validateInput, validatePassword, validateUsername, validateIndianPhone, validateGSTIN, validatePAN } from '../_shared/validation.ts';
+import { applyRateLimit, RateLimitTiers } from '../_shared/rateLimiter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,18 +15,15 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
-const validate = {
-  isValidEmail: (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
-  isValidPhoneNumber: (phone: string) => /^\+?[1-9]\d{1,14}(?:[-\s]\d+)*$/.test(phone),
-  isValidPassword: (pw: string) => /^(?=.*[A-Z])(?=.*\d)[^\s]{8,15}$/.test(pw),
-  isValidUsername: (un: string) => /^[a-zA-Z0-9_.-]{3,20}$/.test(un),
-  isString: (value: any): boolean => typeof value === 'string',
-  isArray: (value: any): boolean => Array.isArray(value),
-  isObject: (value: any): boolean => typeof value === 'object' && value !== null,
-};
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  // Apply strict rate limiting for merchant registration (5 requests per minute)
+  const rateLimit = applyRateLimit(req, RateLimitTiers.STRICT);
+  if (!rateLimit.allowed) {
+    console.warn('[RegisterMerchant] Rate limit exceeded');
+    return rateLimit.response!;
+  }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -34,21 +33,84 @@ Deno.serve(async (req) => {
   const serviceRoleSupabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    // 1. Capture payload into a variable so it can be reused safely
+    // 1. Capture payload and validate using shared utilities
     const body = await req.json();
+
+    const validation = validateInput(body, {
+      required: ['fullName', 'username', 'email', 'password', 'phone', 'storeName', 'stores'],
+      email: 'email',
+      phone: 'phone',
+      minLength: { fullName: 1, username: 3, storeName: 1 },
+      maxLength: { fullName: 100, username: 30, email: 100, storeName: 100 }
+    });
+
+    if (!validation.valid) {
+      console.warn('[RegisterMerchant] Validation failed:', validation.error);
+      return new Response(JSON.stringify({ error: validation.error }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+
     const {
         fullName, username, email, password, phone, role,
         storeName, category, gstin, pan, stores, languagePreference
-    } = body;
+    } = validation.sanitizedData;
 
-    // 2. Comprehensive Validation
-    if (!validate.isString(fullName)) throw new Error('Full name is required.');
-    if (!validate.isValidUsername(username)) throw new Error('Username invalid (3-20 chars).');
-    if (!validate.isValidEmail(email)) throw new Error('Invalid email format.');
-    if (!validate.isValidPassword(password)) throw new Error('Password must have 1 Uppercase, 1 Number, 8-15 chars.');
-    if (!validate.isValidPhoneNumber(phone)) throw new Error('Invalid phone format.');
-    if (!validate.isString(storeName)) throw new Error('Brand store name is required.');
-    if (!validate.isArray(stores) || stores.length === 0) throw new Error('At least one store location is required.');
+    // 2. Additional validations
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid) {
+      return new Response(JSON.stringify({ error: usernameValidation.error }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      return new Response(JSON.stringify({ error: passwordValidation.error }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+
+    const phoneValidation = validateIndianPhone(phone);
+    if (!phoneValidation.valid) {
+      return new Response(JSON.stringify({ error: phoneValidation.error }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+
+    // Validate GSTIN if provided
+    if (gstin) {
+      const gstinValidation = validateGSTIN(gstin);
+      if (!gstinValidation.valid) {
+        return new Response(JSON.stringify({ error: gstinValidation.error }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        });
+      }
+    }
+
+    // Validate PAN if provided
+    if (pan) {
+      const panValidation = validatePAN(pan);
+      if (!panValidation.valid) {
+        return new Response(JSON.stringify({ error: panValidation.error }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        });
+      }
+    }
+
+    // Validate stores array
+    if (!Array.isArray(stores) || stores.length === 0) {
+      return new Response(JSON.stringify({ error: 'At least one store location is required.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
 
     const cleanEmail = email.trim().toLowerCase();
 
@@ -97,12 +159,13 @@ Deno.serve(async (req) => {
     }
 
     // 5. Insert Stores into merchant_stores
-    // FIX: Added s.store_name mapping here
+    // FIX: Added s.store_name and locality mapping here
     const storeInserts = stores.map((s: any) => ({
       merchant_id: userId,
       store_name: s.store_name || storeName, // Fallback to brand name if branch name missing
       address: s.address,
       landmark: s.landmark || null,
+      locality: s.locality || null, // Add locality field
       city: s.city,
       state: s.state,
       latitude: s.latitude || 0,

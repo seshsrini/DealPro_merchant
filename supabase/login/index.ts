@@ -8,6 +8,8 @@ declare const Deno: {
 };
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { validateInput, sanitizeString } from '../_shared/validation.ts';
+import { applyRateLimit, RateLimitTiers } from '../_shared/rateLimiter.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,6 +33,13 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // Apply strict rate limiting for login endpoint (5 requests per minute)
+  const rateLimit = applyRateLimit(req, RateLimitTiers.STRICT);
+  if (!rateLimit.allowed) {
+    console.warn('[Login] Rate limit exceeded');
+    return rateLimit.response!;
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -40,12 +49,21 @@ Deno.serve(async (req) => {
     const supabaseAuth = createClient(supabaseUrl, anonKey);
 
     const body = await req.json();
-    const identifier = body.identifier;
-    const password = body.password;
 
-    if (!identifier || !password) {
-      return createResponse({ error: 'Missing credentials' }, 400);
+    // Validate input
+    const validation = validateInput(body, {
+      required: ['identifier', 'password'],
+      minLength: { password: 6 },
+      maxLength: { identifier: 100, password: 100 }
+    });
+
+    if (!validation.valid) {
+      console.warn('[Login] Validation failed:', validation.error);
+      return createResponse({ error: validation.error }, 400);
     }
+
+    const identifier = validation.sanitizedData.identifier;
+    const password = body.password; // Don't sanitize password
 
     const normalizedIdentifier = identifier.trim().toLowerCase(); // Normalize input once
 
