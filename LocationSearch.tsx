@@ -1,12 +1,11 @@
 
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Target, LocateFixed, Globe, Zap, Loader2, Compass, Sparkles, Hash, MapPin } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Target, LocateFixed, Globe, Zap, Loader2, Hash, MapPin } from 'lucide-react';
 import { locationsearchService } from './services/locationsearchService';
 import { LocationMap } from './components/LocationMap';
 import { useTranslation } from './contexts/LanguageContext';
-import { DBState, DBCity, DBLocality } from './types';
-import { Geolocation } from '@capacitor/geolocation'; // Keep for client-side GPS access
+import { DBLocality } from './types';
 
 interface LocationSearchProps {
   theme: 'light' | 'dark';
@@ -29,118 +28,73 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
   const { t, locale } = useTranslation();
   const isDark = theme === 'dark';
   
-  // -- Dropdown States --
-  const [states, setStates] = useState<DBState[]>([]);
-  const [cities, setCities] = useState<DBCity[]>([]);
-  const [localities, setLocalities] = useState<DBLocality[]>([]);
-  
-  // -- Selection States --
-  const [selectedStateId, setSelectedStateId] = useState<number | ''>('');
-  const [selectedCityId, setSelectedCityId] = useState<number | ''>('');
-  const [selectedLocalityId, setSelectedLocalityId] = useState<number | ''>('');
-  
+  // -- Manual Location Search States (Pincode-based) --
+  const [locality, setLocality] = useState('');
+  const [pincode, setPincode] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [localitySuggestions, setLocalitySuggestions] = useState<DBLocality[]>([]);
+  const [showLocalityDropdown, setShowLocalityDropdown] = useState(false);
+
   // -- Search & Utility States --
   const [searchRadius, setSearchRadius] = useState<number>(2.0);
-  const [pincode, setPincode] = useState('');
-  const [isSearchingLocality, setIsSearchingLocality] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [manualCoords, setManualCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  // 1. Initial Load: Fetch all states with locale
-  useEffect(() => {
-    // locationsearchService.getStates now calls an Edge Function
-    locationsearchService.getStates(locale).then(setStates).catch(err => console.error("Error fetching states:", err));
+  // Locality search handler - searches as user types
+  const handleLocalitySearch = useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setShowLocalityDropdown(false);
+      setLocalitySuggestions([]);
+      return;
+    }
+
+    try {
+      console.log(`[LocationSearch] Searching for "${query}"`);
+      const results = await locationsearchService.searchLocalities(query, locale);
+      console.log(`[LocationSearch] Found ${results.length} localities`);
+
+      setLocalitySuggestions(results);
+      setShowLocalityDropdown(results.length > 0);
+    } catch (error) {
+      console.error('[LocationSearch] Error searching localities:', error);
+      setLocalitySuggestions([]);
+      setShowLocalityDropdown(false);
+    }
   }, [locale]);
 
-  // 2. Cascade: Handle State Change
-  useEffect(() => {
-    if (selectedStateId) {
-      // locationsearchService.getCities now calls an Edge Function
-      locationsearchService.getCities(selectedStateId as number, locale).then(setCities).catch(err => console.error("Error fetching cities:", err));
-      setSelectedCityId('');
-      setSelectedLocalityId('');
-    } else {
-      setCities([]);
-    }
-  }, [selectedStateId, locale]);
+  // Locality selection handler - auto-populates pincode, city, state
+  const handleLocalitySelect = useCallback(async (selectedLocality: DBLocality) => {
+    const localizedName = selectedLocality.display_name || selectedLocality.names[locale] || selectedLocality.names.en;
 
-  // 3. Cascade: Handle City Change
-  useEffect(() => {
-    if (selectedCityId) {
-      // locationsearchService.getLocalities now calls an Edge Function
-      locationsearchService.getLocalities(selectedCityId as number, locale).then(setLocalities).catch(err => console.error("Error fetching localities:", err));
-      setSelectedLocalityId('');
-    } else {
-      setLocalities([]);
-    }
-  }, [selectedCityId, locale]);
+    setLocality(localizedName);
+    setPincode(selectedLocality.pincode);
+    setShowLocalityDropdown(false);
 
-  // 4. Reverse Lookup: Auto-resolve hierarchy from Pincode
-  useEffect(() => {
-    if (pincode.length === 6) {
-      const resolvePin = async () => {
-        setIsSearchingLocality(true);
-        try {
-          // Fix: Explicitly type the result from lookupPincode
-          const result: { locality: DBLocality, city: DBCity, stateId: number } | null = await locationsearchService.lookupPincode(pincode);
-          if (result) {
-            // Fix: Ensure Number() cast for stateId
-            setSelectedStateId(Number(result.stateId));
-            
-            const fetchedCities = await locationsearchService.getCities(result.stateId, locale);
-            setCities(fetchedCities);
-            // Fix: Ensure Number() cast for city.id
-            setSelectedCityId(Number(result.city.id));
-            
-            const fetchedLocalities = await locationsearchService.getLocalities(result.city.id, locale);
-            setLocalities(fetchedLocalities);
-            // Fix: Ensure Number() cast for locality.id
-            setSelectedLocalityId(Number(result.locality.id));
-            
-            // geocodeAddressWithAI remains client-side
-            const locName = result.locality.names[locale] || result.locality.names['en'];
-            const cityObj = fetchedCities.find(c => c.id === result.city.id);
-            const cityName = cityObj?.display_name || "India";
-            const fullAddress = `${locName}, ${cityName}, India`;
-            const coords = await locationsearchService.geocodeAddressWithAI(fullAddress);
-            setManualCoords(coords);
-          }
-        } catch (err) {
-          console.error("Pincode lookup error:", err);
-          // Handle specific error messages from BLL if needed
-        } finally {
-          setIsSearchingLocality(false);
-        }
-      };
-      resolvePin();
-    }
-  }, [pincode, locale]);
+    // Fetch city and state from pincode
+    setIsGeocoding(true);
+    try {
+      const result = await locationsearchService.reverseGeocodePincode(selectedLocality.pincode);
+      if (result) {
+        setCity(result.city);
+        setState(result.state);
 
-  // 5. Geocode selection for the map preview (Standard Selection Path)
-  useEffect(() => {
-    const resolveManualLocation = async () => {
-      if (!isAutoDetect && selectedLocalityId && !isSearchingLocality) {
-        setIsGeocoding(true);
-        try {
-          const loc = localities.find(l => l.id === selectedLocalityId);
-          const city = cities.find(c => c.id === selectedCityId);
-          const state = states.find(s => s.id === selectedStateId);
-          
-          if (loc && city && state) {
-            // geocodeAddressWithAI remains client-side
-            const fullAddress = `${loc.display_name}, ${city.display_name}, ${state.display_name}, India`;
-            const result = await locationsearchService.geocodeAddressWithAI(fullAddress);
-            setManualCoords(result);
-          }
-        } catch (error) {
-          setManualCoords(null);
-        } finally {
-          setIsGeocoding(false);
-        }
+        // Geocode the full address for map display
+        const fullAddress = `${localizedName}, ${result.city}, ${result.state}, India`;
+        const coords = await locationsearchService.geocodeAddressWithAI(fullAddress);
+        setManualCoords(coords);
       }
-    };
-    resolveManualLocation();
-  }, [selectedLocalityId, selectedCityId, selectedStateId, isAutoDetect, localities, cities, states, isSearchingLocality]);
+    } catch (err) {
+      console.error('[LocationSearch] Error fetching city/state:', err);
+      setCity('');
+      setState('');
+      setManualCoords(null);
+    } finally {
+      setIsGeocoding(false);
+    }
+
+    console.log(`[LocationSearch] Selected: ${localizedName} (${selectedLocality.pincode})`);
+  }, [locale]);
 
   const requestGpsPosition = async () => {
     if (onRefreshLocation) {
@@ -152,20 +106,18 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
   const handleSearchClick = () => {
     const activeCoords = isAutoDetect ? userCoords : manualCoords;
     if (!activeCoords) return;
-    
+
     let finalLabel = '';
     if (isAutoDetect) {
       finalLabel = resolvedAddress || 'GPS Location';
     } else {
-      const loc = localities.find(l => l.id === selectedLocalityId);
-      const city = cities.find(c => c.id === selectedCityId);
-      finalLabel = loc ? `${loc.display_name}, ${city?.display_name}` : (city?.display_name || 'Manual Selection');
+      finalLabel = locality ? `${locality}, ${city}` : (city || 'Manual Selection');
     }
 
     onSearch({
       isAutoDetect,
       radius: searchRadius,
-      coords: activeCoords, 
+      coords: activeCoords,
       label: finalLabel
     });
   };
@@ -282,7 +234,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
               theme={theme}
               userCoords={userCoords || undefined}
               targetCoords={manualCoords || undefined}
-              selectedLocation={isAutoDetect ? (resolvedAddress || 'GPS Center') : (localities.find(l => l.id === selectedLocalityId)?.display_name || 'Manual Selection')}
+              selectedLocation={isAutoDetect ? (resolvedAddress || 'GPS Center') : (locality || 'Manual Selection')}
               onRefreshLocation={requestGpsPosition}
             />
         </div>
@@ -373,38 +325,79 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
         {!isAutoDetect && (
           <div className="glass p-8 rounded-[3rem] border-white/5 space-y-6 animate-reveal bg-slate-900/40">
             <div className="space-y-4">
-              <select 
-                className="input-premium h-16" 
-                value={selectedStateId} 
-                onChange={(e) => setSelectedStateId(e.target.value === '' ? '' : Number(e.target.value as string))}
-              >
-                <option value="">{t('loc_region')}</option>
-                {states.map(s => <option key={s.id} value={s.id}>{s.display_name}</option>)}
-              </select>
+              {/* Locality Input with Autocomplete */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Locality / Area (type to search)"
+                  className="input-premium h-16"
+                  value={locality}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setLocality(newValue);
+                    // Clear pincode, city, and state when user manually types
+                    setPincode('');
+                    setCity('');
+                    setState('');
+                    setManualCoords(null);
+                    handleLocalitySearch(newValue);
+                  }}
+                  onFocus={() => {
+                    if (localitySuggestions.length > 0) {
+                      setShowLocalityDropdown(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => setShowLocalityDropdown(false), 200);
+                  }}
+                />
 
-              <select 
-                className="input-premium h-16" 
-                value={selectedCityId} 
-                onChange={(e) => setSelectedCityId(e.target.value === '' ? '' : Number(e.target.value as string))}
-                disabled={!selectedStateId}
-              >
-                <option value="">{t('loc_city')}</option>
-                {cities.map(c => <option key={c.id} value={c.id}>{c.display_name}</option>)}
-              </select>
+                {/* Autocomplete dropdown */}
+                {showLocalityDropdown && localitySuggestions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                    {localitySuggestions.map((loc) => {
+                      const displayName = loc.display_name || loc.names[locale] || loc.names.en;
+                      return (
+                        <div
+                          key={loc.id}
+                          className="px-4 py-3 hover:bg-blue-600/20 cursor-pointer border-b border-white/5 last:border-b-0 transition-colors"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleLocalitySelect(loc);
+                          }}
+                        >
+                          <div className="text-sm font-medium text-white">{displayName}</div>
+                          <div className="text-xs text-slate-400 mt-0.5">Pincode: {loc.pincode}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
-              <select 
-                className="input-premium h-16" 
-                value={selectedLocalityId} 
-                onChange={(e) => setSelectedLocalityId(e.target.value === '' ? '' : Number(e.target.value as string))}
-                disabled={!selectedCityId}
-              >
-                <option value="">{t('loc_area')}</option>
-                {localities.map(l => (
-                  <option key={l.id} value={l.id}>
-                    {l.display_name} ({l.pincode})
-                  </option>
-                ))}
-              </select>
+              {/* Display pincode, city, state below when populated */}
+              {pincode && city && state && (
+                <div className="glass p-5 rounded-2xl border-white/5 bg-slate-950/40 space-y-2.5 animate-reveal">
+                  <div className="flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-blue-400" />
+                    <p className="text-xs text-slate-400">
+                      <span className="font-semibold text-blue-400">Pincode:</span> {pincode}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-blue-400" />
+                    <p className="text-xs text-slate-400">
+                      <span className="font-semibold text-blue-400">City:</span> {city}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-blue-400" />
+                    <p className="text-xs text-slate-400">
+                      <span className="font-semibold text-blue-400">State:</span> {state}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -413,7 +406,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
         <div className="space-y-4 pt-4">
           <button
             onClick={handleSearchClick}
-            disabled={isGeocoding || (isAutoDetect ? !userCoords : !selectedLocalityId)}
+            disabled={isGeocoding || (isAutoDetect ? !userCoords : !locality || !pincode || !city || !state || !manualCoords)}
             className="w-full btn-premium shadow-2xl h-20 active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed transition-all rounded-[2rem]"
           >
             {isGeocoding ? (
@@ -430,7 +423,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
           <p className="text-center text-[9px] font-bold uppercase tracking-wider text-slate-500">
             {isAutoDetect
               ? (userCoords ? 'Review your GPS location above, then scan area' : 'Enable GPS to continue')
-              : (selectedLocalityId ? 'Review your selection above, then scan area' : 'Select a location to continue')
+              : (locality && pincode && city && state ? 'Review your selection above, then scan area' : 'Type and select a locality to continue')
             }
           </p>
         </div>
