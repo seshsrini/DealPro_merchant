@@ -320,6 +320,16 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       setPhoneTaken(null);
       setIsCheckingPhone(false);
     }
+
+    // Auto-trigger OTP modal for consumers when required digits are entered
+    if (regRole === 'user' && !isPhoneVerified) {
+      const requiredLength = selectedCountry.code === '+91' ? 10 : 7;
+      if (value.length === requiredLength) {
+        const fullPhoneNumber = selectedCountry.code + value;
+        setOtpPhoneNumber(fullPhoneNumber);
+        setShowOtpModal(true);
+      }
+    }
   };
 
   // Real-time GSTIN validation
