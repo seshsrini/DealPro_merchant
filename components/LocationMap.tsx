@@ -294,6 +294,13 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     const g = (window as any).google;
     if (!mapInstanceRef.current || !targetCoords) return;
 
+    // Validate target coordinates before using them
+    if (targetCoords.latitude == null || targetCoords.longitude == null ||
+        isNaN(targetCoords.latitude) || isNaN(targetCoords.longitude)) {
+      console.warn('[LocationMap] Invalid target coordinates, skipping marker:', targetCoords);
+      return;
+    }
+
     // Wait for markers library to be ready
     if (!g?.maps?.marker?.AdvancedMarkerElement) {
       console.warn('[LocationMap] AdvancedMarkerElement not yet available for target marker');
@@ -328,7 +335,11 @@ export const LocationMap: React.FC<LocationMapProps> = ({
   const handleRecenter = () => {
     if (onRefreshLocation) onRefreshLocation();
     const coords = targetCoords || userCoords;
-    if (coords && mapInstanceRef.current) mapInstanceRef.current.panTo({ lat: coords.latitude, lng: coords.longitude });
+    // Validate coordinates before panning
+    if (coords && coords.latitude != null && coords.longitude != null &&
+        !isNaN(coords.latitude) && !isNaN(coords.longitude) && mapInstanceRef.current) {
+      mapInstanceRef.current.panTo({ lat: coords.latitude, lng: coords.longitude });
+    }
   };
 
   return (
