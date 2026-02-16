@@ -205,11 +205,15 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     if (!mapInstanceRef.current) return;
 
     const coords = userCoords || targetCoords;
-    if (coords) {
+    // Check that coords exist AND have valid lat/lng values
+    if (coords && coords.latitude != null && coords.longitude != null &&
+        !isNaN(coords.latitude) && !isNaN(coords.longitude)) {
       const pos = { lat: coords.latitude, lng: coords.longitude };
       console.log('[LocationMap] Centering map on new coordinates:', pos);
       mapInstanceRef.current.panTo(pos);
       mapInstanceRef.current.setZoom(15);
+    } else if (coords) {
+      console.warn('[LocationMap] Invalid coordinates received:', coords);
     }
   }, [userCoords, targetCoords]);
 
