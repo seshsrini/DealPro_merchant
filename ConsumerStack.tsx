@@ -438,15 +438,14 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
     }
   }, [user.id, user.role, locationLoading, userCoords, searchRadius]);
 
-  useEffect(() => {
-    if (isAutoDetect) {
-      setUserCoords(capacitorCoords);
-    } else {
-      // Manual coords are set via the onSearch handler from LocationSearch
-      // For now, let's keep userCoords in sync with whatever is active.
-      // The onSearch callback handles setting userCoords based on manual selection.
-    }
-  }, [isAutoDetect, capacitorCoords]);
+  // REMOVED: Auto-setting userCoords when capacitorCoords are available
+  // This was causing auto-submission when GPS location was detected
+  // Now, userCoords is ONLY set when user explicitly clicks "Scan Area" button
+  // via the handleLocationSearch callback
+
+  // Note: capacitorCoords are still available and passed to LocationSearch
+  // for display purposes (showing coordinates and city), but they don't
+  // trigger automatic submission until user confirms
 
   // Notify parent when location is complete (userCoords is set)
   useEffect(() => {
@@ -826,7 +825,15 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
   if (view === 'preferences') {
     return (
       <>
-        <LocationSearch theme={theme} userCoords={userCoords} resolvedAddress={"Current Location"} isAutoDetect={isAutoDetect} setIsAutoDetect={setIsAutoDetect} onSearch={handleLocationSearch} onRefreshLocation={refreshCapacitorLocation} />
+        <LocationSearch
+          theme={theme}
+          userCoords={capacitorCoords}
+          resolvedAddress={capacitorResolvedCity || "Detecting location..."}
+          isAutoDetect={isAutoDetect}
+          setIsAutoDetect={setIsAutoDetect}
+          onSearch={handleLocationSearch}
+          onRefreshLocation={refreshCapacitorLocation}
+        />
 
         {/* Intro Video Modal */}
         {showVideoModal && (
