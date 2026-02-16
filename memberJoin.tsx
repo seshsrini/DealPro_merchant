@@ -307,9 +307,10 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     setPhoneTaken(null); // Reset on change
     setIsCheckingPhone(false);
 
-    // Reset verification if phone number changes (important for merchant flow)
+    // Reset verification if phone number changes
     if (isPhoneVerified) setIsPhoneVerified(false);
 
+    // For consumers, check phone availability after debounce
     if (regRole === 'user' && value.length >= 7) {
       if (phoneDebounceRef.current) {
         clearTimeout(phoneDebounceRef.current as number);
@@ -318,13 +319,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     } else if (regRole === 'user') {
       setPhoneTaken(null);
       setIsCheckingPhone(false);
-    }
-
-    // Auto-trigger OTP for merchants when 10 digits are entered
-    if (regRole === 'merchant' && selectedCountry.code === '+91' && value.length === 10 && !isPhoneVerified) {
-      const fullPhoneNumber = selectedCountry.code + value;
-      setOtpPhoneNumber(fullPhoneNumber);
-      setShowOtpModal(true);
     }
   };
 
@@ -844,9 +838,17 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       const finalRegPhone = regPhone ? selectedCountry.code + regPhone.replace(/[^0-9]/g, '') : null;
 
       if (regRole === 'user') {
+        // For consumers: phone is required and must be verified
+        if (!finalRegPhone) {
+          throw new Error("Phone number required.");
+        }
+        if (!isPhoneVerified) {
+          throw new Error("Phone number not verified.");
+        }
+
         const consumerRegData = {
-          fullName,
-          username,
+          fullName: username || email.split('@')[0], // Use username or email prefix as display name
+          username: username || null, // Username is optional, can be null
           email,
           password,
           phone: finalRegPhone,
@@ -962,11 +964,21 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     if (loading || isCheckingUsername || isCheckingEmail || isCheckingPhone || isCheckingGstin || isCheckingPan) {
       return false; // Always block if any check is in progress
     }
-    // CRITICAL FIX: Block if validation is inconclusive (null state)
-    // For merchants, email is optional, so emailTaken can be null if email is empty
-    if (usernameTaken === null || (regRole === 'user' && regPhone.length > 0 && phoneTaken === null)) {
+
+    // For consumers: username is optional, but if provided must be validated
+    if (regRole === 'user' && username.length > 0 && usernameTaken === null) {
+      return false; // Username entered but validation not complete
+    }
+    // For merchants: username is required and must be validated
+    if (regRole === 'merchant' && usernameTaken === null) {
       return false;
     }
+
+    // Phone validation - required for both roles now
+    if (regPhone.length > 0 && phoneTaken === null) {
+      return false; // Phone entered but validation not complete
+    }
+
     // For users, email is required and must be validated
     if (regRole === 'user' && emailTaken === null) {
       return false;
@@ -977,9 +989,21 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     }
 
     // Basic fields must be filled and valid format
-    // For merchants, email is optional
     if (regRole === 'user') {
-      if (username.length < 3 || email.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !isValidPassword(password)) {
+      // For consumers: phone is required, username is optional, email is required
+      if (email.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !isValidPassword(password)) {
+        return false;
+      }
+      // Username is optional, but if provided must be >= 3 chars
+      if (username.length > 0 && username.length < 3) {
+        return false;
+      }
+      // Phone is required and must meet minimum length
+      if (regPhone.length === 0 || regPhone.length < 7) {
+        return false;
+      }
+      // Phone must be verified for consumers
+      if (!isPhoneVerified) {
         return false;
       }
     } else {
@@ -995,9 +1019,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
 
     if (regRole === 'user') {
-      // For user, phone is optional. If provided, it should meet length requirement and not be taken.
-      if (regPhone.length > 0 && regPhone.length < 7) return false;
-
       // Locality validation: If user started typing locality, all fields must be resolved
       // If consumerLocality is not empty, then pincode, city, and state must also be populated
       if (consumerLocality.trim().length > 0) {
@@ -1152,22 +1173,92 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       <form onSubmit={handleRegister} className="space-y-6 flex-1">
         {/* Basic User Info (Applies to both roles) */}
         <div className="space-y-4">
-          <input 
-            type="text" 
-            placeholder={t('reg_fullname')} 
-            className="input-premium" 
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required 
-          />
+          {/* Phone Number - Moved to top for consumers, required with OTP */}
+          <div className="relative flex group">
+             {/* Country Code Picker */}
+             <div className={`relative ${showCountryPicker ? 'z-[1000]' : ''}`}>
+                <button
+                   type="button"
+                   onClick={() => setShowCountryPicker(!showCountryPicker)}
+                   className="h-14 w-20 glass rounded-l-2xl border-white/10 flex items-center justify-center gap-1 active:scale-95 transition-all focus:outline-none"
+                >
+                   <span className="text-lg">{selectedCountry.flag}</span>
+                   <ChevronDown className="w-3 h-3 text-slate-500" />
+                </button>
+                {showCountryPicker && (
+                   <div className="absolute top-full left-0 mt-2 w-48 glass rounded-2xl p-2 z-[999] shadow-2xl animate-reveal border-white/10">
+                      <div className="max-h-48 overflow-y-auto hide-scrollbar">
+                         {COUNTRY_CODES.map(c => (
+                            <button
+                               key={c.code}
+                               type="button"
+                               onClick={() => { setSelectedCountry(c); setShowCountryPicker(false); }}
+                               className="w-full text-left p-3 hover:bg-blue-500/10 rounded-xl text-xs font-bold flex gap-3 items-center"
+                            >
+                               <span>{c.flag}</span> <span className="flex-1 text-slate-200">{c.country}</span> <span className="text-slate-500">{c.code}</span>
+                            </button>
+                         ))}
+                      </div>
+                   </div>
+                )}
+             </div>
+             {/* Input field with integrated icon */}
+             <div className="relative flex-1">
+                 <input
+                   type="tel"
+                   placeholder={regRole === 'user' ? `Phone Number (${selectedCountry.code === '+91' ? '10 Digits - ' : ''}Required)` : getPhonePlaceholder()}
+                   className="input-premium flex-1 rounded-l-none"
+                   value={formatPhoneNumber(regPhone, selectedCountry.code)}
+                   onChange={handleRegPhoneChange}
+                   maxLength={selectedCountry.code === '+91' ? 10 : 15}
+                   required
+                 />
+                 {/* OTP Button for consumers when phone is entered */}
+                 {regRole === 'user' && regPhone.length >= (selectedCountry.code === '+91' ? 10 : 7) && !isPhoneVerified && (
+                   <button
+                     type="button"
+                     onClick={handleSendOtp}
+                     disabled={isSendingOtp}
+                     className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center active:scale-90 transition-all"
+                   >
+                     {isSendingOtp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                   </button>
+                 )}
+                 {/* Verified checkmark for consumers */}
+                 {regRole === 'user' && isPhoneVerified && regPhone.length > 0 && (
+                   <div className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500">
+                     <CheckCircle2 className="w-5 h-5" />
+                   </div>
+                 )}
+                 {/* Merchant OTP button */}
+                 {regRole === 'merchant' && regPhone.length > 5 && !isPhoneVerified && (
+                   <button
+                     type="button"
+                     onClick={handleSendOtp}
+                     disabled={isSendingOtp}
+                     className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center active:scale-90 transition-all"
+                   >
+                     {isSendingOtp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                   </button>
+                 )}
+                 {/* Merchant verified checkmark */}
+                 {regRole === 'merchant' && isPhoneVerified && regPhone.length > 0 && (
+                   <div className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500">
+                     <CheckCircle2 className="w-5 h-5" />
+                   </div>
+                 )}
+             </div>
+          </div>
+
+          {/* Username - Now optional for consumers */}
           <div className="relative group">
             <input
               type="text"
-              placeholder={t('reg_username')}
+              placeholder={regRole === 'user' ? 'Username (Optional)' : t('reg_username')}
               className="input-premium"
               value={username}
               onChange={handleUsernameChange}
-              required
+              required={regRole === 'merchant'}
             />
             {isCheckingUsername && (
               <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
@@ -1179,6 +1270,8 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
               <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
             )}
           </div>
+
+          {/* Email */}
           <div className="relative group">
             <input
               type="email"
@@ -1198,71 +1291,18 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
               <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
             )}
           </div>
-          <div className="relative flex group">
-             {/* Country Code Picker */}
-             <div className={`relative ${showCountryPicker ? 'z-[1000]' : ''}`}>
-                <button 
-                   type="button" 
-                   onClick={() => setShowCountryPicker(!showCountryPicker)} 
-                   className="h-14 w-20 glass rounded-l-2xl border-white/10 flex items-center justify-center gap-1 active:scale-95 transition-all focus:outline-none"
-                >
-                   <span className="text-lg">{selectedCountry.flag}</span>
-                   <ChevronDown className="w-3 h-3 text-slate-500" />
-                </button>
-                {showCountryPicker && (
-                   <div className="absolute top-full left-0 mt-2 w-48 glass rounded-2xl p-2 z-[999] shadow-2xl animate-reveal border-white/10">
-                      <div className="max-h-48 overflow-y-auto hide-scrollbar">
-                         {COUNTRY_CODES.map(c => (
-                            <button 
-                               key={c.code} 
-                               type="button" 
-                               onClick={() => { setSelectedCountry(c); setShowCountryPicker(false); }} 
-                               className="w-full text-left p-3 hover:bg-blue-500/10 rounded-xl text-xs font-bold flex gap-3 items-center"
-                            >
-                               <span>{c.flag}</span> <span className="flex-1 text-slate-200">{c.country}</span> <span className="text-slate-500">{c.code}</span>
-                            </button>
-                         ))}
-                      </div>
-                   </div>
-                )}
-             </div>
-             {/* Input field with integrated icon */}
-             <div className="relative flex-1">
-                 <input
-                   type="tel"
-                   placeholder={getPhonePlaceholder()}
-                   className="input-premium flex-1 rounded-l-none"
-                   value={formatPhoneNumber(regPhone, selectedCountry.code)}
-                   onChange={handleRegPhoneChange}
-                   maxLength={selectedCountry.code === '+91' ? 10 : 15}
-                   required={regRole === 'merchant'}
-                 />
-                 {regRole === 'user' && isCheckingPhone && (
-                   <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
-                 )}
-                 {regRole === 'user' && phoneTaken === false && !isCheckingPhone && regPhone.length >= 7 && (
-                   <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-                 )}
-                 {regRole === 'user' && phoneTaken === true && !isCheckingPhone && (
-                   <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-                 )}
-                 {regRole === 'merchant' && regPhone.length > 5 && !isPhoneVerified && (
-                   <button
-                     type="button"
-                     onClick={handleSendOtp}
-                     disabled={isSendingOtp}
-                     className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center active:scale-90 transition-all"
-                   >
-                     {isSendingOtp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                   </button>
-                 )}
-                 {regRole === 'merchant' && isPhoneVerified && regPhone.length > 0 && (
-                   <div className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500">
-                     <CheckCircle2 className="w-5 h-5" />
-                   </div>
-                 )}
-             </div>
-          </div>
+
+          {/* Full Name - Only for merchants */}
+          {regRole === 'merchant' && (
+            <input
+              type="text"
+              placeholder={t('reg_fullname')}
+              className="input-premium"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+            />
+          )}
           <div className="relative group">
             <input
               type={showPassword ? "text" : "password"}
