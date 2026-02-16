@@ -297,7 +297,12 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
 
         <div className="grid grid-cols-2 gap-4">
            <button
-             onClick={() => { setIsAutoDetect(true); requestGpsPosition(); }}
+             onClick={() => {
+               setIsAutoDetect(true);
+               if (!userCoords) {
+                 requestGpsPosition();
+               }
+             }}
              className={`p-6 rounded-[2.5rem] border-2 transition-all flex flex-col items-center gap-3 ${isAutoDetect ? 'bg-yellow-600/10 border-yellow-500/50 shadow-xl' : 'glass border-white/5 opacity-60'} ${isAutoDetect ? (isDark ? 'text-white' : 'text-slate-900') : 'text-slate-600'}`}
            >
               <LocateFixed className="w-8 h-8" />
@@ -311,6 +316,59 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
               <span className="text-[10px] font-black uppercase tracking-widest">{t('loc_manual')}</span>
            </button>
         </div>
+
+        {/* Auto-Detect Location Details */}
+        {isAutoDetect && userCoords && (
+          <div className="glass p-6 rounded-[2.5rem] border-white/5 bg-slate-900/40 space-y-4 animate-reveal">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                <LocateFixed className="w-4 h-4 text-blue-500" />
+              </div>
+              <p className="font-bold text-sm uppercase tracking-wider text-blue-400">GPS Location Detected</p>
+            </div>
+
+            <div className="space-y-3">
+              {/* Coordinates Display */}
+              <div className="glass p-4 rounded-2xl border-white/5 bg-slate-950/40">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-2">Coordinates</p>
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-[8px] font-bold uppercase text-slate-600">Latitude</p>
+                    <p className="text-sm font-black text-emerald-400 font-mono">{userCoords.latitude.toFixed(6)}</p>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[8px] font-bold uppercase text-slate-600">Longitude</p>
+                    <p className="text-sm font-black text-emerald-400 font-mono">{userCoords.longitude.toFixed(6)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address Display */}
+              <div className="glass p-4 rounded-2xl border-white/5 bg-slate-950/40">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-2">Location</p>
+                <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {resolvedAddress || 'Resolving address...'}
+                </p>
+              </div>
+
+              {/* Refresh GPS Button */}
+              <button
+                onClick={requestGpsPosition}
+                disabled={isGeocoding}
+                className="w-full px-4 py-3 rounded-2xl glass border-blue-500/30 hover:border-blue-500/50 transition-all flex items-center justify-center gap-2 text-blue-400 hover:text-blue-300 active:scale-95 disabled:opacity-50"
+              >
+                {isGeocoding ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <LocateFixed className="w-4 h-4" />
+                )}
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  {isGeocoding ? 'Updating...' : 'Refresh GPS'}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {!isAutoDetect && (
           <div className="glass p-8 rounded-[3rem] border-white/5 space-y-6 animate-reveal bg-slate-900/40">
@@ -351,21 +409,30 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
           </div>
         )}
 
+        {/* Scan Area Button - Always show, require click for both modes */}
         <div className="space-y-4 pt-4">
-          <button 
-            onClick={handleSearchClick} 
-            disabled={isGeocoding || (isAutoDetect ? !userCoords : !selectedLocalityId)} 
-            className="w-full btn-premium shadow-2xl h-20 active:scale-[0.98] disabled:opacity-30 transition-all rounded-[2rem]"
+          <button
+            onClick={handleSearchClick}
+            disabled={isGeocoding || (isAutoDetect ? !userCoords : !selectedLocalityId)}
+            className="w-full btn-premium shadow-2xl h-20 active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed transition-all rounded-[2rem]"
           >
             {isGeocoding ? (
               <Loader2 className="w-8 h-8 animate-spin" />
             ) : (
               <div className="flex items-center gap-4">
-                <Zap className="w-8 h-8 fill-white" /> 
+                <Zap className="w-8 h-8 fill-white" />
                 <span className="font-black text-xl tracking-widest uppercase">{t('loc_scan_btn')}</span>
               </div>
             )}
           </button>
+
+          {/* Helper text */}
+          <p className="text-center text-[9px] font-bold uppercase tracking-wider text-slate-500">
+            {isAutoDetect
+              ? (userCoords ? 'Review your GPS location above, then scan area' : 'Enable GPS to continue')
+              : (selectedLocalityId ? 'Review your selection above, then scan area' : 'Select a location to continue')
+            }
+          </p>
         </div>
       </div>
     </div>
