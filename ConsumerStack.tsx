@@ -24,6 +24,8 @@ import { StoreSearchScreen } from './StoreSearchScreen'; // NEW: Import StoreSea
 import { RatingPopup } from './RatingPopup'; // Import RatingPopup
 import { HelpFeedback } from './HelpFeedback'; // Import HelpFeedback
 import { NotificationsView } from './NotificationsView'; // Import NotificationsView
+import { PushNotificationPromptModal } from './PushNotificationPromptModal';
+import { notificationsService } from './services/notificationsService';
 
 const calculateDistance = (lat1: number | null, lon1: number | null, lat2: number | null, lon2: number | null) => {
   if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return Infinity;
@@ -112,6 +114,20 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
   const [hasLoadedCachedLocation, setHasLoadedCachedLocation] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [hasCheckedVideoStatus, setHasCheckedVideoStatus] = useState(false);
+  const [showNotifPrompt, setShowNotifPrompt] = useState(false);
+
+  // Show push notification permission prompt once on first login (after onboarding)
+  useEffect(() => {
+    if (!user.id) return;
+    const key = `notif_prompt_shown_${user.id}`;
+    if (!localStorage.getItem(key)) {
+      // Trigger when user first lands on preferences/home after onboarding
+      if (view === 'preferences' || view === 'home' || view === 'deals') {
+        setShowNotifPrompt(true);
+        localStorage.setItem(key, 'true');
+      }
+    }
+  }, [view, user.id]);
 
   // Load cached location preferences on mount
   useEffect(() => {
@@ -1116,6 +1132,26 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
           theme={theme}
         />
       )}
+
+      {/* One-time push notification permission prompt */}
+      <PushNotificationPromptModal
+        isOpen={showNotifPrompt}
+        theme={theme}
+        onAllow={async () => {
+          setShowNotifPrompt(false);
+          // Request browser/OS notification permission if available
+          if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            Notification.requestPermission();
+          }
+          // Persist opt-in to user_profiles.push_notification
+          try {
+            await notificationsService.updatePushConsent(user.id);
+          } catch (err) {
+            console.error('[PushConsent] Failed to save push consent:', err);
+          }
+        }}
+        onDismiss={() => setShowNotifPrompt(false)}
+      />
     </>
   );
 };

@@ -79,6 +79,24 @@ class NotificationsService {
       console.error('[NotificationsService] fetch-notifications mark-read returned failure:', data?.error);
     }
   }
+
+  /**
+   * Save push notification consent for a consumer
+   */
+  async updatePushConsent(userId: string): Promise<void> {
+    const { data, error } = await supabase.functions.invoke('update-pushnotify-consent', {
+      body: { userId },
+    });
+
+    if (error) {
+      console.error('[NotificationsService] Error updating push consent:', error.message);
+      return;
+    }
+
+    if (!data?.success) {
+      console.error('[NotificationsService] update-pushnotify-consent returned failure:', data?.error);
+    }
+  }
 }
 
 export const notificationsService = new NotificationsService();
