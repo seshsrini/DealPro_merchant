@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { userService } from './services/userService';
 import { biometricService } from './services/biometricService';
+import { fcmService } from './services/fcmService';
 import { AppView } from './types';
 // Removed decryptPassword import as it's no longer used
 import { addCampaignService } from './services/addCampaignService';
@@ -126,6 +127,16 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
 
   const handleLogout = async () => {
     if (confirm("Terminate secure session and exit grid?")) {
+      // Cleanup push notifications
+      try {
+        await fcmService.unregisterToken();
+        await fcmService.cleanup();
+        console.log('[EditProfile] Push notifications cleaned up');
+      } catch (error) {
+        console.error('[EditProfile] Failed to cleanup push notifications:', error);
+        // Don't block logout if FCM cleanup fails
+      }
+
       await biometricService.clearSession(); // Clears local storage and signs out from Supabase Auth
       setUser({ id: '', username: '', isLoggedIn: false, role: 'user', access_token: null, refresh_token: null });
       setView('login');

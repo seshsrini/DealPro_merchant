@@ -1,15 +1,38 @@
-
-// @ts-ignore: Deno is a global in Deno runtime, but TS might not resolve 'deno.ns' lib
+// @ts-ignore
 declare const Deno: {
-  env: {
-    get(key: string): string | undefined;
-  };
+  env: { get(key: string): string | undefined; };
   serve: (handler: (req: Request) => Promise<Response> | Response) => void;
 };
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { validateInput, sanitizeString } from '../_shared/validation.ts';
-import { applyRateLimit, RateLimitTiers } from '../_shared/rateLimiter.ts';
+
+// --- HELPER FUNCTIONS ---
+
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+function applyRateLimit(req: Request): { allowed: boolean; response?: Response } {
+  const ip = req.headers.get('x-forwarded-for') || 'unknown';
+  const now = Date.now();
+  const limit = 10; // 10 login attempts per minute
+  const window = 60000;
+
+  const record = rateLimitMap.get(ip);
+  if (record && now < record.resetTime) {
+    if (record.count >= limit) {
+      return {
+        allowed: false,
+        response: new Response(JSON.stringify({ error: 'Too many login attempts. Please try again later.' }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        })
+      };
+    }
+    record.count++;
+  } else {
+    rateLimitMap.set(ip, { count: 1, resetTime: now + window });
+  }
+  return { allowed: true };
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,28 +40,13 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-// Helper for consistent responses
-const createResponse = (payload: any, status: number) => {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json',
-    },
-  });
-};
+// --- MAIN HANDLER ---
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  // Apply strict rate limiting for login endpoint (5 requests per minute)
-  const rateLimit = applyRateLimit(req, RateLimitTiers.STRICT);
-  if (!rateLimit.allowed) {
-    console.warn('[Login] Rate limit exceeded');
-    return rateLimit.response!;
-  }
+  const rateLimit = applyRateLimit(req);
+  if (!rateLimit.allowed) return rateLimit.response!;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -49,103 +57,122 @@ Deno.serve(async (req) => {
     const supabaseAuth = createClient(supabaseUrl, anonKey);
 
     const body = await req.json();
+    const { identifier, password } = body;
 
-    // Validate input
-    const validation = validateInput(body, {
-      required: ['identifier', 'password'],
-      minLength: { password: 6 },
-      maxLength: { identifier: 100, password: 100 }
-    });
-
-    if (!validation.valid) {
-      console.warn('[Login] Validation failed:', validation.error);
-      return createResponse({ error: validation.error }, 400);
+    if (!identifier || !password) {
+      return new Response(JSON.stringify({ error: 'Identifier and password required' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400
+      });
     }
 
-    const identifier = validation.sanitizedData.identifier;
-    const password = body.password; // Don't sanitize password
+    console.log('[Login] Login attempt for:', identifier);
 
-    const normalizedIdentifier = identifier.trim().toLowerCase(); // Normalize input once
+    const normalizedIdentifier = identifier.trim().toLowerCase();
 
-    let emailToAuth: string | null = null; // Will store the canonical email for Supabase Auth
+    // Normalize phone number: if it's 10 digits starting with 6-9, add +91 prefix
+    let phoneIdentifier = identifier;
+    const cleanPhone = identifier.replace(/\D/g, '');
+    if (cleanPhone.length === 10 && /^[6-9]/.test(cleanPhone)) {
+      phoneIdentifier = `+91${cleanPhone}`;
+    } else if (cleanPhone.length === 12 && cleanPhone.startsWith('91')) {
+      phoneIdentifier = `+${cleanPhone}`;
+    }
 
-    // 1. Find user in `user_profiles` table using normalized identifier
-    // Use ilike for username and email for case-insensitive matching.
-    // Phone number comparison remains .eq() because phone numbers are typically exact.
-    const { data: userProfileRecord, error: profileLookupError } = await adminClient
+    // Find user in user_profiles (must have email for auth)
+    const { data: userProfile, error: profileLookupError } = await adminClient
       .from('user_profiles')
-      .select('email')
-      .or(`username.ilike.${normalizedIdentifier},email.ilike.${normalizedIdentifier},phone.eq.${identifier}`)
+      .select('id, email, phone, role')
+      .or(`username.ilike.${normalizedIdentifier},email.ilike.${normalizedIdentifier},phone.eq.${phoneIdentifier}`)
       .maybeSingle();
 
     if (profileLookupError) {
-      console.error('Login: Error looking up user profile by identifier:', profileLookupError);
-      return createResponse({ error: 'User lookup failed.' }, 500);
+      console.error('[Login] Profile lookup error:', profileLookupError);
+      return new Response(JSON.stringify({ error: 'User lookup failed' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500
+      });
     }
 
-    if (userProfileRecord) {
-      emailToAuth = userProfileRecord.email; // Found a profile, get its canonical email
-    } else {
-      return createResponse({ error: 'User not found' }, 404);
+    if (!userProfile) {
+      return new Response(JSON.stringify({ error: 'Invalid credentials' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401
+      });
     }
 
-    if (!emailToAuth) {
-        return createResponse({ error: 'User found, but no email associated.' }, 500);
+    if (!userProfile.email) {
+      console.error('[Login] User has no email:', userProfile.id);
+      return new Response(JSON.stringify({ error: 'Invalid user configuration' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500
+      });
     }
-    
-    // 2. Attempt Authentication with the resolved email (which is already canonical lowercase from DB)
+
+    console.log('[Login] User found:', { id: userProfile.id, role: userProfile.role, email: userProfile.email });
+
+    // Authenticate with email + password
     const { data: authData, error: authError } = await supabaseAuth.auth.signInWithPassword({
-      email: emailToAuth, // Use the email retrieved from user_profiles
+      email: userProfile.email,
       password: password,
     });
 
     if (authError) {
-      console.error('Login: Supabase Auth Error:', authError.message);
-      return createResponse({ error: authError.message }, 401);
-    }
-    if (!authData.user || !authData.session) {
-      return createResponse({ error: 'Authentication successful but no user/session data returned.' }, 500);
+      console.error('[Login] Auth error:', authError.message);
+      return new Response(JSON.stringify({ error: 'Invalid credentials' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401
+      });
     }
 
-    // 3. Fetch Full Profile from the unified user_profiles table
-    const { data: profileData, error: profileError } = await adminClient
+    if (!authData.user || !authData.session) {
+      return new Response(JSON.stringify({ error: 'Authentication failed' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500
+      });
+    }
+
+    console.log('[Login] Auth successful for:', userProfile.id);
+
+    // Fetch full profile
+    const { data: fullProfile, error: profileError } = await adminClient
       .from('user_profiles')
       .select('*')
       .eq('id', authData.user.id)
       .single();
 
-    if (profileError) {
-      console.error('Login: Error fetching profile from user_profiles:', profileError.message);
-      // Clean up auth.users entry if profile is missing (should ideally not happen post-signup)
-      await adminClient.auth.admin.deleteUser(authData.user.id);
-      return createResponse({ error: 'Profile data incomplete or not found after authentication.' }, 404);
+    if (profileError || !fullProfile) {
+      console.error('[Login] Profile fetch error:', profileError);
+      return new Response(JSON.stringify({ error: 'Profile not found' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 404
+      });
     }
 
-    // 4. Update first_login_at if this is the user's first actual login
-    if (!profileData.first_login_at) {
-      const { error: updateError } = await adminClient
+    // Update first_login_at if needed
+    if (!fullProfile.first_login_at) {
+      await adminClient
         .from('user_profiles')
         .update({ first_login_at: new Date().toISOString() })
         .eq('id', authData.user.id);
 
-      if (updateError) {
-        console.error('Login: Error updating first_login_at:', updateError.message);
-        // Don't fail the login if this update fails, just log it
-      } else {
-        // Update the profileData to include the new first_login_at value
-        profileData.first_login_at = new Date().toISOString();
-        console.log(`Login: Set first_login_at for user ${authData.user.id}`);
-      }
+      fullProfile.first_login_at = new Date().toISOString();
+      console.log('[Login] Set first_login_at for:', authData.user.id);
     }
 
-    // Return the combined user data including the role directly from user_profiles
-    return createResponse({
-      user: { ...profileData }, // profileData already contains 'role'
+    return new Response(JSON.stringify({
+      user: fullProfile,
       session: authData.session,
-    }, 200);
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
+    });
 
-  } catch (err: any) {
-    console.error('Login Edge Function Crash:', err.message);
-    return createResponse({ error: 'Internal Server Error', details: err.message }, 500);
+  } catch (error: any) {
+    console.error('[Login] Error:', error.message);
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 });

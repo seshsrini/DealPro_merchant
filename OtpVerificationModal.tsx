@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Loader2, ShieldCheck, Key, AlertTriangle, CheckCircle2, X, RefreshCw, Send, Phone, ArrowLeft } from 'lucide-react';
+import { Loader2, ShieldCheck, Key, AlertTriangle, CheckCircle2, RefreshCw, Send, Phone, ArrowLeft } from 'lucide-react';
 import { useTranslation } from './contexts/LanguageContext';
 // Removed userService import as it's no longer directly used for dummy OTP functionality
 // import { userService } from './services/userService'; 
@@ -115,12 +115,7 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
   return (
     <div className="fixed inset-0 z-[1500] bg-black/90 backdrop-blur-md flex items-center justify-center p-6 animate-reveal">
       <div className="w-full max-w-sm glass p-8 rounded-[3.5rem] border-blue-500/20 bg-slate-900/95 shadow-2xl relative text-center flex flex-col">
-        <button
-          onClick={onClose}
-          className="absolute top-6 right-6 w-10 h-10 glass rounded-full flex items-center justify-center border-white/10 active:scale-90 transition-transform z-10"
-        >
-          <X className="w-5 h-5 text-slate-400" />
-        </button>
+        {/* Close button removed - OTP verification is mandatory */}
 
         {currentStep === 'phoneNumberInput' && (
           <div className="flex flex-col animate-reveal">

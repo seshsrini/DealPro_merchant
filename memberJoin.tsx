@@ -310,26 +310,18 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     // Reset verification if phone number changes
     if (isPhoneVerified) setIsPhoneVerified(false);
 
-    // For consumers, check phone availability after debounce
-    if (regRole === 'user' && value.length >= 7) {
+    // For all users, check phone availability after debounce
+    if (value.length >= 7) {
       if (phoneDebounceRef.current) {
         clearTimeout(phoneDebounceRef.current as number);
       }
       phoneDebounceRef.current = setTimeout(() => validatePhoneNumber(value, selectedCountry.code), 500) as number;
-    } else if (regRole === 'user') {
+    } else {
       setPhoneTaken(null);
       setIsCheckingPhone(false);
     }
 
-    // Auto-trigger OTP modal for consumers when required digits are entered
-    if (regRole === 'user' && !isPhoneVerified) {
-      const requiredLength = selectedCountry.code === '+91' ? 10 : 7;
-      if (value.length === requiredLength) {
-        const fullPhoneNumber = selectedCountry.code + value;
-        setOtpPhoneNumber(fullPhoneNumber);
-        setShowOtpModal(true);
-      }
-    }
+    // Note: OTP modal will be triggered automatically after validation completes (see useEffect)
   };
 
   // Real-time GSTIN validation
@@ -819,6 +811,17 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     }
   }, [regPhone, selectedCountry.code, isPhoneVerifiedForRegistration, otpPhoneNumber, isPhoneVerified]);
 
+  // Auto-trigger OTP modal when phone validation completes successfully (for both consumers and merchants)
+  useEffect(() => {
+    if (!isPhoneVerified && phoneTaken === false && regPhone.length > 0) {
+      const requiredLength = selectedCountry.code === '+91' ? 10 : 7;
+      if (regPhone.length === requiredLength) {
+        const fullPhoneNumber = selectedCountry.code + regPhone;
+        setOtpPhoneNumber(fullPhoneNumber);
+        setShowOtpModal(true);
+      }
+    }
+  }, [regRole, isPhoneVerified, phoneTaken, regPhone, selectedCountry.code]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -830,14 +833,15 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
         throw new Error("Password strength invalid.");
       }
       
-      if (regRole === 'user' && (usernameTaken || emailTaken || phoneTaken)) {
-        throw new Error("Identifier conflicts exist.");
+      if (regRole === 'user' && (phoneTaken === true)) {
+        throw new Error("Phone number already registered.");
+      }
+      // For consumers: only validate phone (username and email are auto-generated)
+      if (regRole === 'user' && (isCheckingPhone || (regPhone.length > 0 && phoneTaken === null))) {
+        throw new Error("Phone validation still in progress. Please wait.");
       }
       // For merchants, email is optional, so only check if email is provided
       if (regRole === 'merchant' && email.length > 0 && (isCheckingUsername || isCheckingEmail || isCheckingPhone || usernameTaken === null || emailTaken === null)) {
-        throw new Error("Validation still in progress or inconclusive. Please ensure all identifiers are checked and available.");
-      }
-      if (regRole === 'user' && (isCheckingUsername || isCheckingEmail || isCheckingPhone || usernameTaken === null || emailTaken === null || (regPhone.length > 0 && phoneTaken === null))) {
         throw new Error("Validation still in progress or inconclusive. Please ensure all identifiers are checked and available.");
       }
       if (regRole === 'merchant' && email.length === 0 && (isCheckingUsername || isCheckingPhone || usernameTaken === null)) {
@@ -856,21 +860,18 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           throw new Error("Phone number not verified.");
         }
 
-        // Generate username and email from phone number for backend compatibility
-        const phoneUsername = `user_${regPhone}`;
-        const phoneEmail = `${regPhone}@dealpro.app`;
-
+        // Consumer signup: phone-first, username is optional, email/fullName are null
         const consumerRegData = {
-          fullName: phoneUsername, // Use phone-based identifier as display name
-          username: phoneUsername, // Generated from phone
-          email: phoneEmail, // Generated email for backend compatibility
+          fullName: null,
+          username: username || null,
+          email: null,
           password,
           phone: finalRegPhone,
           role: 'consumer',
           languagePreference,
-          home_location: consumerLocality || null, // Add consumer home location
+          home_location: consumerLocality || null,
         };
-        console.log('[memberJoin] Attempting to register consumer with phone-based credentials');
+        console.log('[memberJoin] Attempting to register consumer with phone-first authentication');
 
         const { user: registeredUser, session } = await userService.registerUser(consumerRegData);
 
@@ -996,7 +997,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
     // Basic fields must be filled and valid format
     if (regRole === 'user') {
-      // For consumers: only phone and password are required
+      // For consumers: phone and password are required, username is optional
       if (!isValidPassword(password)) {
         return false;
       }
@@ -1006,6 +1007,10 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       }
       // Phone must be verified for consumers
       if (!isPhoneVerified) {
+        return false;
+      }
+      // If username is provided, it must be valid (3+ chars) and validation must be complete
+      if (username.length > 0 && (username.length < 3 || usernameTaken === null)) {
         return false;
       }
     } else {
@@ -1215,8 +1220,16 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                    maxLength={selectedCountry.code === '+91' ? 10 : 15}
                    required
                  />
-                 {/* OTP Button for consumers when phone is entered */}
-                 {regRole === 'user' && regPhone.length >= (selectedCountry.code === '+91' ? 10 : 7) && !isPhoneVerified && (
+                 {/* Loading spinner while checking phone for consumers */}
+                 {regRole === 'user' && isCheckingPhone && (
+                   <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
+                 )}
+                 {/* Error indicator if phone is already taken for consumers */}
+                 {regRole === 'user' && phoneTaken === true && !isCheckingPhone && (
+                   <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
+                 )}
+                 {/* OTP Button for consumers when phone is available */}
+                 {regRole === 'user' && regPhone.length >= (selectedCountry.code === '+91' ? 10 : 7) && !isPhoneVerified && phoneTaken === false && !isCheckingPhone && (
                    <button
                      type="button"
                      onClick={handleSendOtp}
@@ -1232,8 +1245,16 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                      <CheckCircle2 className="w-5 h-5" />
                    </div>
                  )}
-                 {/* Merchant OTP button */}
-                 {regRole === 'merchant' && regPhone.length > 5 && !isPhoneVerified && (
+                 {/* Loading spinner while checking phone for merchants */}
+                 {regRole === 'merchant' && isCheckingPhone && (
+                   <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
+                 )}
+                 {/* Error indicator if phone is already taken for merchants */}
+                 {regRole === 'merchant' && phoneTaken === true && !isCheckingPhone && !isPhoneVerified && (
+                   <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
+                 )}
+                 {/* Merchant OTP button - only show if phone is available */}
+                 {regRole === 'merchant' && regPhone.length > 5 && !isPhoneVerified && (phoneTaken === false || phoneTaken === null) && !isCheckingPhone && (
                    <button
                      type="button"
                      onClick={handleSendOtp}
@@ -1252,28 +1273,33 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
              </div>
           </div>
 
-          {/* Username - Only for merchants */}
-          {regRole === 'merchant' && (
-            <div className="relative group">
-              <input
-                type="text"
-                placeholder={t('reg_username')}
-                className="input-premium"
-                value={username}
-                onChange={handleUsernameChange}
-                required
-              />
-              {isCheckingUsername && (
-                <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
-              )}
-              {usernameTaken === false && !isCheckingUsername && username.length >= 3 && (
-                <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-              )}
-              {usernameTaken === true && !isCheckingUsername && (
-                <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-              )}
+          {/* Phone error message */}
+          {phoneTaken === true && !isCheckingPhone && (
+            <div className="text-rose-500 text-xs font-bold -mt-3 ml-2 animate-shake">
+              Phone number already registered
             </div>
           )}
+
+          {/* Username - For both consumers and merchants */}
+          <div className="relative group">
+            <input
+              type="text"
+              placeholder={t('reg_username')}
+              className="input-premium"
+              value={username}
+              onChange={handleUsernameChange}
+              required={regRole === 'merchant'}
+            />
+            {isCheckingUsername && (
+              <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
+            )}
+            {usernameTaken === false && !isCheckingUsername && username.length >= 3 && (
+              <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
+            )}
+            {usernameTaken === true && !isCheckingUsername && (
+              <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
+            )}
+          </div>
 
           {/* Email - Only for merchants */}
           {regRole === 'merchant' && (

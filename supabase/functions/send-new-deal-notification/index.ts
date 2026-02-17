@@ -9,6 +9,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { create } from 'https://deno.land/x/djwt@v3.0.1/mod.ts';
 
 // Firebase Admin SDK initialization (using service account)
 // You'll need to set these environment variables in Supabase Dashboard
@@ -16,14 +17,25 @@ const FIREBASE_PROJECT_ID = Deno.env.get('FIREBASE_PROJECT_ID') || '';
 const FIREBASE_CLIENT_EMAIL = Deno.env.get('FIREBASE_CLIENT_EMAIL') || '';
 const FIREBASE_PRIVATE_KEY = Deno.env.get('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n') || '';
 
+// Debug: Check if credentials are loaded
+console.log('[DEBUG] Firebase credentials check:');
+console.log('[DEBUG] PROJECT_ID:', FIREBASE_PROJECT_ID ? 'SET' : 'MISSING');
+console.log('[DEBUG] CLIENT_EMAIL:', FIREBASE_CLIENT_EMAIL ? 'SET' : 'MISSING');
+console.log('[DEBUG] PRIVATE_KEY length:', FIREBASE_PRIVATE_KEY ? FIREBASE_PRIVATE_KEY.length : 'MISSING');
+console.log('[DEBUG] PRIVATE_KEY starts with:', FIREBASE_PRIVATE_KEY ? FIREBASE_PRIVATE_KEY.substring(0, 27) : 'N/A');
+
 interface Deal {
   campaign_id: string;
   deal_heading: string;
   shop_name: string;
-  city: string;
+  store_id?: string; // Reference to merchant_stores table
+  locality?: string;
+  city?: string;
   category: string;
   offer_value: string;
   image_url?: string;
+  merchant_id: string;
+  status: string;
 }
 
 interface FCMToken {
@@ -32,37 +44,31 @@ interface FCMToken {
 }
 
 /**
- * Get Firebase access token using service account credentials
+ * Get Firebase access token using djwt (Deno-native JWT library)
  */
 async function getFirebaseAccessToken(): Promise<string> {
   try {
-    const header = {
-      alg: 'RS256',
-      typ: 'JWT',
-    };
+    console.log('[FCM] Creating JWT using djwt library...');
 
     const now = Math.floor(Date.now() / 1000);
+
+    // JWT payload for Google OAuth2
     const payload = {
       iss: FIREBASE_CLIENT_EMAIL,
-      scope: 'https://www.googleapis.com/auth/firebase.messaging',
+      sub: FIREBASE_CLIENT_EMAIL,
       aud: 'https://oauth2.googleapis.com/token',
-      exp: now + 3600,
       iat: now,
+      exp: now + 3600, // 1 hour from now
+      scope: 'https://www.googleapis.com/auth/firebase.messaging',
     };
 
-    // Create JWT (you might need to use a JWT library for proper signing)
-    // For now, this is a simplified version - in production, use proper JWT signing
-    const encoder = new TextEncoder();
-    const data = encoder.encode(
-      JSON.stringify(header) + '.' + JSON.stringify(payload)
-    );
-
-    // Import private key
+    // Import the private key
     const pemHeader = '-----BEGIN PRIVATE KEY-----';
     const pemFooter = '-----END PRIVATE KEY-----';
     const pemContents = FIREBASE_PRIVATE_KEY.replace(pemHeader, '')
       .replace(pemFooter, '')
       .replace(/\s/g, '');
+
     const binaryDer = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
 
     const key = await crypto.subtle.importKey(
@@ -73,19 +79,13 @@ async function getFirebaseAccessToken(): Promise<string> {
       ['sign']
     );
 
-    const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, data);
+    // Create and sign JWT using djwt
+    const jwt = await create({ alg: 'RS256', typ: 'JWT' }, payload, key);
 
-    // Base64 encode signature
-    const base64Signature = btoa(
-      String.fromCharCode(...new Uint8Array(signature))
-    );
-
-    const jwt = `${btoa(JSON.stringify(header))}.${btoa(
-      JSON.stringify(payload)
-    )}.${base64Signature}`;
+    console.log('[FCM] JWT created successfully, exchanging for access token...');
 
     // Exchange JWT for access token
-    const response = await fetch('https://oauth2.googleapis.com/token', {
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -94,10 +94,17 @@ async function getFirebaseAccessToken(): Promise<string> {
       }),
     });
 
-    const data2 = await response.json();
-    return data2.access_token;
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('[FCM] Token exchange failed:', errorText);
+      throw new Error(`Token exchange failed: ${errorText}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    console.log('[FCM] ✅ Access token obtained successfully');
+    return tokenData.access_token;
   } catch (error) {
-    console.error('[FCM] Error getting access token:', error);
+    console.error('[FCM] ❌ Error getting access token:', error);
     throw error;
   }
 }
@@ -181,9 +188,9 @@ serve(async (req) => {
     const payload = await req.json();
     console.log('[Webhook] Received payload:', payload);
 
-    // Extract the new deal data
-    const deal: Deal = payload.record || payload.new;
-    if (!deal) {
+    // Extract the new deal data (defensive extraction)
+    const record = payload.record || payload.new || payload;
+    if (!record) {
       console.error('[Webhook] No deal data in payload');
       return new Response(JSON.stringify({ error: 'No deal data' }), {
         status: 400,
@@ -191,13 +198,47 @@ serve(async (req) => {
       });
     }
 
+    const deal: Deal = record;
+
+    // Extract store_id using snake_case (database column format)
+    const storeId = record.store_id;
+
     console.log('[Webhook] Campaign updated:', {
       id: deal.campaign_id,
       heading: deal.deal_heading,
       shop: deal.shop_name,
       merchant_id: deal.merchant_id,
       status: deal.status,
+      store_id: storeId,
     });
+
+    // Debug: Log full deal object to see all available fields
+    console.log('[DEBUG] Full deal object:', JSON.stringify(deal, null, 2));
+    console.log('[DEBUG] Extracted storeId:', storeId);
+
+    // Fetch store location details from merchant_stores table
+    if (storeId) {
+      console.log('[Database] Fetching location for store_id:', storeId);
+
+      const { data: storeData, error: storeError } = await supabase
+        .from('merchant_stores')
+        .select('locality, city')
+        .eq('id', storeId)
+        .maybeSingle();
+
+      if (storeError) {
+        console.error('[Database] Error:', storeError.message);
+      } else if (storeData) {
+        // Populate location fields from merchant_stores
+        deal.locality = storeData.locality;
+        deal.city = storeData.city;
+        console.log(`[Success] Location found: ${deal.locality}, ${deal.city}`);
+      } else {
+        console.warn('[Database] No matching store found for ID:', storeId);
+      }
+    } else {
+      console.warn('[Database] No store_id in campaign, cannot fetch location');
+    }
 
     // CRITICAL: Only send notifications if campaign status is 'active'
     // This prevents notifications for draft edits or pending campaigns
@@ -211,44 +252,69 @@ serve(async (req) => {
 
     console.log('[FCM] Campaign is active, proceeding with notification...');
 
-    // IMPORTANT: Only notify users who have favorited this merchant
-    // Step 1: Find users who favorited this merchant
-    const { data: favoritedUsers, error: favoritesError } = await supabase
-      .from('favorites')
-      .select('user_id')
-      .eq('merchant_id', deal.merchant_id);
+    // LOCALITY-BASED: Notify all consumers in the merchant's store locality
+    // Step 1: Match consumers by home_location against merchant store locality
+    const storeLocality = deal.locality;
+    const storeCity = deal.city;
 
-    if (favoritesError) {
-      console.error('[Database] Error fetching favorites:', favoritesError);
+    if (!storeLocality && !storeCity) {
+      console.log('[FCM] No store location available, cannot match consumers by locality.');
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch favorites' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!favoritedUsers || favoritedUsers.length === 0) {
-      console.log('[FCM] No users have favorited this merchant. No notifications to send.');
-      return new Response(
-        JSON.stringify({ message: 'No users to notify', sent: 0 }),
+        JSON.stringify({ message: 'No store location data, no notifications sent', sent: 0 }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Extract user IDs who favorited this merchant
-    const favoritedUserIds = favoritedUsers.map(f => f.user_id);
-    console.log(`[FCM] Found ${favoritedUserIds.length} users who favorited this merchant`);
+    let localConsumerIds: string[] = [];
 
-    // Step 2: Get FCM tokens for those users (who are also consumers)
+    // Primary match: consumers whose home_location contains the store's locality name
+    if (storeLocality) {
+      console.log(`[FCM] Searching consumers with home_location matching locality: '${storeLocality}'`);
+      const { data: localityUsers, error: localityError } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('role', 'consumer')
+        .ilike('home_location', `%${storeLocality}%`);
+
+      if (localityError) {
+        console.error('[Database] Error finding consumers by locality:', localityError);
+      } else if (localityUsers && localityUsers.length > 0) {
+        localConsumerIds = localityUsers.map((u: { id: string }) => u.id);
+        console.log(`[FCM] Found ${localConsumerIds.length} consumers in locality '${storeLocality}'`);
+      }
+    }
+
+    // Fallback: if no locality match, try city-level match
+    if (localConsumerIds.length === 0 && storeCity) {
+      console.log(`[FCM] No locality match found, falling back to city: '${storeCity}'`);
+      const { data: cityUsers, error: cityError } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('role', 'consumer')
+        .ilike('home_location', `%${storeCity}%`);
+
+      if (cityError) {
+        console.error('[Database] Error finding consumers by city:', cityError);
+      } else if (cityUsers && cityUsers.length > 0) {
+        localConsumerIds = cityUsers.map((u: { id: string }) => u.id);
+        console.log(`[FCM] Found ${localConsumerIds.length} consumers in city '${storeCity}'`);
+      }
+    }
+
+    if (localConsumerIds.length === 0) {
+      console.log('[FCM] No consumers found in this locality/city. No notifications to send.');
+      return new Response(
+        JSON.stringify({ message: 'No local consumers to notify', sent: 0 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Step 2: Get FCM tokens for consumers in this locality
     const { data: tokens, error: tokensError } = await supabase
       .from('fcm_tokens')
-      .select(`
-        device_token,
-        user_id,
-        user_profiles!inner(role)
-      `)
+      .select('device_token, user_id')
       .eq('is_active', true)
-      .eq('user_profiles.role', 'consumer')
-      .in('user_id', favoritedUserIds);
+      .in('user_id', localConsumerIds);
 
     if (tokensError) {
       console.error('[Database] Error fetching tokens:', tokensError);
@@ -259,25 +325,62 @@ serve(async (req) => {
     }
 
     if (!tokens || tokens.length === 0) {
-      console.log('[FCM] No active tokens found');
+      console.log('[FCM] No active FCM tokens found for consumers in this locality');
       return new Response(
-        JSON.stringify({ message: 'No users to notify', sent: 0 }),
+        JSON.stringify({ message: 'No active device tokens for local consumers', sent: 0 }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[FCM] Found ${tokens.length} active tokens`);
+    console.log(`[FCM] Found ${tokens.length} active tokens for ${localConsumerIds.length} local consumers`);
 
     // Prepare notification content
-    const notificationTitle = '🎉 New Deal Live!';
-    const notificationBody = `${deal.offer_value} at ${deal.shop_name} in ${deal.city}`;
+    const notificationTitle = 'New Deal Live!';
+
+    // Construct location string: "locality, city" or "city" or "locality"
+    let location = '';
+    if (deal.locality && deal.city) {
+      location = `${deal.locality}, ${deal.city}`;
+    } else if (deal.city) {
+      location = deal.city;
+    } else if (deal.locality) {
+      location = deal.locality;
+    }
+
+    const notificationBody = location
+      ? `${deal.offer_value} at ${deal.shop_name} in ${location}`
+      : `${deal.offer_value} at ${deal.shop_name}`;
+
     const notificationData = {
       campaign_id: deal.campaign_id,
       type: 'new_deal',
-      city: deal.city,
+      locality: deal.locality || '',
+      city: deal.city || '',
       category: deal.category,
       screen: 'CampaignDetails', // Deep link to campaign details screen
     };
+
+    // Bulk insert notification records into user_notifications for all local consumers
+    const notificationRows = localConsumerIds.map((userId) => ({
+      user_id: userId,
+      campaign_id: deal.campaign_id,
+      merchant_id: deal.merchant_id,
+      type: 'new_deal',
+      title: notificationTitle,
+      body: notificationBody,
+      image_url: deal.image_url || null,
+      is_read: false,
+    }));
+
+    const { error: notifInsertError } = await supabase
+      .from('user_notifications')
+      .insert(notificationRows);
+
+    if (notifInsertError) {
+      console.error('[Database] Failed to insert user_notifications:', notifInsertError.message);
+    } else {
+      console.log(`[Database] Inserted ${notificationRows.length} notification records into user_notifications`);
+    }
 
     // Send notifications to all tokens
     const results = await Promise.allSettled(

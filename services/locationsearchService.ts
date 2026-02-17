@@ -72,7 +72,7 @@ export const locationsearchService = {
   // Calls Edge Function
   searchLocalities: async (query: string, lang: Locale): Promise<DBLocality[]> => {
     // It's assumed that the supabase.functions.invoke method implicitly handles the JWT in headers
-    const { data, error } = await supabase.functions.invoke('location/search-localities', { // Updated EF name
+    const { data, error } = await supabase.functions.invoke('search-localities', { // Corrected EF name
       body: { query, lang },
     });
     if (error) {
@@ -99,12 +99,12 @@ export const locationsearchService = {
   },
 
   /**
-   * Performs reverse geocoding using Google Maps API to get city and state from a pincode.
+   * Performs reverse geocoding using Google Maps API to get locality, city and state from a pincode.
    * This runs entirely client-side.
    * @param pincode The 6-digit Indian pincode.
-   * @returns An object containing `city` and `state` names, or `null` if not found/error.
+   * @returns An object containing `locality`, `city` and `state` names, or `null` if not found/error.
    */
-  reverseGeocodePincode: async (pincode: string): Promise<{ city: string; state: string } | null> => {
+  reverseGeocodePincode: async (pincode: string): Promise<{ locality: string; city: string; state: string } | null> => {
     const gWindow = window as any;
     if (!gWindow.google || !gWindow.google.maps || !gWindow.google.maps.Geocoder) {
       console.error("Google Maps SDK or Geocoder not loaded.");
@@ -116,19 +116,55 @@ export const locationsearchService = {
       // Appending ', India' helps restrict results to India, improving accuracy.
       geocoder.geocode({ address: pincode + ', India' }, (results: any, status: any) => {
         if (status === 'OK' && results && results[0]) {
+          let locality = '';
           let city = '';
           let state = '';
 
+          // Log all address components for debugging
+          console.log(`[Pincode ${pincode}] Address components:`, results[0].address_components);
+
           for (const component of results[0].address_components) {
+            // Log each component's types for debugging
+            console.log(`[Pincode ${pincode}] Component "${component.long_name}" has types:`, component.types);
+
+            // Extract locality/area - try multiple fields in priority order
+            // For Indian cities, sublocality_level_1, sublocality_level_2, or neighborhood usually has the area name
+            if (!locality) {
+              if (component.types.includes('sublocality_level_1')) {
+                locality = component.long_name;
+                console.log(`[Pincode ${pincode}] ✅ Found locality in sublocality_level_1:`, locality);
+              } else if (component.types.includes('sublocality_level_2')) {
+                locality = component.long_name;
+                console.log(`[Pincode ${pincode}] ✅ Found locality in sublocality_level_2:`, locality);
+              } else if (component.types.includes('sublocality')) {
+                locality = component.long_name;
+                console.log(`[Pincode ${pincode}] ✅ Found locality in sublocality:`, locality);
+              } else if (component.types.includes('neighborhood')) {
+                locality = component.long_name;
+                console.log(`[Pincode ${pincode}] ✅ Found locality in neighborhood:`, locality);
+              } else if (component.types.includes('sublocality_level_3')) {
+                locality = component.long_name;
+                console.log(`[Pincode ${pincode}] ✅ Found locality in sublocality_level_3:`, locality);
+              }
+            }
+
+            // Extract city
             if (component.types.includes('locality')) {
               city = component.long_name;
+              console.log(`[Pincode ${pincode}] Found city:`, city);
             }
+
+            // Extract state
             if (component.types.includes('administrative_area_level_1')) {
               state = component.long_name;
+              console.log(`[Pincode ${pincode}] Found state:`, state);
             }
           }
+
+          console.log(`[Pincode ${pincode}] Final result - Locality: ${locality}, City: ${city}, State: ${state}`);
+
           if (city && state) {
-            resolve({ city, state });
+            resolve({ locality, city, state });
           } else {
             console.warn(`Pincode ${pincode} found, but city/state components missing in Google Maps response.`, results[0]);
             resolve(null);

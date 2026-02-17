@@ -58,6 +58,22 @@ export const DealAdminReviewDeals: React.FC<DealAdminReviewDealsProps> = ({
     })));
   }, [deals]);
 
+  // Auto-refresh: Fetch new campaigns every 15 seconds
+  useEffect(() => {
+    console.log('[DealAdminReviewDeals] Setting up auto-refresh (15s interval)');
+
+    const intervalId = setInterval(() => {
+      console.log('[DealAdminReviewDeals] Auto-refreshing campaigns...');
+      refreshDeals();
+    }, 15000); // 15 seconds
+
+    // Cleanup: Clear interval when component unmounts
+    return () => {
+      console.log('[DealAdminReviewDeals] Clearing auto-refresh interval');
+      clearInterval(intervalId);
+    };
+  }, [refreshDeals]);
+
   const getCampaignImage = (deal: Deal) => {
     // Try thumbnail field first (should be full URL from database)
     if (deal.thumbnail && deal.thumbnail.startsWith('http')) {

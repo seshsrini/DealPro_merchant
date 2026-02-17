@@ -178,7 +178,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
 
         <form onSubmit={handleLogin} className="space-y-6 flex-1">
           <div className="relative group">
-            <input name="identifier" placeholder={t('login_placeholder_id')} className="input-premium" required />
+            <input name="identifier" placeholder="Phone Number / Username" className="input-premium" required />
           </div>
           <div className="relative group">
             <input name="password" type={showPassword ? "text" : "password"} placeholder={t('login_placeholder_pass')} className="input-premium pr-14" required />

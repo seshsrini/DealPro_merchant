@@ -1,8 +1,3 @@
-if (req.method === 'OPTIONS') {
-
-return new Response('ok', { headers: corsHeaders });
-
-}
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // 1. GLOBAL CORS HEADERS
@@ -51,15 +46,12 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 3. AUTHENTICATION
-    await authenticateRequest(req);
-    
+    // 3. SETUP SUPABASE CLIENT (No authentication required - this is public data)
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
-    });
+    // Use anon key only - no authentication headers
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     const body = await req.json();
     const { query, lang = 'en' } = body;

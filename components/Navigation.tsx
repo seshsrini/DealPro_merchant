@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Ticket, Languages, ChevronDown, Search, CheckSquare, TrendingUp, Image } from 'lucide-react'; // Added CheckSquare, TrendingUp, Image
+import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Ticket, Languages, ChevronDown, Search, CheckSquare, TrendingUp, Image, Bell } from 'lucide-react'; // Added CheckSquare, TrendingUp, Image, Bell
 import { AppView, Locale, User as UserType } from '../types';
 import { useTranslation } from '../contexts/LanguageContext';
 
@@ -14,6 +14,8 @@ interface NavProps {
   toggleTheme: () => void;
   isLoggedIn: boolean;
   userRole?: UserType['role']; // Pass user role to determine homeView
+  unreadNotifications?: number;
+  onBellClick?: () => void;
 }
 
 const LANGUAGES: { id: Locale; label: string; short: string }[] = [
@@ -28,13 +30,9 @@ const LANGUAGES: { id: Locale; label: string; short: string }[] = [
   { id: 'gu', label: 'Gujarati', short: 'GU' }
 ];
 
-export const Header: React.FC<NavProps> = ({ currentView, setView, onBack, showBack, theme, toggleTheme, isLoggedIn, userRole }) => {
+export const Header: React.FC<NavProps> = ({ currentView, setView, onBack, showBack, theme, toggleTheme, isLoggedIn, userRole, unreadNotifications = 0, onBellClick }) => {
   const isDark = theme === 'dark';
   const { locale, setLocale } = useTranslation();
-
-  // Determine the home view based on user role
-  const homeView: AppView = userRole === 'merchant' ? 'merchant_dashboard' : 
-                            userRole === 'dealadmin' ? 'dealadmin_review_deals' : 'home';
 
   return (
     <header className="sticky top-0 z-50 px-6 h-24 flex items-center justify-between bg-transparent">
@@ -61,6 +59,21 @@ export const Header: React.FC<NavProps> = ({ currentView, setView, onBack, showB
       </div>
       
       <div className="flex items-center gap-2">
+        {/* Bell icon — consumer only */}
+        {userRole === 'consumer' && onBellClick && (
+          <button
+            onClick={onBellClick}
+            className="relative w-12 h-12 glass rounded-2xl flex items-center justify-center transition-all active:scale-90 border-white/10"
+          >
+            <Bell className={`w-5 h-5 ${isDark ? 'text-white' : 'text-slate-900'}`} />
+            {unreadNotifications > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-yellow-500 text-black text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">
+                {unreadNotifications > 99 ? '99+' : unreadNotifications}
+              </span>
+            )}
+          </button>
+        )}
+
         {/* Compact Language Selector */}
         <div className="relative group">
           <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">

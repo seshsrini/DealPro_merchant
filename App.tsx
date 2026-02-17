@@ -17,12 +17,13 @@ import { Loader2 } from 'lucide-react';
 // NEW: Import the dedicated redemption history service
 import { redemptionHistoryService } from './services/redemptionHistoryService';
 import { QRscan } from './QRscan';
-import { supabase, updateSupabaseSession } from './services/supabaseClient'; // Import supabase and the session updater
+import { updateSupabaseSession } from './services/supabaseClient'; // Import the session updater
 import { addCampaignService } from './services/addCampaignService';
 import { getCampaignsConsumer } from './services/getCampaignsConsumer'; // NEW: Import getCampaignsConsumer
 import { OtpVerificationModal } from './OtpVerificationModal'; // New Import
 import { fetchFavoritesService } from './services/fetchFavorites'; // NEW: Import fetchFavoritesService
 import { pinnedDealsService } from './services/pinnedDealsService'; // NEW: Import pinnedDealsService
+import { notificationsService } from './services/notificationsService';
 import { PrivacyPolicy } from './PrivacyPolicy'; // Privacy Policy component
 import { TermsOfService } from './TermsOfService'; // Terms of Service component
 import { PrivacyPolicySignup } from './PrivacyPolicySignup'; // Privacy Policy for signup
@@ -80,6 +81,9 @@ const AppContent: React.FC = () => {
   // Role selection state for signup (persist across navigation)
   const [signupRole, setSignupRole] = useState<'user' | 'merchant'>('user');
   const [showRoleSelector, setShowRoleSelector] = useState(true);
+
+  // Notification bell: unread count for consumer
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
 
   const navigateTo = (newView: AppView) => {
@@ -245,6 +249,33 @@ const AppContent: React.FC = () => {
     }
   }, [view]);
 
+  // Always show role selector when navigating to register view
+  useEffect(() => {
+    if (view === 'register') {
+      setShowRoleSelector(true);
+    }
+  }, [view]);
+
+  // Fetch unread notification count for consumers + realtime subscription
+  useEffect(() => {
+    if (!user.isLoggedIn || user.role !== 'consumer' || !user.id) {
+      setUnreadNotifications(0);
+      return;
+    }
+
+    const fetchUnreadCount = async () => {
+      const count = await notificationsService.getUnreadCount(user.id);
+      setUnreadNotifications(count);
+    };
+
+    fetchUnreadCount();
+
+    // Poll every 30 seconds for new notifications (avoids WebSocket/Realtime dependency)
+    const interval = setInterval(fetchUnreadCount, 30000);
+
+    return () => { clearInterval(interval); };
+  }, [user.id, user.isLoggedIn, user.role]);
+
   // Biometric Auto-Login
   useEffect(() => {
     if (view === 'login' && hasBiometricSession && !user.isLoggedIn) {
@@ -324,12 +355,14 @@ const AppContent: React.FC = () => {
           <Header
             currentView={view}
             setView={navigateTo}
-            showBack={['detail', 'register', 'forgot_password', 'merchant_deals', 'edit_profile', 'help_feedback', 'my_redemptions', 'verify_phone', 'onboarding', 'merchant_subscriptions', 'payment_plans', 'bank_verification', 'store_search', 'dealadmin_edit_deal'].includes(view)}
+            showBack={['detail', 'register', 'forgot_password', 'merchant_deals', 'edit_profile', 'help_feedback', 'my_redemptions', 'verify_phone', 'onboarding', 'merchant_subscriptions', 'payment_plans', 'bank_verification', 'store_search', 'dealadmin_edit_deal', 'notifications'].includes(view)}
             onBack={handleBackNavigation}
             theme={theme}
             toggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
             isLoggedIn={user.isLoggedIn}
-            userRole={user.role} // Pass user role to Header
+            userRole={user.role}
+            unreadNotifications={unreadNotifications}
+            onBellClick={user.isLoggedIn ? () => navigateTo('notifications') : undefined}
           />
           <main className="flex-1 overflow-y-auto hide-scrollbar pb-32">
             {!user.isLoggedIn ? (
@@ -427,6 +460,7 @@ const AppContent: React.FC = () => {
                 pinnedDeals={pinnedDeals} // NEW: Pass pinned deals to ConsumerStack
                 updateConsumerPinnedDeals={updateConsumerPinnedDeals} // NEW: Pass the update function
                 onLocationComplete={setIsLocationComplete} // NEW: Callback to update location completion status
+                onUnreadCountChange={setUnreadNotifications}
               />
             )}
           </main>

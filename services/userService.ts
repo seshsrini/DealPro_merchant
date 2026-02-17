@@ -64,9 +64,17 @@ export const userService = {
         body: d,
       });
 
+      // Check for error in data first (Edge Function may return error in body)
+      if (data?.error) {
+        console.error("[userService] Edge Function returned error in response body:", data.error);
+        throw new Error(data.error);
+      }
+
       if (error) {
         console.error("[userService] Registration failed via Edge Function:", error);
-        throw error;
+        // Try to extract actual error message from various possible locations
+        const errorMessage = error.context?.error || error.context?.message || error.message || "Registration failed";
+        throw new Error(errorMessage);
       }
 
       if (!data || !data.user) { // session might be null if email verification is pending

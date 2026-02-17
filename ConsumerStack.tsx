@@ -23,6 +23,7 @@ import { locationsearchService } from './services/locationsearchService'; // Imp
 import { StoreSearchScreen } from './StoreSearchScreen'; // NEW: Import StoreSearchScreen
 import { RatingPopup } from './RatingPopup'; // Import RatingPopup
 import { HelpFeedback } from './HelpFeedback'; // Import HelpFeedback
+import { NotificationsView } from './NotificationsView'; // Import NotificationsView
 
 const calculateDistance = (lat1: number | null, lon1: number | null, lat2: number | null, lon2: number | null) => {
   if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return Infinity;
@@ -50,6 +51,7 @@ interface ConsumerStackProps {
   pinnedDeals: any[]; // NEW: Pinned deals from parent
   updateConsumerPinnedDeals: (userId: string) => Promise<void>; // NEW: Function to update pinned deals
   onLocationComplete?: (isComplete: boolean) => void; // NEW: Callback to notify when location is set
+  onUnreadCountChange?: (count: number) => void; // For resetting badge after viewing notifications
 }
 
 const generateCustomClaimId = (): string => {
@@ -78,7 +80,7 @@ const generateCustomClaimId = (): string => {
 
 export const ConsumerStack: React.FC<ConsumerStackProps> = ({
   view, setView, user, setUser, deals, favoriteIds, setFavoriteIds, redeemedIds, setRedeemedIds, loading, theme,
-  favoriteDeals, updateConsumerFavorites, pinnedDeals, updateConsumerPinnedDeals, onLocationComplete
+  favoriteDeals, updateConsumerFavorites, pinnedDeals, updateConsumerPinnedDeals, onLocationComplete, onUnreadCountChange
 }) => {
   const [consumerDeals, setConsumerDeals] = useState<Deal[]>([]);
   const [dealOfDayDeals, setDealOfDayDeals] = useState<Deal[]>([]); // NEW: Separate state for Deal of the Day
@@ -727,6 +729,18 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
     }
   }, [setView, user.id]);
 
+  // Deep link from notification: fetch deal by campaign_id and navigate to detail
+  const handleSelectDealById = useCallback(async (campaignId: string) => {
+    try {
+      const deal = await dealDetailsService.fetchDealDetails(campaignId);
+      setSelectedDeal(deal);
+      setIsDealOfTheDayDetail(false);
+      setView('detail');
+    } catch (error) {
+      console.error('[ConsumerStack] Failed to fetch deal from notification:', error);
+    }
+  }, [setView]);
+
   const handleShowDealOfTheDayDetails = useCallback(async (deal: Deal) => {
     try {
       // Fetch fresh deal details with proper fallbacks
@@ -773,6 +787,18 @@ export const ConsumerStack: React.FC<ConsumerStackProps> = ({
       return consumerDeals;
     }
   }, [consumerDeals, dealOfDayDeals, view]);
+
+  if (view === 'notifications') {
+    return (
+      <NotificationsView
+        userId={user.id}
+        theme={theme}
+        setView={setView}
+        onSelectDeal={handleSelectDealById}
+        onUnreadCountChange={onUnreadCountChange || (() => {})}
+      />
+    );
+  }
 
   if (view === 'onboarding') {
     return (
