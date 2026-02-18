@@ -13,8 +13,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     
-    // HARDCODE for testing to rule out Env Var issues
-    const bucketName = 'dealproDEV_Images' 
+    const bucketName = Deno.env.get('STORAGE_BUCKET_NAME') || 'dealproDEV_Images'
 
     const authHeader = req.headers.get('Authorization')?.replace('Bearer ', '')
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
