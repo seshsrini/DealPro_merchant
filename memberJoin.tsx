@@ -73,10 +73,33 @@ const isGstValid = (gst: string): boolean => GST_REGEX.test(gst);
 const PAN_REGEX = /^[A-Z]{3}[CFPB][A-Z][0-9]{4}[A-Z]$/;
 const isPanValid = (pan: string): boolean => PAN_REGEX.test(pan);
 
+// Udyam (MSME) Format: UDYAM-MH-01-0000001
+const UDYAM_REGEX = /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/i;
+const isUdyamValid = (v: string): boolean => UDYAM_REGEX.test(v.toUpperCase());
+
+// FSSAI (Food License) Format: 14 digits
+const FSSAI_REGEX = /^[0-9]{14}$/;
+const isFssaiValid = (v: string): boolean => FSSAI_REGEX.test(v);
+
+// Trade License Format: 2-letter state code + alphanumeric (e.g., KA/2024/123456)
+const TRADE_LICENSE_REGEX = /^[A-Z]{2}[A-Z0-9\/\-]{3,20}$/i;
+const isTradeLicenseValid = (v: string): boolean => TRADE_LICENSE_REGEX.test(v.toUpperCase());
+
+// Indian state name → 2-letter abbreviation (for Trade License pre-fill)
+const STATE_ABBREVIATIONS: Record<string, string> = {
+  'Andhra Pradesh': 'AP', 'Arunachal Pradesh': 'AR', 'Assam': 'AS',
+  'Bihar': 'BR', 'Chhattisgarh': 'CG', 'Delhi': 'DL', 'Goa': 'GA',
+  'Gujarat': 'GJ', 'Haryana': 'HR', 'Himachal Pradesh': 'HP',
+  'Jharkhand': 'JH', 'Karnataka': 'KA', 'Kerala': 'KL',
+  'Madhya Pradesh': 'MP', 'Maharashtra': 'MH', 'Manipur': 'MN',
+  'Meghalaya': 'ML', 'Mizoram': 'MZ', 'Nagaland': 'NL', 'Odisha': 'OR',
+  'Punjab': 'PB', 'Rajasthan': 'RJ', 'Sikkim': 'SK', 'Tamil Nadu': 'TN',
+  'Telangana': 'TS', 'Tripura': 'TR', 'Uttar Pradesh': 'UP',
+  'Uttarakhand': 'UK', 'West Bengal': 'WB',
+};
+
 const isValidPassword = (password: string): boolean => {
-  // At least 8 characters, at most 15, one uppercase, one number, and no spaces.
-  const regex = /^(?=.*[A-Z])(?=.*\d)[^\s]{8,15}$/;
-  return regex.test(password);
+  return password.length >= 6;
 };
 
 const formatPhoneNumber = (value: string, countryCode: string) => {
@@ -148,10 +171,31 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const { t, locale } = useTranslation();
   const isDark = theme === 'dark';
 
+  // Business type selection
+  const [businessType, setBusinessType] = useState<'' | 'gstin' | 'udyam' | 'fssai' | 'trade_license'>('');
+
   const [gstinValue, setGstinValue] = useState('');
   const [panValue, setPanValue] = useState('');
   const [gstinValidated, setGstinValidated] = useState<boolean | null>(null); // null = not validated, true = valid, false = invalid
   const [panValidated, setPanValidated] = useState<boolean | null>(null); // null = not validated, true = valid, false = invalid
+
+  // Udyam (MSME) verification
+  const [udyamValue, setUdyamValue] = useState('');
+  const [udyamValidated, setUdyamValidated] = useState<boolean | null>(null);
+  const [udyamTaken, setUdyamTaken] = useState<boolean | null>(null);
+  const [isCheckingUdyam, setIsCheckingUdyam] = useState(false);
+
+  // FSSAI (Food License) verification
+  const [fssaiValue, setFssaiValue] = useState('');
+  const [fssaiValidated, setFssaiValidated] = useState<boolean | null>(null);
+  const [fssaiTaken, setFssaiTaken] = useState<boolean | null>(null);
+  const [isCheckingFssai, setIsCheckingFssai] = useState(false);
+
+  // Trade License (Shop & Establishment) verification
+  const [tradeLicenseValue, setTradeLicenseValue] = useState('');
+  const [tradeLicenseValidated, setTradeLicenseValidated] = useState<boolean | null>(null);
+  const [tradeLicenseTaken, setTradeLicenseTaken] = useState<boolean | null>(null);
+  const [isCheckingTradeLicense, setIsCheckingTradeLicense] = useState(false);
 
   const [isPhoneVerified, setIsPhoneVerified] = useState(false); // Local verification status
   const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -204,6 +248,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   // State for locality autocomplete
   const [localitySuggestions, setLocalitySuggestions] = useState<Record<number, DBLocality[]>>({});
   const [showLocalityDropdown, setShowLocalityDropdown] = useState<Record<number, boolean>>({});
+  const [localityResolved, setLocalityResolved] = useState<Record<number, boolean>>({});
 
   // Ref for debounce timeouts
   const usernameDebounceRef = useRef<number | null>(null);
@@ -211,6 +256,9 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const phoneDebounceRef = useRef<number | null>(null);
   const gstinDebounceRef = useRef<number | null>(null);
   const panDebounceRef = useRef<number | null>(null);
+  const udyamDebounceRef = useRef<number | null>(null);
+  const fssaiDebounceRef = useRef<number | null>(null);
+  const tradeLicenseDebounceRef = useRef<number | null>(null);
 
 
   // Real-time username validation
@@ -609,8 +657,9 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       return newStores;
     });
 
-    // If locality field changed, trigger autocomplete search
+    // If locality field changed, mark as unresolved and trigger autocomplete search
     if (field === 'locality' && typeof value === 'string') {
+      setLocalityResolved((prev: Record<number, boolean>) => ({ ...prev, [index]: false }));
       handleLocalitySearch(index, value);
     }
   };
@@ -667,6 +716,8 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       return next;
     });
 
+    // Mark locality as resolved via autocomplete
+    setLocalityResolved((prev: Record<number, boolean>) => ({ ...prev, [index]: true }));
     // Hide dropdown
     setShowLocalityDropdown(prev => ({ ...prev, [index]: false }));
     console.log(`[LocalitySearch] Selected locality: ${localizedName} with pincode: ${locality.pincode}`);
@@ -758,6 +809,102 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     } else {
       // Clear any previous error
       setOtpError(null);
+    }
+  };
+
+  // Udyam validation
+  const validateUdyam = useCallback(async (value: string) => {
+    if (!value || !isUdyamValid(value)) { setUdyamTaken(null); setIsCheckingUdyam(false); return; }
+    setIsCheckingUdyam(true);
+    try {
+      const isTaken = await userService.validateMerchantField('udyam_no', value.toUpperCase());
+      setUdyamTaken(isTaken);
+    } catch { setUdyamTaken(null); } finally { setIsCheckingUdyam(false); }
+  }, []);
+
+  const handleUdyamChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.toUpperCase();
+    setUdyamValue(value);
+    setUdyamTaken(null);
+    setUdyamValidated(null);
+    setIsCheckingUdyam(false);
+    if (udyamDebounceRef.current) clearTimeout(udyamDebounceRef.current as number);
+    udyamDebounceRef.current = setTimeout(() => validateUdyam(value), 500) as unknown as number;
+  };
+
+  const handleValidateUdyam = () => {
+    const isValid = isUdyamValid(udyamValue);
+    setUdyamValidated(isValid);
+    if (!isValid) { setOtpError('Invalid Udyam format. Expected: UDYAM-XX-00-0000000'); setTimeout(() => setOtpError(null), 3000); }
+    else setOtpError(null);
+  };
+
+  // FSSAI validation
+  const validateFssai = useCallback(async (value: string) => {
+    if (!value || !isFssaiValid(value)) { setFssaiTaken(null); setIsCheckingFssai(false); return; }
+    setIsCheckingFssai(true);
+    try {
+      const isTaken = await userService.validateMerchantField('fssai_no', value);
+      setFssaiTaken(isTaken);
+    } catch { setFssaiTaken(null); } finally { setIsCheckingFssai(false); }
+  }, []);
+
+  const handleFssaiChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, ''); // digits only
+    setFssaiValue(value);
+    setFssaiTaken(null);
+    setFssaiValidated(null);
+    setIsCheckingFssai(false);
+    if (fssaiDebounceRef.current) clearTimeout(fssaiDebounceRef.current as number);
+    fssaiDebounceRef.current = setTimeout(() => validateFssai(value), 500) as unknown as number;
+  };
+
+  const handleValidateFssai = () => {
+    const isValid = isFssaiValid(fssaiValue);
+    setFssaiValidated(isValid);
+    if (!isValid) { setOtpError('Invalid FSSAI format. Must be exactly 14 digits.'); setTimeout(() => setOtpError(null), 3000); }
+    else setOtpError(null);
+  };
+
+  // Trade License validation
+  const validateTradeLicense = useCallback(async (value: string) => {
+    if (!value || !isTradeLicenseValid(value)) { setTradeLicenseTaken(null); setIsCheckingTradeLicense(false); return; }
+    setIsCheckingTradeLicense(true);
+    try {
+      const isTaken = await userService.validateMerchantField('trade_license_no', value.toUpperCase());
+      setTradeLicenseTaken(isTaken);
+    } catch { setTradeLicenseTaken(null); } finally { setIsCheckingTradeLicense(false); }
+  }, []);
+
+  const handleTradeLicenseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.toUpperCase();
+    setTradeLicenseValue(value);
+    setTradeLicenseTaken(null);
+    setTradeLicenseValidated(null);
+    setIsCheckingTradeLicense(false);
+    if (tradeLicenseDebounceRef.current) clearTimeout(tradeLicenseDebounceRef.current as number);
+    tradeLicenseDebounceRef.current = setTimeout(() => validateTradeLicense(value), 500) as unknown as number;
+  };
+
+  const handleValidateTradeLicense = () => {
+    const isValid = isTradeLicenseValid(tradeLicenseValue);
+    setTradeLicenseValidated(isValid);
+    if (!isValid) { setOtpError('Invalid Trade License format. Must start with state code (e.g. KA/2024/123456).'); setTimeout(() => setOtpError(null), 3000); }
+    else setOtpError(null);
+  };
+
+  const handleBusinessTypeChange = (newType: 'gstin' | 'udyam' | 'fssai' | 'trade_license') => {
+    setBusinessType(newType);
+    // Reset all business verification fields when type changes
+    setGstinValue(''); setGstinValidated(null); setGstinTaken(null);
+    setPanValue(''); setPanValidated(null); setPanTaken(null);
+    setUdyamValue(''); setUdyamValidated(null); setUdyamTaken(null);
+    setFssaiValue(''); setFssaiValidated(null); setFssaiTaken(null);
+    setTradeLicenseValue(''); setTradeLicenseValidated(null); setTradeLicenseTaken(null);
+    // Pre-fill Trade License with state abbreviation
+    if (newType === 'trade_license') {
+      const stateAbbrev = STATE_ABBREVIATIONS[merchantStores[0]?.state] || '';
+      if (stateAbbrev) setTradeLicenseValue(stateAbbrev);
     }
   };
 
@@ -884,8 +1031,16 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
       } else { // regRole === 'merchant'
         // Client-side validation: Rely on `canSubmit` to disable button for these checks
-        if (!isGstValid(gstinValue)) throw new Error('Invalid GSTIN.');
-        if (!isPanValid(panValue)) throw new Error('Invalid PAN.');
+        if (businessType === 'gstin') {
+          if (!isGstValid(gstinValue)) throw new Error('Invalid GSTIN.');
+          if (!isPanValid(panValue)) throw new Error('Invalid PAN.');
+        } else if (businessType === 'udyam') {
+          if (!isUdyamValid(udyamValue)) throw new Error('Invalid Udyam Registration No.');
+        } else if (businessType === 'fssai') {
+          if (!isFssaiValid(fssaiValue)) throw new Error('Invalid FSSAI License No.');
+        } else if (businessType === 'trade_license') {
+          if (!isTradeLicenseValid(tradeLicenseValue)) throw new Error('Invalid Trade License No.');
+        }
         if (merchantStores.some(s => !s.store_name || !s.street || !s.city || !s.state)) {
           throw new Error('Incomplete store address.');
         }
@@ -902,20 +1057,20 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           throw new Error("Phone number not verified.");
         }
 
-        // 🔐 SECURITY: Encrypt sensitive business data (GST & PAN) before transmission
-        const gstEncryptionResult = encryptionService.encryptGST(gstinValue);
-        const panEncryptionResult = encryptionService.encryptPAN(panValue);
+        // 🔐 SECURITY: Encrypt sensitive business data (GSTIN/PAN only for GSTIN type)
+        let encryptedGstin: string | null = null;
+        let encryptedPan: string | null = null;
 
-        if (!gstEncryptionResult.isValid) {
-          throw new Error(gstEncryptionResult.error || 'GST encryption failed');
+        if (businessType === 'gstin') {
+          const gstEncryptionResult = encryptionService.encryptGST(gstinValue);
+          const panEncryptionResult = encryptionService.encryptPAN(panValue);
+          if (!gstEncryptionResult.isValid) throw new Error(gstEncryptionResult.error || 'GST encryption failed');
+          if (!panEncryptionResult.isValid) throw new Error(panEncryptionResult.error || 'PAN encryption failed');
+          encryptedGstin = gstEncryptionResult.encrypted;
+          encryptedPan = panEncryptionResult.encrypted;
+          auditLogger.logSensitiveDataAccess('ENCRYPT_FOR_REGISTRATION', 'GST');
+          auditLogger.logSensitiveDataAccess('ENCRYPT_FOR_REGISTRATION', 'PAN');
         }
-        if (!panEncryptionResult.isValid) {
-          throw new Error(panEncryptionResult.error || 'PAN encryption failed');
-        }
-
-        // Log sensitive data access for audit compliance
-        auditLogger.logSensitiveDataAccess('ENCRYPT_FOR_REGISTRATION', 'GST');
-        auditLogger.logSensitiveDataAccess('ENCRYPT_FOR_REGISTRATION', 'PAN');
 
         const merchantRegData = {
           fullName,
@@ -924,16 +1079,22 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           password,
           phone: finalRegPhone,
           role: 'merchant',
-          storeName, // Overall store name
+          storeName,
           category,
-          gstin: gstEncryptionResult.encrypted, // 🔐 Encrypted GST
-          pan: panEncryptionResult.encrypted,   // 🔐 Encrypted PAN
+          businessType,
+          gstin: encryptedGstin,
+          pan: encryptedPan,
+          udyamNo: businessType === 'udyam' ? udyamValue.toUpperCase() : null,
+          fssaiNo: businessType === 'fssai' ? fssaiValue : null,
+          tradeLicenseNo: businessType === 'trade_license' ? tradeLicenseValue.toUpperCase() : null,
+          termsAccepted,
+          privacyAccepted,
           languagePreference,
           stores: merchantStores.map(s => ({
-            store_name: s.store_name, // Pass individual store name
+            store_name: s.store_name,
             address: s.street,
             pincode: s.pincode,
-            locality: s.locality, // Add locality to the payload
+            locality: s.locality,
             city: s.city,
             state: s.state,
             landmark: s.landmark,
@@ -942,10 +1103,10 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
             store_hrs: s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`,
           })),
         };
-        console.log('[memberJoin] Attempting to register merchant (GST/PAN encrypted):', {
+        console.log('[memberJoin] Attempting to register merchant:', {
           ...merchantRegData,
-          gstin: encryptionService.maskGST(gstinValue), // Show masked version in logs
-          pan: encryptionService.maskPAN(panValue)       // Show masked version in logs
+          gstin: businessType === 'gstin' ? encryptionService.maskGST(gstinValue) : null,
+          pan: businessType === 'gstin' ? encryptionService.maskPAN(panValue) : null,
         });
 
         const { user: registeredUser, session } = await merchantService.registerMerchant(merchantRegData);
@@ -976,7 +1137,8 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
   const canSubmit = useMemo(() => {
     // Universal validations
-    if (loading || isCheckingUsername || isCheckingEmail || isCheckingPhone || isCheckingGstin || isCheckingPan) {
+    if (loading || isCheckingUsername || isCheckingEmail || isCheckingPhone || isCheckingGstin || isCheckingPan ||
+        isCheckingUdyam || isCheckingFssai || isCheckingTradeLicense) {
       return false; // Always block if any check is in progress
     }
 
@@ -1020,7 +1182,8 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       }
     }
     // Check if identifiers are actually available (not taken)
-    if (usernameTaken === true || emailTaken === true || phoneTaken === true || gstinTaken === true || panTaken === true) {
+    if (usernameTaken === true || emailTaken === true || phoneTaken === true || gstinTaken === true || panTaken === true ||
+        udyamTaken === true || fssaiTaken === true || tradeLicenseTaken === true) {
       return false;
     }
 
@@ -1038,15 +1201,19 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       return true;
     } else { // regRole === 'merchant'
       // Merchant-specific validations
-      if (!fullName || !storeName || !category || !gstinValue || !panValue || !regPhone) {
+      if (!fullName || !storeName || !category || !regPhone) {
         return false;
       }
-      if (!isGstValid(gstinValue)) { // Moved up for earlier feedback
+      // Business type specific document validation
+      if (!businessType) return false; // Must select a type
+      const bizDocValid = (() => {
+        if (businessType === 'gstin') return !!gstinValue && isGstValid(gstinValue) && !!panValue && isPanValid(panValue);
+        if (businessType === 'udyam') return !!udyamValue && isUdyamValid(udyamValue);
+        if (businessType === 'fssai') return !!fssaiValue && isFssaiValid(fssaiValue);
+        if (businessType === 'trade_license') return !!tradeLicenseValue && isTradeLicenseValid(tradeLicenseValue);
         return false;
-      }
-      if (!isPanValid(panValue)) { // Moved up for earlier feedback
-        return false;
-      }
+      })();
+      if (!bizDocValid) return false;
       // Require both Terms of Service and Privacy Policy acceptance
       if (!termsAccepted || !privacyAccepted) {
         return false;
@@ -1073,27 +1240,35 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     }
   }, [
     loading, isCheckingUsername, isCheckingEmail, isCheckingPhone, isCheckingGstin, isCheckingPan,
+    isCheckingUdyam, isCheckingFssai, isCheckingTradeLicense,
     usernameTaken, emailTaken, phoneTaken, gstinTaken, panTaken,
+    udyamTaken, fssaiTaken, tradeLicenseTaken,
     username, email, password,
     regRole, fullName, storeName, category, gstinValue, panValue, regPhone,
+    businessType, udyamValue, fssaiValue, tradeLicenseValue,
     isGstValid, isPanValid, isValidPassword, isPhoneVerified, merchantStores,
     consumerLocality, consumerPincode, consumerCity, consumerState,
     termsAccepted, privacyAccepted
   ]);
 
+  const inputClass = `w-full h-12 px-4 rounded-lg text-sm font-medium border outline-none transition-all ${
+    isDark
+      ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-slate-500'
+      : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-slate-400'
+  }`;
+
   const renderRoleSelector = () => (
-    <div className="px-8 pt-8 animate-reveal flex flex-col justify-center min-h-screen">
-      <div className="w-full text-center mb-12">
-        <h2 className={`text-5xl font-black tracking-tighter uppercase leading-none mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-          {t('reg_title').split(' ')[0]}<br/>
-          <span className="text-yellow-500">{t('reg_title').split(' ').slice(1).join(' ')}</span>
+    <div className={`px-6 pt-8 flex flex-col justify-center min-h-screen ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+      <div className="w-full text-center mb-10">
+        <h2 className={`text-2xl font-semibold leading-tight mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+          {t('reg_title')}
         </h2>
-        <p className={`font-medium leading-relaxed mt-6 ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>
+        <p className={`text-sm font-medium mt-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           {t('reg_choose_account') || 'Choose your account type to get started'}
         </p>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Consumer/User Option */}
         <button
           type="button"
@@ -1101,17 +1276,17 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
             setRegRole('user');
             setShowRoleSelector(false);
           }}
-          className="w-full glass border-white/10 dark:border-white/10 border-slate-900/10 hover:border-yellow-500/50 p-8 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] group"
+          className={`w-full p-6 rounded-xl border transition-all active:scale-[0.98] group ${isDark ? 'bg-slate-900 border-slate-800 hover:border-slate-600' : 'bg-white border-slate-200 hover:border-slate-400'}`}
         >
-          <div className="flex items-center gap-6">
-            <div className="w-16 h-16 rounded-2xl bg-yellow-600/20 flex items-center justify-center group-hover:bg-yellow-600/30 transition-colors">
-              <UserIcon className="w-8 h-8 text-yellow-500" />
+          <div className="flex items-center gap-5">
+            <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${isDark ? 'bg-yellow-500/10' : 'bg-yellow-50'}`}>
+              <UserIcon className="w-7 h-7 text-yellow-500" />
             </div>
             <div className="flex-1 text-left">
-              <h3 className={`text-2xl font-black uppercase tracking-tight mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              <h3 className={`text-lg font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 {t('reg_consumer')}
               </h3>
-              <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>
+              <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 {t('reg_consumer_desc') || 'Join the network to discover local deals and save money'}
               </p>
             </div>
@@ -1125,18 +1300,18 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
             setRegRole('merchant');
             setShowRoleSelector(false);
           }}
-          className="w-full glass border-white/10 dark:border-white/10 border-slate-900/10 hover:border-yellow-500/50 p-8 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] group"
+          className={`w-full p-6 rounded-xl border transition-all active:scale-[0.98] group ${isDark ? 'bg-slate-900 border-slate-800 hover:border-slate-600' : 'bg-white border-slate-200 hover:border-slate-400'}`}
         >
-          <div className="flex items-center gap-6">
-            <div className="w-16 h-16 rounded-2xl bg-yellow-600/20 flex items-center justify-center group-hover:bg-yellow-600/30 transition-colors">
-              <Store className="w-8 h-8 text-yellow-500" />
+          <div className="flex items-center gap-5">
+            <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${isDark ? 'bg-yellow-500/10' : 'bg-yellow-50'}`}>
+              <Store className="w-7 h-7 text-yellow-500" />
             </div>
             <div className="flex-1 text-left">
-              <h3 className={`text-2xl font-black uppercase tracking-tight mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              <h3 className={`text-lg font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 {t('reg_merchant')}
               </h3>
-              <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>
-                {t('reg_merchant_desc') || <>Empower your business with <span className="text-white">Deal</span><span className="text-yellow-500">Pro</span> smart commerce</>}
+              <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                {t('reg_merchant_desc') || <>Empower your business with <span className={isDark ? 'text-white' : 'text-slate-900'}>Deal</span><span className="text-green-500">Pro</span> smart commerce</>}
               </p>
             </div>
           </div>
@@ -1144,12 +1319,12 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       </div>
 
       {/* Back to Login */}
-      <div className="mt-12 text-center">
-        <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-slate-500' : 'text-slate-800'}`}>
+      <div className="mt-10 text-center">
+        <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
           {t('reg_have_account') || 'Already have an account?'}{' '}
           <button
             onClick={() => setView('login')}
-            className={`ml-1 border-b ${isDark ? 'text-white border-white/20' : 'text-yellow-600 border-yellow-600/30'} hover:text-yellow-500 hover:border-yellow-500/50 transition-colors`}
+            className={`ml-1 font-semibold ${isDark ? 'text-white' : 'text-green-600'}`}
           >
             {t('reg_back_login') || 'Back to Login'}
           </button>
@@ -1159,20 +1334,19 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   );
 
   const renderRegisterForm = () => (
-    <div className="px-8 pt-8 animate-reveal flex flex-col">
-      <div className="w-full text-left mb-8">
-        <h2 className={`text-5xl font-black tracking-tighter uppercase leading-none mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-          {t('reg_title').split(' ')[0]}<br/>
-          <span className="text-yellow-500">{t('reg_title').split(' ').slice(1).join(' ')}</span>
+    <div className={`px-6 pt-8 flex flex-col ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+      <div className="w-full text-left mb-6">
+        <h2 className={`text-2xl font-semibold leading-tight mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+          {t('reg_title')}
         </h2>
-        <p className={`font-medium leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>
-          {regRole === 'user' ? 'Join the network to discover local deals.' : <>Empower your business with <span className="text-white">Deal</span><span className="text-yellow-500">Pro</span> smart commerce.</>}
+        <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+          {regRole === 'user' ? 'Join the network to discover local deals.' : <>Empower your business with <span className={isDark ? 'text-white' : 'text-slate-900'}>Deal</span><span className="text-green-500">Pro</span> smart commerce.</>}
         </p>
       </div>
 
       {otpError && (
-        <div className="mb-6 p-4 glass border-rose-500/20 text-rose-500 text-[10px] font-black uppercase rounded-2xl animate-shake flex items-center gap-2">
-          <ShieldAlert className="w-4 h-4" />
+        <div className={`mb-5 p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${isDark ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-red-50 border border-red-200 text-red-600'}`}>
+          <ShieldAlert className="w-4 h-4 flex-shrink-0" />
           <span>{otpError}</span>
         </div>
       )}
@@ -1181,28 +1355,28 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
         {/* Basic User Info (Applies to both roles) */}
         <div className="space-y-4">
           {/* Phone Number - First field for consumers, required with OTP */}
-          <div className="relative flex group">
+          <div className="relative flex">
              {/* Country Code Picker */}
              <div className={`relative ${showCountryPicker ? 'z-[1000]' : ''}`}>
                 <button
                    type="button"
                    onClick={() => setShowCountryPicker(!showCountryPicker)}
-                   className="h-14 w-20 glass rounded-l-2xl border-white/10 flex items-center justify-center gap-1 active:scale-95 transition-all focus:outline-none"
+                   className={`h-12 w-20 rounded-l-lg border border-r-0 flex items-center justify-center gap-1 active:scale-95 transition-all focus:outline-none ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}
                 >
                    <span className="text-lg">{selectedCountry.flag}</span>
                    <ChevronDown className="w-3 h-3 text-slate-500" />
                 </button>
                 {showCountryPicker && (
-                   <div className="absolute top-full left-0 mt-2 w-48 glass rounded-2xl p-2 z-[999] shadow-2xl animate-reveal border-white/10">
+                   <div className={`absolute top-full left-0 mt-2 w-48 rounded-xl p-2 z-[999] shadow-lg border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                       <div className="max-h-48 overflow-y-auto hide-scrollbar">
                          {COUNTRY_CODES.map(c => (
                             <button
                                key={c.code}
                                type="button"
                                onClick={() => { setSelectedCountry(c); setShowCountryPicker(false); }}
-                               className="w-full text-left p-3 hover:bg-blue-500/10 rounded-xl text-xs font-bold flex gap-3 items-center"
+                               className={`w-full text-left p-3 rounded-lg text-xs font-medium flex gap-3 items-center ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
                             >
-                               <span>{c.flag}</span> <span className="flex-1 text-slate-200">{c.country}</span> <span className="text-slate-500">{c.code}</span>
+                               <span>{c.flag}</span> <span className={`flex-1 ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{c.country}</span> <span className="text-slate-500">{c.code}</span>
                             </button>
                          ))}
                       </div>
@@ -1214,7 +1388,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                  <input
                    type="tel"
                    placeholder={regRole === 'user' ? `Phone Number (${selectedCountry.code === '+91' ? '10 Digits - ' : ''}Required)` : getPhonePlaceholder()}
-                   className="input-premium flex-1 rounded-l-none"
+                   className={`${inputClass} rounded-l-none`}
                    value={formatPhoneNumber(regPhone, selectedCountry.code)}
                    onChange={handleRegPhoneChange}
                    maxLength={selectedCountry.code === '+91' ? 10 : 15}
@@ -1275,17 +1449,17 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
           {/* Phone error message */}
           {phoneTaken === true && !isCheckingPhone && (
-            <div className="text-rose-500 text-xs font-bold -mt-3 ml-2 animate-shake">
+            <div className="text-rose-500 text-xs font-medium -mt-2 ml-1">
               Phone number already registered
             </div>
           )}
 
           {/* Username - For both consumers and merchants */}
-          <div className="relative group">
+          <div className="relative">
             <input
               type="text"
               placeholder={t('reg_username')}
-              className="input-premium"
+              className={inputClass}
               value={username}
               onChange={handleUsernameChange}
               required={regRole === 'merchant'}
@@ -1303,11 +1477,11 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
           {/* Email - Only for merchants */}
           {regRole === 'merchant' && (
-            <div className="relative group">
+            <div className="relative">
               <input
                 type="email"
                 placeholder="Email Address (Optional)"
-                className="input-premium"
+                className={inputClass}
                 value={email}
                 onChange={handleEmailChange}
                 required={false}
@@ -1329,25 +1503,28 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
             <input
               type="text"
               placeholder={t('reg_fullname')}
-              className="input-premium"
+              className={inputClass}
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
             />
           )}
-          <div className="relative group">
+          <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
               placeholder={t('reg_password')}
-              className="input-premium pr-14"
+              className={`${inputClass} pr-12 ${password.length > 0 && !isValidPassword(password) ? 'border-red-500' : ''}`}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-blue-500 transition-colors">
+            <button type="button" onClick={() => setShowPassword(!showPassword)} className={`absolute right-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
           </div>
+          {password.length > 0 && !isValidPassword(password) && (
+            <p className="text-red-500 text-xs font-semibold mt-1 ml-1">Password must be at least 6 characters</p>
+          )}
 
           {/* Consumer Locality Field - Only for user role */}
           {regRole === 'user' && (
@@ -1355,7 +1532,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
               <input
                 type="text"
                 placeholder="Enter your area (Ex. Indira Nagar)"
-                className="input-premium"
+                className={`${inputClass} ${consumerLocality.trim().length > 0 && !consumerPincode ? 'border-red-500' : ''}`}
                 value={consumerLocality}
                 onChange={(e) => {
                   const newValue = e.target.value;
@@ -1379,20 +1556,20 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
               {/* Autocomplete dropdown */}
               {showConsumerLocalityDropdown && consumerLocalitySuggestions.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                <div className={`absolute z-50 w-full mt-1 rounded-xl shadow-lg max-h-60 overflow-y-auto border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                   {consumerLocalitySuggestions.map((locality) => {
                     const displayName = locality.display_name || locality.names[locale] || locality.names.en;
                     return (
                       <div
                         key={locality.id}
-                        className="px-4 py-3 hover:bg-blue-600/20 cursor-pointer border-b border-white/5 last:border-b-0 transition-colors"
+                        className={`px-4 py-3 cursor-pointer border-b last:border-b-0 transition-colors ${isDark ? 'hover:bg-slate-700 border-slate-700' : 'hover:bg-slate-50 border-slate-100'}`}
                         onMouseDown={(e) => {
                           e.preventDefault();
                           handleConsumerLocalitySelect(locality);
                         }}
                       >
-                        <div className="text-sm font-medium text-white">{displayName}</div>
-                        <div className="text-xs text-slate-400 mt-0.5">Pincode: {locality.pincode}</div>
+                        <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{displayName}</div>
+                        <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Pincode: {locality.pincode}</div>
                       </div>
                     );
                   })}
@@ -1416,11 +1593,11 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
             </div>
           )}
 
-          <div className="relative group">
+          <div className="relative">
             <select
               value={languagePreference}
               onChange={(e) => setLanguagePreference(e.target.value)}
-              className="input-premium"
+              className={inputClass}
               required
             >
               <option value="" disabled>Select Language Preference</option>
@@ -1432,21 +1609,21 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
         </div>
         
         {regRole === 'merchant' && (
-          <div className="space-y-6 animate-reveal">
+          <div className="space-y-4">
             {/* Overall Store Name for Merchant Profile, not individual store blocks */}
-            <input 
-              type="text" 
-              placeholder={t('reg_brand')} 
-              className="input-premium" 
+            <input
+              type="text"
+              placeholder={t('reg_brand')}
+              className={inputClass}
               value={storeName}
               onChange={(e) => setStoreName(e.target.value)}
-              required 
+              required
             />
-            <div className="relative group">
+            <div className="relative">
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="input-premium"
+                className={inputClass}
                 required
                 disabled={isCatsLoading}
               >
@@ -1459,35 +1636,35 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
             </div>
 
             {merchantStores.map((store, index) => (
-              <div key={index} className="glass p-5 rounded-[2rem] border-white/5 space-y-4 relative bg-slate-900/40">
+              <div key={index} className={`p-4 rounded-xl border space-y-3 relative ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
                 {merchantStores.length > 1 && (
-                  <button 
-                    type="button" 
-                    onClick={() => handleRemoveStore(index)} 
-                    className="absolute top-4 right-4 w-8 h-8 rounded-full bg-rose-500/20 text-rose-500 flex items-center justify-center active:scale-90"
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveStore(index)}
+                    className="absolute top-3 right-3 w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center active:scale-90"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 )}
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4">
+                <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   {t('reg_locations')} {index + 1}
                 </p>
-                {/* NEW: Store Name for this specific address block */}
-                <input 
-                  type="text" 
-                  placeholder={t('reg_store_name_label')} 
-                  className="input-premium" 
+                {/* Store Name for this specific address block */}
+                <input
+                  type="text"
+                  placeholder={t('reg_store_name_label')}
+                  className={inputClass}
                   value={store.store_name}
                   onChange={(e) => handleStoreChange(index, 'store_name', e.target.value)}
-                  required 
+                  required
                 />
-                <input 
-                  type="text" 
-                  placeholder={t('reg_street')} 
-                  className="input-premium" 
+                <input
+                  type="text"
+                  placeholder={t('reg_street')}
+                  className={inputClass}
                   value={store.street}
                   onChange={(e) => handleStoreChange(index, 'street', e.target.value)}
-                  required 
+                  required
                 />
 
                 {/* Locality input with autocomplete */}
@@ -1495,7 +1672,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                   <input
                     type="text"
                     placeholder="Locality / Area (type to search)"
-                    className="input-premium"
+                    className={`${inputClass} ${store.locality.trim().length > 0 && !localityResolved[index] ? 'border-red-500' : ''}`}
                     value={store.locality}
                     onChange={(e) => handleStoreChange(index, 'locality', e.target.value)}
                     onFocus={() => {
@@ -1515,20 +1692,20 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
                   {/* Autocomplete dropdown */}
                   {showLocalityDropdown[index] && localitySuggestions[index]?.length > 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-white/10 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                    <div className={`absolute z-50 w-full mt-1 rounded-xl shadow-lg max-h-60 overflow-y-auto border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                       {localitySuggestions[index].map((locality) => {
                         const displayName = locality.display_name || locality.names[locale] || locality.names.en;
                         return (
                           <div
                             key={locality.id}
-                            className="px-4 py-3 hover:bg-blue-600/20 cursor-pointer border-b border-white/5 last:border-b-0 transition-colors"
+                            className={`px-4 py-3 cursor-pointer border-b last:border-b-0 transition-colors ${isDark ? 'hover:bg-slate-700 border-slate-700' : 'hover:bg-slate-50 border-slate-100'}`}
                             onMouseDown={(e) => {
                               e.preventDefault(); // Prevent onBlur from hiding dropdown before click
                               handleSelectLocality(index, locality);
                             }}
                           >
-                            <div className="text-sm font-medium text-white">{displayName}</div>
-                            <div className="text-xs text-slate-400 mt-0.5">Pincode: {locality.pincode}</div>
+                            <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{displayName}</div>
+                            <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Pincode: {locality.pincode}</div>
                           </div>
                         );
                       })}
@@ -1537,11 +1714,11 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                 </div>
 
                 {/* Pincode input */}
-                <div className="relative group">
+                <div className="relative">
                   <input
                     type="text"
                     placeholder="Pincode"
-                    className="input-premium"
+                    className={inputClass}
                     value={store.pincode}
                     onChange={(e) => handleStoreChange(index, 'pincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
                     maxLength={6}
@@ -1555,32 +1732,32 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                 <input
                   type="text"
                   placeholder={t('reg_city')}
-                  className="input-premium"
+                  className={inputClass}
                   value={store.city}
                   onChange={(e) => handleStoreChange(index, 'city', e.target.value)}
                   required
                   readOnly={store.pincode.length === 6 && !!store.city && !store.isPincodeSearching}
                   disabled={store.pincode.length === 6 && !!store.city && !store.isPincodeSearching}
                 />
-                <input 
-                  type="text" 
-                  placeholder={t('reg_state')} 
-                  className="input-premium" 
+                <input
+                  type="text"
+                  placeholder={t('reg_state')}
+                  className={inputClass}
                   value={store.state}
                   onChange={(e) => handleStoreChange(index, 'state', e.target.value)}
-                  required 
+                  required
                   readOnly={store.pincode.length === 6 && !!store.state && !store.isPincodeSearching}
                   disabled={store.pincode.length === 6 && !!store.state && !store.isPincodeSearching}
                 />
-                <input 
-                  type="text" 
-                  placeholder={t('reg_landmark')} 
-                  className="input-premium" 
+                <input
+                  type="text"
+                  placeholder={t('reg_landmark')}
+                  className={inputClass}
                   value={store.landmark}
                   onChange={(e) => handleStoreChange(index, 'landmark', e.target.value)}
                 />
 
-                <div className="flex items-center justify-between glass p-4 rounded-xl border-white/5">
+                <div className={`flex items-center justify-between p-3 rounded-lg border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
                   <div className="flex flex-col items-start gap-1">
                     <div className="flex items-center gap-3">
                       {store.isGeocoding ? (
@@ -1590,24 +1767,23 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                       ) : (
                         <MapPin className="w-5 h-5 text-slate-500" />
                       )}
-                      <span className="text-xs font-bold uppercase tracking-widest text-slate-300">
+                      <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                         {store.coords ? t('reg_sync_verified') : t('loc_awaiting')}
                       </span>
                     </div>
-                    {/* Display Lat/Long values */}
                     {store.coords && (
-                      <p className="text-[9px] font-mono text-slate-400 mt-1 pl-8">
+                      <p className={`text-xs font-mono mt-1 pl-8 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                         Lat: {store.coords.latitude.toFixed(4)}, Lng: {store.coords.longitude.toFixed(4)}
                       </p>
                     )}
                   </div>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => handleGetGpsForStore(index)}
                     disabled={store.isGeocoding}
-                    className="text-blue-500 text-[10px] font-black uppercase tracking-widest active:scale-95 disabled:opacity-50"
+                    className="text-blue-500 text-xs font-medium active:scale-95 disabled:opacity-50"
                   >
-                    <Navigation className="w-4 h-4 inline-block mr-2" />{t('reg_use_my_loc')}
+                    <Navigation className="w-4 h-4 inline-block mr-1.5" />{t('reg_use_my_loc')}
                   </button>
                 </div>
 
@@ -1622,19 +1798,19 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                     <span className="text-sm font-medium text-slate-300">{t('reg_24h')}</span>
                   </label>
                   {!store.is24hrs && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <select 
-                        value={store.shift1} 
+                    <div className="grid grid-cols-2 gap-3">
+                      <select
+                        value={store.shift1}
                         onChange={(e) => handleStoreChange(index, 'shift1', e.target.value)}
-                        className="input-premium text-xs"
+                        className={`${inputClass} text-xs`}
                       >
                         <option value="">{t('reg_opens')}</option>
                         {SHIFT1_OPTIONS.map(time => <option key={time} value={time}>{time}</option>)}
                       </select>
-                      <select 
-                        value={store.shift2} 
+                      <select
+                        value={store.shift2}
                         onChange={(e) => handleStoreChange(index, 'shift2', e.target.value)}
-                        className="input-premium text-xs"
+                        className={`${inputClass} text-xs`}
                       >
                         <option value="">{t('reg_closes')}</option>
                         {SHIFT2_OPTIONS.map(time => <option key={time} value={time}>{time}</option>)}
@@ -1644,112 +1820,195 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                 </div>
               </div>
             ))}
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={handleAddStore}
-              className="w-full glass p-4 rounded-xl border-blue-500/20 bg-blue-500/5 text-blue-500 flex items-center justify-center gap-3 active:scale-95 transition-all"
+              className={`w-full p-3 rounded-xl border text-blue-500 flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${isDark ? 'bg-blue-500/5 border-blue-500/20' : 'bg-blue-50 border-blue-200'}`}
             >
               <Plus className="w-5 h-5" />
-              <span className="text-xs font-black uppercase tracking-widest">{t('reg_add_outlet')}</span>
+              <span className="text-sm font-medium">{t('reg_add_outlet')}</span>
             </button>
 
-            {/* GSTIN Input with Validate Button */}
+            {/* Business Type Dropdown */}
             <div className="relative">
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    placeholder={t('reg_gstin')}
-                    className={`input-premium ${
-                      gstinTaken === true ? 'border-rose-500' :
-                      gstinTaken === false && gstinValidated === true ? 'border-emerald-500' :
-                      gstinValidated === false ? 'border-rose-500' :
-                      gstinValidated === true ? 'border-emerald-500' :
-                      gstinValue.length > 0 && !isGstValid(gstinValue) ? 'border-rose-500' : ''
-                    }`}
-                    value={gstinValue}
-                    onChange={handleGstinChange}
-                    required
-                  />
-                  {isCheckingGstin && (
-                    <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-blue-500" />
-                  )}
-                  {!isCheckingGstin && gstinTaken === true && (
-                    <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-                  )}
-                  {!isCheckingGstin && gstinValidated === false && gstinTaken !== true && (
-                    <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-                  )}
-                  {!isCheckingGstin && gstinValidated === true && gstinTaken === false && (
-                    <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleValidateGstin}
-                  disabled={!gstinValue || gstinValue.length === 0 || !isGstValid(gstinValue)}
-                  className="px-4 py-3 rounded-xl bg-amber-600/20 border border-amber-500/30 text-amber-500 font-black text-xs uppercase tracking-wider hover:bg-amber-600/30 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
-                >
-                  Validate
-                </button>
-              </div>
-              {gstinTaken === true && (
-                <p className="text-rose-500 text-[10px] font-bold mt-1 ml-1">✗ GSTIN already registered</p>
-              )}
-              {gstinValidated === true && gstinTaken === false && (
-                <p className="text-emerald-500 text-[10px] font-bold mt-1 ml-1">✓ Valid GSTIN format and available</p>
-              )}
+              <select
+                className={inputClass}
+                value={businessType}
+                onChange={(e) => handleBusinessTypeChange(e.target.value as 'gstin' | 'udyam' | 'fssai' | 'trade_license')}
+              >
+                <option value="" disabled>Select Identification</option>
+                <option value="gstin">GSTIN Number</option>
+                <option value="udyam">Udyam (MSME) Verification</option>
+                <option value="fssai">FSSAI (Food License) Verification</option>
+                <option value="trade_license">Shop &amp; Establishment (Trade License)</option>
+              </select>
             </div>
 
-            {/* PAN Input with Validate Button */}
-            <div className="relative">
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    placeholder={t('reg_pan')}
-                    className={`input-premium ${
-                      panTaken === true ? 'border-rose-500' :
-                      panTaken === false && panValidated === true ? 'border-emerald-500' :
-                      panValidated === false ? 'border-rose-500' :
-                      panValidated === true ? 'border-emerald-500' :
-                      panValue.length > 0 && !isPanValid(panValue) ? 'border-rose-500' : ''
-                    }`}
-                    value={panValue}
-                    onChange={handlePanChange}
-                    required
-                  />
-                  {isCheckingPan && (
-                    <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-blue-500" />
-                  )}
-                  {!isCheckingPan && panTaken === true && (
-                    <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-                  )}
-                  {!isCheckingPan && panValidated === false && panTaken !== true && (
-                    <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-                  )}
-                  {!isCheckingPan && panValidated === true && panTaken === false && (
-                    <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-                  )}
+            {/* GSTIN Input — only for GSTIN type */}
+            {businessType === 'gstin' && (
+              <div className="relative">
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      placeholder={t('reg_gstin')}
+                      className={`${inputClass} ${
+                        gstinTaken === true ? 'border-red-500' :
+                        gstinTaken === false && gstinValidated === true ? 'border-emerald-500' :
+                        gstinValidated === false ? 'border-red-500' :
+                        gstinValidated === true ? 'border-emerald-500' :
+                        gstinValue.length > 0 && !isGstValid(gstinValue) ? 'border-red-500' : ''
+                      }`}
+                      value={gstinValue}
+                      onChange={handleGstinChange}
+                    />
+                    {isCheckingGstin && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-blue-500" />}
+                    {!isCheckingGstin && gstinTaken === true && <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                    {!isCheckingGstin && gstinValidated === false && gstinTaken !== true && <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                    {!isCheckingGstin && gstinValidated === true && gstinTaken === false && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />}
+                  </div>
+                  <button type="button" onClick={handleValidateGstin} disabled={!gstinValue || !isGstValid(gstinValue)}
+                    className={`px-4 h-12 rounded-lg border text-sm font-medium active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-600'}`}>
+                    Validate
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleValidatePan}
-                  disabled={!panValue || panValue.length === 0 || !isPanValid(panValue)}
-                  className="px-4 py-3 rounded-xl bg-amber-600/20 border border-amber-500/30 text-amber-500 font-black text-xs uppercase tracking-wider hover:bg-amber-600/30 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
-                >
-                  Validate
-                </button>
+                {gstinTaken === true && <p className="text-rose-500 text-xs font-medium mt-1 ml-1">✗ GSTIN already registered</p>}
+                {gstinValidated === true && gstinTaken === false && <p className="text-emerald-500 text-xs font-medium mt-1 ml-1">✓ Valid GSTIN format and available</p>}
               </div>
-              {panTaken === true && (
-                <p className="text-rose-500 text-[10px] font-bold mt-1 ml-1">✗ PAN already registered</p>
-              )}
-              {panValidated === true && panTaken === false && (
-                <p className="text-emerald-500 text-[10px] font-bold mt-1 ml-1">✓ Valid PAN format and available</p>
-              )}
-            </div>
-            {panValue.length > 0 && !isPanValid(panValue) && (
-              <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
+            )}
+
+            {/* Udyam Input — only for Udyam type */}
+            {businessType === 'udyam' && (
+              <div className="relative">
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      placeholder="Udyam Reg. No. (e.g. UDYAM-MH-01-0000001)"
+                      className={`${inputClass} ${
+                        udyamTaken === true ? 'border-red-500' :
+                        udyamTaken === false && udyamValidated === true ? 'border-emerald-500' :
+                        udyamValidated === false ? 'border-red-500' :
+                        udyamValidated === true ? 'border-emerald-500' :
+                        udyamValue.length > 0 && !isUdyamValid(udyamValue) ? 'border-red-500' : ''
+                      }`}
+                      value={udyamValue}
+                      onChange={handleUdyamChange}
+                    />
+                    {isCheckingUdyam && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-blue-500" />}
+                    {!isCheckingUdyam && udyamTaken === true && <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                    {!isCheckingUdyam && udyamValidated === false && udyamTaken !== true && <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                    {!isCheckingUdyam && udyamValidated === true && udyamTaken === false && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />}
+                  </div>
+                  <button type="button" onClick={handleValidateUdyam} disabled={!udyamValue || !isUdyamValid(udyamValue)}
+                    className={`px-4 h-12 rounded-lg border text-sm font-medium active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-600'}`}>
+                    Validate
+                  </button>
+                </div>
+                {udyamTaken === true && <p className="text-rose-500 text-xs font-medium mt-1 ml-1">✗ Udyam No. already registered</p>}
+                {udyamValidated === true && udyamTaken === false && <p className="text-emerald-500 text-xs font-medium mt-1 ml-1">✓ Valid Udyam format and available</p>}
+              </div>
+            )}
+
+            {/* FSSAI Input — only for FSSAI type */}
+            {businessType === 'fssai' && (
+              <div className="relative">
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="FSSAI License No. (14 digits)"
+                      className={`${inputClass} ${
+                        fssaiTaken === true ? 'border-red-500' :
+                        fssaiTaken === false && fssaiValidated === true ? 'border-emerald-500' :
+                        fssaiValidated === false ? 'border-red-500' :
+                        fssaiValidated === true ? 'border-emerald-500' :
+                        fssaiValue.length > 0 && !isFssaiValid(fssaiValue) ? 'border-red-500' : ''
+                      }`}
+                      value={fssaiValue}
+                      onChange={handleFssaiChange}
+                      maxLength={14}
+                    />
+                    {isCheckingFssai && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-blue-500" />}
+                    {!isCheckingFssai && fssaiTaken === true && <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                    {!isCheckingFssai && fssaiValidated === false && fssaiTaken !== true && <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                    {!isCheckingFssai && fssaiValidated === true && fssaiTaken === false && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />}
+                  </div>
+                  <button type="button" onClick={handleValidateFssai} disabled={!fssaiValue || !isFssaiValid(fssaiValue)}
+                    className={`px-4 h-12 rounded-lg border text-sm font-medium active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-600'}`}>
+                    Validate
+                  </button>
+                </div>
+                {fssaiTaken === true && <p className="text-rose-500 text-xs font-medium mt-1 ml-1">✗ FSSAI No. already registered</p>}
+                {fssaiValidated === true && fssaiTaken === false && <p className="text-emerald-500 text-xs font-medium mt-1 ml-1">✓ Valid FSSAI format and available</p>}
+              </div>
+            )}
+
+            {/* Trade License Input — only for trade_license type */}
+            {businessType === 'trade_license' && (
+              <div className="relative">
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      placeholder="License Number"
+                      className={`${inputClass} ${
+                        tradeLicenseTaken === true ? 'border-red-500' :
+                        tradeLicenseTaken === false && tradeLicenseValidated === true ? 'border-emerald-500' :
+                        tradeLicenseValidated === false ? 'border-red-500' :
+                        tradeLicenseValidated === true ? 'border-emerald-500' :
+                        tradeLicenseValue.length > 0 && !isTradeLicenseValid(tradeLicenseValue) ? 'border-red-500' : ''
+                      }`}
+                      value={tradeLicenseValue}
+                      onChange={handleTradeLicenseChange}
+                    />
+                    {isCheckingTradeLicense && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-blue-500" />}
+                    {!isCheckingTradeLicense && tradeLicenseTaken === true && <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                    {!isCheckingTradeLicense && tradeLicenseValidated === false && tradeLicenseTaken !== true && <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                    {!isCheckingTradeLicense && tradeLicenseValidated === true && tradeLicenseTaken === false && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />}
+                  </div>
+                  <button type="button" onClick={handleValidateTradeLicense} disabled={!tradeLicenseValue || !isTradeLicenseValid(tradeLicenseValue)}
+                    className={`px-4 h-12 rounded-lg border text-sm font-medium active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-600'}`}>
+                    Validate
+                  </button>
+                </div>
+                {tradeLicenseTaken === true && <p className="text-rose-500 text-xs font-medium mt-1 ml-1">✗ Trade License No. already registered</p>}
+                {tradeLicenseValidated === true && tradeLicenseTaken === false && <p className="text-emerald-500 text-xs font-medium mt-1 ml-1">✓ Valid Trade License format and available</p>}
+              </div>
+            )}
+
+            {/* PAN Input — only for GSTIN type */}
+            {businessType === 'gstin' && (
+              <div className="relative">
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      placeholder={t('reg_pan')}
+                      className={`${inputClass} ${
+                        panTaken === true ? 'border-red-500' :
+                        panTaken === false && panValidated === true ? 'border-emerald-500' :
+                        panValidated === false ? 'border-red-500' :
+                        panValidated === true ? 'border-emerald-500' :
+                        panValue.length > 0 && !isPanValid(panValue) ? 'border-red-500' : ''
+                      }`}
+                      value={panValue}
+                      onChange={handlePanChange}
+                    />
+                    {isCheckingPan && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-blue-500" />}
+                    {!isCheckingPan && panTaken === true && <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                    {!isCheckingPan && panValidated === false && panTaken !== true && <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />}
+                    {!isCheckingPan && panValidated === true && panTaken === false && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />}
+                  </div>
+                  <button type="button" onClick={handleValidatePan} disabled={!panValue || !isPanValid(panValue)}
+                    className={`px-4 h-12 rounded-lg border text-sm font-medium active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-amber-50 border-amber-200 text-amber-600'}`}>
+                    Validate
+                  </button>
+                </div>
+                {panTaken === true && <p className="text-rose-500 text-xs font-medium mt-1 ml-1">✗ PAN already registered</p>}
+                {panValidated === true && panTaken === false && <p className="text-emerald-500 text-xs font-medium mt-1 ml-1">✓ Valid PAN format and available</p>}
+              </div>
             )}
 
             {/* Terms of Service and Privacy Policy Checkboxes */}
@@ -1764,16 +2023,16 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                   readOnly
                   className={`mt-1 w-5 h-5 rounded cursor-not-allowed transition-all ${
                     termsAccepted
-                      ? 'accent-emerald-500 bg-emerald-500 border-emerald-500 opacity-100 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20'
-                      : 'accent-slate-600 bg-slate-900/50 border-white/20 opacity-40'
+                      ? 'accent-emerald-500 opacity-100'
+                      : 'accent-slate-600 opacity-40'
                   }`}
                 />
-                <label className="text-sm text-white/80 select-none">
+                <label className={`text-sm select-none ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                   I have read and accept the{' '}
                   <button
                     type="button"
                     onClick={() => setView('terms_of_service_signup')}
-                    className="text-amber-500 underline hover:text-amber-400 transition-colors"
+                    className={`underline transition-colors ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}
                   >
                     Terms of Service
                   </button>
@@ -1790,16 +2049,16 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                   readOnly
                   className={`mt-1 w-5 h-5 rounded cursor-not-allowed transition-all ${
                     privacyAccepted
-                      ? 'accent-emerald-500 bg-emerald-500 border-emerald-500 opacity-100 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/20'
-                      : 'accent-slate-600 bg-slate-900/50 border-white/20 opacity-40'
+                      ? 'accent-emerald-500 opacity-100'
+                      : 'accent-slate-600 opacity-40'
                   }`}
                 />
-                <label className="text-sm text-white/80 select-none">
+                <label className={`text-sm select-none ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                   I have read and accept the{' '}
                   <button
                     type="button"
                     onClick={() => setView('privacy_policy_signup')}
-                    className="text-amber-500 underline hover:text-amber-400 transition-colors"
+                    className={`underline transition-colors ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}
                   >
                     Privacy Policy
                   </button>
@@ -1810,19 +2069,19 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           </div>
         )}
 
-        <button 
-          type="submit" 
-          disabled={!canSubmit} 
-          className="w-full btn-premium bg-amber-600 shadow-2xl shadow-amber-500/20 active:scale-[0.98] transition-all mt-6 disabled:opacity-30 disabled:shadow-none"
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="w-full h-12 rounded-xl bg-slate-900 text-white font-medium text-sm flex items-center justify-center active:scale-[0.98] transition-all mt-6 disabled:opacity-30"
         >
-          {loading ? <Loader2 className="animate-spin w-6 h-6" /> : t('reg_submit')}
+          {loading ? <Loader2 className="animate-spin w-5 h-5" /> : t('reg_submit')}
         </button>
       </form>
 
       <div className="mt-8 text-center space-y-4 pb-20">
-        <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-slate-500' : 'text-slate-800'}`}>
+        <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
           {t('reg_have_account') || 'Already have an account?'}{' '}
-          <button onClick={() => setView('login')} className={`ml-1 border-b ${isDark ? 'text-white border-white/20' : 'text-yellow-600 border-yellow-600/30'} hover:text-yellow-500 hover:border-yellow-500/50 transition-colors`}>
+          <button onClick={() => setView('login')} className={`ml-1 font-semibold ${isDark ? 'text-white' : 'text-green-600'}`}>
             {t('reg_back_login') || 'Back to Login'}
           </button>
         </p>

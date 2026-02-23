@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
           localized_shop_name,
           image_url
         ),
-        user_profiles!merchant_id (
+        merchant_profiles!merchant_id (
           store_name
         )
       `)
@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
       dealHeading: item.campaigns?.deal_heading || '',
       // Map from campaigns, not user_profiles
       localized_shop_name: item.campaigns?.localized_shop_name || {},
-      shopName: item.user_profiles?.store_name || 'Retail Partner',
+      shopName: item.merchant_profiles?.store_name || 'Retail Partner',
       thumbnail: item.campaigns?.image_url || '',
       localized_heading: item.campaigns?.localized_heading || {}
     }));

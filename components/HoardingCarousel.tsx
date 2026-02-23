@@ -44,10 +44,10 @@ export const HoardingCarousel: React.FC<HoardingCarouselProps> = ({ onClose }) =
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl flex items-center justify-center">
+      <div className="fixed inset-0 z-[1000] bg-black/95 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-sm font-bold uppercase tracking-widest">Loading...</p>
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-sm font-medium">Loading...</p>
         </div>
       </div>
     );
@@ -61,43 +61,43 @@ export const HoardingCarousel: React.FC<HoardingCarouselProps> = ({ onClose }) =
   const currentHoarding = hoardings[currentIndex];
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 animate-reveal">
+    <div className="fixed inset-0 z-[1000] bg-black/95 flex items-center justify-center p-6">
       {/* Close Button */}
       <button
         onClick={handleSkip}
-        className="absolute top-6 right-6 w-12 h-12 glass rounded-full flex items-center justify-center border-white/20 hover:bg-white/10 transition-all z-10"
+        className="absolute top-6 right-6 w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center active:scale-[0.98] transition-all z-10"
       >
-        <X className="w-6 h-6 text-white" />
+        <X className="w-5 h-5 text-white" />
       </button>
 
       {/* Hoarding Content */}
       <div className="max-w-2xl w-full">
         {/* Topic */}
         <div className="text-center mb-6">
-          <p className="text-blue-400 text-sm font-black uppercase tracking-[0.3em] mb-2">
+          <p className="text-blue-400 text-sm font-medium mb-2">
             {currentHoarding.topic}
           </p>
         </div>
 
         {/* Main Image */}
         {currentHoarding.images && currentHoarding.images.length > 0 && (
-          <div className="relative aspect-video rounded-3xl overflow-hidden mb-8 border-2 border-white/10 shadow-2xl">
+          <div className="relative aspect-video rounded-xl overflow-hidden mb-8 border border-white/10">
             <img
               src={currentHoarding.images[0]}
               alt={currentHoarding.heading}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
           </div>
         )}
 
         {/* Heading */}
-        <h2 className="text-4xl md:text-5xl font-black uppercase tracking-tight text-white text-center mb-4 leading-none">
+        <h2 className="text-3xl md:text-4xl font-semibold text-white text-center mb-4 leading-tight">
           {currentHoarding.heading}
         </h2>
 
         {/* Description */}
-        <p className="text-slate-300 text-center text-lg leading-relaxed mb-8 max-w-xl mx-auto">
+        <p className="text-slate-300 text-center text-base leading-relaxed mb-8 max-w-xl mx-auto">
           {currentHoarding.description}
         </p>
 
@@ -107,13 +107,13 @@ export const HoardingCarousel: React.FC<HoardingCarouselProps> = ({ onClose }) =
           <button
             onClick={handlePrev}
             disabled={currentIndex === 0}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+            className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
               currentIndex === 0
-                ? 'glass opacity-50 cursor-not-allowed'
-                : 'glass hover:bg-white/10 border-white/20'
+                ? 'bg-white/5 opacity-50 cursor-not-allowed'
+                : 'bg-white/10 hover:bg-white/20'
             }`}
           >
-            <ChevronLeft className="w-6 h-6 text-white" />
+            <ChevronLeft className="w-5 h-5 text-white" />
           </button>
 
           {/* Dots Indicator */}
@@ -134,16 +134,16 @@ export const HoardingCarousel: React.FC<HoardingCarouselProps> = ({ onClose }) =
           {currentIndex === hoardings.length - 1 ? (
             <button
               onClick={handleSkip}
-              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest rounded-full transition-all shadow-xl shadow-blue-500/30"
+              className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl active:scale-[0.98] transition-all"
             >
               Get Started
             </button>
           ) : (
             <button
               onClick={handleNext}
-              className="w-12 h-12 rounded-full glass flex items-center justify-center hover:bg-white/10 border-white/20 transition-all"
+              className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all"
             >
-              <ChevronRight className="w-6 h-6 text-white" />
+              <ChevronRight className="w-5 h-5 text-white" />
             </button>
           )}
         </div>
@@ -152,7 +152,7 @@ export const HoardingCarousel: React.FC<HoardingCarouselProps> = ({ onClose }) =
         <div className="text-center mt-6">
           <button
             onClick={handleSkip}
-            className="text-slate-400 hover:text-white text-sm font-bold uppercase tracking-widest transition-colors"
+            className="text-slate-400 hover:text-white text-sm font-medium transition-colors"
           >
             Skip
           </button>

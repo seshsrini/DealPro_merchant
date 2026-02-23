@@ -94,12 +94,10 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
 
   if (loading) {
     return (
-      <div className="px-6 pt-6 pb-32 animate-reveal">
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 animate-pulse">
-            Loading Analytics
-          </p>
+      <div className={`px-4 pt-4 pb-28 ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+          <p className={`text-xs font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Loading analytics...</p>
         </div>
       </div>
     );
@@ -107,13 +105,13 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
 
   if (error) {
     return (
-      <div className="px-6 pt-6 pb-32 animate-reveal">
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <AlertCircle className="w-12 h-12 text-red-500" />
-          <p className="text-sm font-bold text-red-500">{error}</p>
+      <div className={`px-4 pt-4 pb-28 ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <AlertCircle className="w-8 h-8 text-red-500" />
+          <p className="text-sm font-medium text-red-500">{error}</p>
           <button
             onClick={fetchAnalytics}
-            className="px-6 py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 transition-colors"
+            className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-medium active:scale-[0.98] transition-all"
           >
             Retry
           </button>
@@ -127,37 +125,37 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
   }
 
   const maxTrendValue = Math.max(...analytics.campaignTrend.map(d => d.count), 1);
-  const maxCategoryValue = Math.max(...analytics.categoriesWithDeals.map(d => d.count), 1);
 
   return (
-    <div className="px-6 pt-6 pb-32 animate-reveal">
+    <div className={`px-4 pt-4 pb-28 space-y-4 ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
       {/* Header */}
-      <div className="mb-8">
-        <h2 className="text-3xl font-black uppercase tracking-tighter leading-none text-white">
-          Analytics<br />
-          <span className="text-blue-500">Dashboard</span>
-        </h2>
-        <div className="flex items-center gap-2 mt-2">
-          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-          <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.3em]">ADMIN INSIGHTS</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Analytics</h2>
+          <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Campaign performance overview</p>
+        </div>
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
+          <BarChart3 className="w-4 h-4 text-blue-500" />
         </div>
       </div>
 
       {/* Period Selector & Reports Dropdown */}
-      <div className="flex justify-between items-center gap-2 mb-6">
+      <div className="flex justify-between items-center gap-2">
         {/* Period Buttons */}
-        <div className="flex gap-2">
+        <div className={`flex p-1 rounded-lg border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           {(['7', '30', 'lifetime'] as const).map(period => (
             <button
               key={period}
               onClick={() => setSelectedPeriod(period)}
-              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+              className={`px-3 py-1.5 rounded-md text-[10px] font-medium transition-all ${
                 selectedPeriod === period
-                  ? 'bg-blue-600 text-white shadow-xl'
-                  : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                  ? 'bg-slate-900 text-white'
+                  : isDark
+                    ? 'text-slate-400 hover:text-slate-300'
+                    : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              {period === 'lifetime' ? 'Lifetime' : `${period} Days`}
+              {period === 'lifetime' ? 'All' : `${period}d`}
             </button>
           ))}
         </div>
@@ -166,15 +164,20 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setShowReportsDropdown(!showReportsDropdown)}
-            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-white/5 text-amber-500 hover:bg-white/10 hover:text-amber-400 flex items-center gap-2"
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 border ${
+              isDark
+                ? 'bg-slate-900 border-slate-800 text-amber-500 hover:border-slate-700'
+                : 'bg-white border-slate-200 text-amber-600 hover:border-slate-300'
+            }`}
           >
             Reports
             <ChevronDown className={`w-3 h-3 transition-transform ${showReportsDropdown ? 'rotate-180' : ''}`} />
           </button>
 
-          {/* Dropdown Menu */}
           {showReportsDropdown && (
-            <div className="absolute right-0 top-full mt-2 w-56 glass rounded-xl border-white/10 shadow-2xl overflow-hidden z-50">
+            <div className={`absolute right-0 top-full mt-1.5 w-52 rounded-xl border overflow-hidden z-50 ${
+              isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+            }`}>
               {[
                 'Live Reports',
                 'Merchant Analytics',
@@ -189,12 +192,15 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
                   onClick={() => {
                     console.log(`Selected: ${item}`);
                     setShowReportsDropdown(false);
-                    // TODO: Navigate to different analytics views
                   }}
-                  className="w-full px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10 hover:text-white transition-all border-b border-white/5 last:border-b-0 flex items-center gap-2"
+                  className={`w-full px-4 py-2.5 text-left text-xs font-medium transition-all flex items-center gap-2 ${
+                    isDark
+                      ? 'text-slate-300 hover:bg-slate-800 border-b border-slate-800 last:border-b-0'
+                      : 'text-slate-600 hover:bg-slate-50 border-b border-slate-100 last:border-b-0'
+                  }`}
                 >
                   {item === 'Live Reports' && (
-                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
                   )}
                   {item}
                 </button>
@@ -205,81 +211,79 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="glass rounded-2xl p-4 border-white/10">
-          <div className="flex items-center gap-2 mb-2">
-            <BarChart3 className="w-4 h-4 text-blue-500" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Total Campaigns</span>
-          </div>
-          <p className="text-3xl font-black text-white">{analytics.totalCampaigns}</p>
-        </div>
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { icon: BarChart3, color: 'blue', label: 'Total Campaigns', value: analytics.totalCampaigns },
+          { icon: TrendingUp, color: 'emerald', label: 'Active', value: analytics.activeCampaigns },
+          { icon: Store, color: 'purple', label: 'Merchants', value: analytics.totalMerchants },
+          { icon: PieChart, color: 'amber', label: 'Categories', value: analytics.categoriesWithDeals.length },
+        ].map((metric, i) => {
+          const Icon = metric.icon;
+          const colorMap: Record<string, { iconBg: string; iconBgLight: string; iconText: string }> = {
+            blue: { iconBg: 'bg-blue-500/10', iconBgLight: 'bg-blue-50', iconText: 'text-blue-500' },
+            emerald: { iconBg: 'bg-emerald-500/10', iconBgLight: 'bg-emerald-50', iconText: 'text-emerald-500' },
+            purple: { iconBg: 'bg-purple-500/10', iconBgLight: 'bg-purple-50', iconText: 'text-purple-500' },
+            amber: { iconBg: 'bg-amber-500/10', iconBgLight: 'bg-amber-50', iconText: 'text-amber-500' },
+          };
+          const c = colorMap[metric.color];
 
-        <div className="glass rounded-2xl p-4 border-white/10">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-4 h-4 text-green-500" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Active</span>
-          </div>
-          <p className="text-3xl font-black text-white">{analytics.activeCampaigns}</p>
-        </div>
-
-        <div className="glass rounded-2xl p-4 border-white/10">
-          <div className="flex items-center gap-2 mb-2">
-            <Store className="w-4 h-4 text-purple-500" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Merchants</span>
-          </div>
-          <p className="text-3xl font-black text-white">{analytics.totalMerchants}</p>
-        </div>
-
-        <div className="glass rounded-2xl p-4 border-white/10">
-          <div className="flex items-center gap-2 mb-2">
-            <PieChart className="w-4 h-4 text-amber-500" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Categories</span>
-          </div>
-          <p className="text-3xl font-black text-white">{analytics.categoriesWithDeals.length}</p>
-        </div>
+          return (
+            <div key={i} className={`rounded-xl border p-4 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? c.iconBg : c.iconBgLight}`}>
+                  <Icon className={`w-3.5 h-3.5 ${c.iconText}`} />
+                </div>
+                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{metric.label}</span>
+              </div>
+              <p className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{metric.value}</p>
+            </div>
+          );
+        })}
       </div>
 
       {/* Status Breakdown */}
-      <div className="glass rounded-2xl p-5 border-white/10 mb-6">
-        <h3 className="text-sm font-black uppercase tracking-widest text-white mb-4">Campaign Status</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3">
-            <p className="text-[9px] font-black uppercase tracking-widest text-green-400 mb-1">Approved</p>
-            <p className="text-2xl font-black text-green-500">{analytics.statusBreakdown.approved}</p>
-          </div>
-          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
-            <p className="text-[9px] font-black uppercase tracking-widest text-yellow-400 mb-1">In Review</p>
-            <p className="text-2xl font-black text-yellow-500">{analytics.statusBreakdown.review}</p>
-          </div>
-          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3">
-            <p className="text-[9px] font-black uppercase tracking-widest text-orange-400 mb-1">Needs Review</p>
-            <p className="text-2xl font-black text-orange-500">{analytics.statusBreakdown.needs_review}</p>
-          </div>
-          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
-            <p className="text-[9px] font-black uppercase tracking-widest text-red-400 mb-1">Expired</p>
-            <p className="text-2xl font-black text-red-500">{analytics.statusBreakdown.expired}</p>
-          </div>
+      <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>Campaign Status</h3>
+        <div className="grid grid-cols-2 gap-2.5">
+          {[
+            { label: 'Approved', value: analytics.statusBreakdown.approved, color: 'emerald' },
+            { label: 'In Review', value: analytics.statusBreakdown.review, color: 'amber' },
+            { label: 'Needs Review', value: analytics.statusBreakdown.needs_review, color: 'orange' },
+            { label: 'Expired', value: analytics.statusBreakdown.expired, color: 'red' },
+          ].map((status, i) => {
+            const colorMap: Record<string, { bg: string; bgLight: string; text: string; textLight: string }> = {
+              emerald: { bg: 'bg-emerald-500/10 border-emerald-500/20', bgLight: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-400', textLight: 'text-emerald-600' },
+              amber: { bg: 'bg-amber-500/10 border-amber-500/20', bgLight: 'bg-amber-50 border-amber-200', text: 'text-amber-400', textLight: 'text-amber-600' },
+              orange: { bg: 'bg-orange-500/10 border-orange-500/20', bgLight: 'bg-orange-50 border-orange-200', text: 'text-orange-400', textLight: 'text-orange-600' },
+              red: { bg: 'bg-red-500/10 border-red-500/20', bgLight: 'bg-red-50 border-red-200', text: 'text-red-400', textLight: 'text-red-600' },
+            };
+            const c = colorMap[status.color];
+
+            return (
+              <div key={i} className={`rounded-lg border p-3 ${isDark ? c.bg : c.bgLight}`}>
+                <p className={`text-[10px] font-medium mb-1 ${isDark ? c.text : c.textLight}`}>{status.label}</p>
+                <p className={`text-xl font-semibold ${isDark ? c.text : c.textLight}`}>{status.value}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Campaign Trend Chart */}
-      <div className="glass rounded-2xl p-5 border-white/10 mb-6">
+      <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center gap-2 mb-4">
           <Calendar className="w-4 h-4 text-blue-500" />
-          <h3 className="text-sm font-black uppercase tracking-widest text-white">Campaign Creation Trend</h3>
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Campaign Creation Trend</h3>
         </div>
 
         {/* Line Chart */}
-        <div className="relative h-48 mt-6">
+        <div className="relative h-48 mt-4">
           <svg viewBox="0 0 400 150" className="w-full h-full" preserveAspectRatio="none">
             <defs>
-              {/* Gradient for area fill */}
               <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
                 <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
               </linearGradient>
-
-              {/* Gradient for line */}
               <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="#3b82f6" />
                 <stop offset="100%" stopColor="#8b5cf6" />
@@ -294,7 +298,7 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
                 y1={i * 30}
                 x2="400"
                 y2={i * 30}
-                stroke="rgba(255,255,255,0.05)"
+                stroke={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}
                 strokeWidth="1"
               />
             ))}
@@ -305,27 +309,19 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
               const maxValue = Math.max(...data.map(d => d.count), 1);
               const points = data.map((item, index) => {
                 const x = (index / Math.max(data.length - 1, 1)) * 400;
-                const y = 120 - (item.count / maxValue) * 100; // Invert Y and scale
+                const y = 120 - (item.count / maxValue) * 100;
                 return { x, y, count: item.count };
               });
 
-              // Create path data for the line
               const linePath = points.map((p, i) =>
                 `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
               ).join(' ');
 
-              // Create path data for the area (filled region under the line)
               const areaPath = `${linePath} L ${points[points.length - 1].x} 120 L ${points[0].x} 120 Z`;
 
               return (
                 <>
-                  {/* Area fill */}
-                  <path
-                    d={areaPath}
-                    fill="url(#areaGradient)"
-                  />
-
-                  {/* Line */}
+                  <path d={areaPath} fill="url(#areaGradient)" />
                   <path
                     d={linePath}
                     fill="none"
@@ -334,25 +330,21 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-
-                  {/* Data points with values */}
                   {points.map((point, index) => (
                     <g key={index}>
-                      {/* Small dot at the point */}
                       <circle
                         cx={point.x}
                         cy={point.y}
                         r="2"
                         fill="#3b82f6"
-                        stroke="white"
+                        stroke={isDark ? '#0f172a' : '#ffffff'}
                         strokeWidth="1"
                       />
-                      {/* Value label above the point */}
                       <text
                         x={point.x}
                         y={point.y - 8}
                         textAnchor="middle"
-                        className="text-[8px] font-black fill-blue-400"
+                        className={`text-[8px] font-medium ${isDark ? 'fill-blue-400' : 'fill-blue-600'}`}
                         style={{ fontFamily: 'inherit' }}
                       >
                         {point.count}
@@ -364,10 +356,9 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
             })()}
           </svg>
 
-          {/* X-axis labels (dates) */}
-          <div className="flex justify-between mt-3 px-1">
+          {/* X-axis labels */}
+          <div className="flex justify-between mt-2 px-1">
             {analytics.campaignTrend.map((item, index) => {
-              // Show only every Nth label to avoid crowding
               const showLabel = analytics.campaignTrend.length <= 7 ||
                                 index === 0 ||
                                 index === analytics.campaignTrend.length - 1 ||
@@ -376,8 +367,10 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
               return (
                 <span
                   key={index}
-                  className={`text-[8px] font-black uppercase tracking-wider ${
-                    showLabel ? 'text-slate-400' : 'text-transparent'
+                  className={`text-[8px] font-medium ${
+                    showLabel
+                      ? isDark ? 'text-slate-500' : 'text-slate-400'
+                      : 'text-transparent'
                   }`}
                   style={{ flex: 1, textAlign: index === 0 ? 'left' : index === analytics.campaignTrend.length - 1 ? 'right' : 'center' }}
                 >
@@ -387,36 +380,36 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
             })}
           </div>
 
-          {/* Y-axis label */}
-          <div className="absolute -left-1 top-0 text-[8px] font-black text-slate-400 uppercase tracking-wider">
+          {/* Y-axis labels */}
+          <div className={`absolute -left-1 top-0 text-[8px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
             {maxTrendValue}
           </div>
-          <div className="absolute -left-1 bottom-8 text-[8px] font-black text-slate-400 uppercase tracking-wider">
+          <div className={`absolute -left-1 bottom-8 text-[8px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
             0
           </div>
         </div>
       </div>
 
       {/* Category Distribution */}
-      <div className="glass rounded-2xl p-5 border-white/10 mb-6">
+      <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center gap-2 mb-4">
           <PieChart className="w-4 h-4 text-amber-500" />
-          <h3 className="text-sm font-black uppercase tracking-widest text-white">Categories with Deals</h3>
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Categories with Deals</h3>
         </div>
 
         {/* Bar Chart */}
-        <div className="space-y-3 mb-6">
+        <div className="space-y-2.5 mb-6">
           {analytics.categoriesWithDeals.map((item, index) => (
             <div key={index} className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[9px] font-black text-slate-300 uppercase tracking-wider">
+                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                   {item.category}
                 </span>
-                <span className="text-[9px] font-black text-blue-400">
+                <span className={`text-[10px] font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
                   {item.count} ({item.percentage.toFixed(1)}%)
                 </span>
               </div>
-              <div className="bg-slate-800/50 rounded-full h-3 overflow-hidden">
+              <div className={`rounded-full h-2.5 overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{
@@ -431,7 +424,7 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
 
         {/* Pie Chart Visualization */}
         <div className="flex justify-center">
-          <div className="relative w-48 h-48">
+          <div className="relative w-44 h-44">
             <svg viewBox="0 0 100 100" className="transform -rotate-90">
               {analytics.categoriesWithDeals.reduce((acc, item, index) => {
                 const startAngle = acc.currentAngle;
@@ -457,7 +450,7 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
                     key={index}
                     d={pathData}
                     fill={COLORS[index % COLORS.length]}
-                    stroke="rgba(0,0,0,0.2)"
+                    stroke={isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.5)'}
                     strokeWidth="0.5"
                   />
                 );
@@ -467,22 +460,18 @@ export const DealAdminAnalytics: React.FC<DealAdminAnalyticsProps> = ({ user, th
               }, { elements: [] as JSX.Element[], currentAngle: 0 }).elements}
 
               {/* Center circle for donut effect */}
-              <circle cx="50" cy="50" r="20" fill={isDark ? '#0f172a' : '#1e293b'} />
+              <circle cx="50" cy="50" r="20" fill={isDark ? '#0f172a' : '#ffffff'} />
             </svg>
 
             {/* Center text */}
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
-                <p className="text-2xl font-black text-white">{analytics.categoriesWithDeals.length}</p>
-                <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Categories</p>
+                <p className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{analytics.categoriesWithDeals.length}</p>
+                <p className={`text-[8px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Categories</p>
               </div>
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="text-center mt-10">
-        <p className="text-[9px] font-black uppercase tracking-[0.6em] text-slate-700">ANALYTICS DASHBOARD</p>
       </div>
     </div>
   );

@@ -35,8 +35,9 @@ Deno.serve(async (req) => {
     const { field, value } = body;
 
     // Validation
-    if (!isString(field) || !['gstin', 'pan'].includes(field)) {
-      return new Response(JSON.stringify({ error: 'Invalid field. Must be "gstin" or "pan".' }), {
+    const allowedFields = ['gstin', 'pan', 'udyam_no', 'fssai_no', 'trade_license_no'];
+    if (!isString(field) || !allowedFields.includes(field)) {
+      return new Response(JSON.stringify({ error: `Invalid field. Must be one of: ${allowedFields.join(', ')}.` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       });
@@ -51,9 +52,9 @@ Deno.serve(async (req) => {
 
     const cleanValue = value.trim().toUpperCase(); // Normalize to uppercase
 
-    // Check if GSTIN or PAN already exists in user_profiles table
+    // Check if field already exists in merchant_profiles table
     const { data, error } = await supabase
-      .from('user_profiles')
+      .from('merchant_profiles')
       .select('id')
       .eq(field, cleanValue)
       .maybeSingle();

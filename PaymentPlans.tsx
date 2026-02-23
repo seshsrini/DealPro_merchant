@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AppView, User } from './types';
 import { useTranslation } from './contexts/LanguageContext';
 import { QRCanvas } from './components/QRCanvas';
-import { paymentService } from './services/paymentService'; // Simulated payment service
+import { paymentService } from './services/paymentService';
 import {
   CreditCard,
   IndianRupee,
@@ -19,46 +19,40 @@ import {
 interface PaymentPlansProps {
   user: User;
   setView: (view: AppView) => void;
+  theme?: 'light' | 'dark';
 }
 
-// Dummy UPI IDs for demonstration
 const UPI_APPS = [
   { id: 'phonepe', name: 'PhonePe', logo: 'https://cdn.iconscout.com/icon/free/png-256/phonepe-2139062-1801262.png', uriPrefix: 'phonepe://pay' },
   { id: 'gpay', name: 'Google Pay', logo: 'https://cdn.iconscout.com/icon/free/png-256/google-pay-2038769-1721590.png', uriPrefix: 'tez://upi/pay' },
   { id: 'paytm', name: 'Paytm', logo: 'https://cdn.iconscout.com/icon/free/png-256/paytm-226448.png', uriPrefix: 'paytmmp://pay' },
-  // 'Other UPI App' will fall back to a generic UPI URI or prompt manual entry
 ];
 
-// Helper to generate a unique transaction ID
 const generateTransactionId = () => `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
-export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView }) => {
+export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView, theme = 'dark' }) => {
   const { t } = useTranslation();
-  const [paymentAmount, setPaymentAmount] = useState<number>(999.00); // Fixed dummy amount
-  const [upiId, setUpiId] = useState<string>('dealpro@ybl'); // Dummy UPI ID
+  const isDark = theme === 'dark';
+  const [paymentAmount, setPaymentAmount] = useState<number>(999.00);
+  const [upiId, setUpiId] = useState<string>('dealpro@ybl');
   const [transactionId, setTransactionId] = useState<string>(generateTransactionId());
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
-  // Re-generate transaction ID if component remounts or on retry
   useEffect(() => {
     if (!isProcessing && !paymentSuccess && !paymentError) {
       setTransactionId(generateTransactionId());
     }
   }, [isProcessing, paymentSuccess, paymentError]);
 
-  // UPI QR Data generation
   const upiQrData = useMemo(() => {
-    // Refer to UPI Linking Specification for URI format
-    // upi://pay?pa=<payee_address>&pn=<payee_name>&mc=<merchant_code>&tid=<transaction_id>&tr=<transaction_ref_id>&am=<amount>&cu=<currency>&url=<transaction_url>
     const payeeAddress = upiId;
     const payeeName = encodeURIComponent('DealPro Services');
-    const transactionRefId = transactionId; // Unique ID for tracking
+    const transactionRefId = transactionId;
     const amount = paymentAmount.toFixed(2);
     const currency = 'INR';
-
     return `upi://pay?pa=${payeeAddress}&pn=${payeeName}&tr=${transactionRefId}&am=${amount}&cu=${currency}`;
   }, [upiId, paymentAmount, transactionId]);
 
@@ -68,7 +62,6 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView }) => 
     setPaymentSuccess(false);
 
     try {
-      // Construct UPI deep link
       let uri = upiQrData;
       if (appId === 'phonepe') {
         uri = `phonepe://pay?pa=${upiId}&pn=${encodeURIComponent('DealPro Services')}&mc=8999&tid=${transactionId}&tr=${transactionId}&am=${paymentAmount.toFixed(2)}&cu=INR`;
@@ -77,22 +70,17 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView }) => 
       } else if (appId === 'paytm') {
         uri = `paytmmp://pay?pa=${upiId}&pn=${encodeURIComponent('DealPro Services')}&mc=8999&tid=${transactionId}&tr=${transactionId}&am=${paymentAmount.toFixed(2)}&cu=INR`;
       }
-      
-      console.log('Attempting to open UPI URI:', uri);
 
-      // Attempt to open the deep link
+      console.log('Attempting to open UPI URI:', uri);
       window.location.href = uri;
 
-      // Simulate a backend payment success after a short delay
-      // In a real application, you would poll your backend for payment status
-      await new Promise(resolve => setTimeout(resolve, 5000)); 
-      
-      // Simulate backend processing
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
       const backendResponse = await paymentService.processUpiPayment(paymentAmount, 'INR', user.id, transactionId);
 
       if (backendResponse.success) {
         setPaymentSuccess(true);
-        setTimeout(() => setView('merchant_dashboard'), 3000); // Redirect on success
+        setTimeout(() => setView('merchant_dashboard'), 3000);
       } else {
         setPaymentError(backendResponse.message || 'Payment processing failed on backend.');
       }
@@ -110,96 +98,94 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView }) => 
   }, []);
 
   return (
-    <div className="px-6 pt-6 pb-32 animate-reveal space-y-8 max-w-md mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <button 
-          onClick={() => setView('profile')} 
-          className="w-14 h-14 glass rounded-2xl flex items-center justify-center border-white/10 active:scale-90 transition-transform"
+    <div className="px-6 pt-6 pb-32 space-y-6 max-w-md mx-auto">
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-2">
+        <button
+          onClick={() => setView('profile')}
+          className={`w-10 h-10 rounded-lg flex items-center justify-center active:scale-[0.98] transition-all ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-slate-100 border border-slate-200'}`}
         >
-          <ArrowLeft className="w-6 h-6 text-slate-400" />
+          <ArrowLeft className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
         </button>
-        <div>
-          <h2 className="text-3xl font-black uppercase tracking-tighter leading-none text-white">
-            Secure<br /><span className="text-emerald-500">Payments</span>
-          </h2>
-          <div className="flex items-center gap-2 mt-2">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em]">Gateway Protocol Active</p>
-          </div>
+        <div className="flex-1">
+          <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Secure Payments</h2>
+          <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Payment gateway</p>
         </div>
-        <div className="w-14 h-14 glass rounded-2xl flex items-center justify-center border-white/10">
-          <CreditCard className="w-6 h-6 text-slate-400" />
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
+          <CreditCard className="w-5 h-5 text-emerald-500" />
         </div>
       </div>
 
       {paymentSuccess ? (
-        <div className="text-center py-24 glass rounded-[3.5rem] border-emerald-500/20 bg-emerald-500/5 shadow-2xl animate-reveal">
-          <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-6" />
-          <p className="text-xl font-black text-white uppercase tracking-tighter mb-2">Payment Successful!</p>
-          <p className="text-xs font-bold text-slate-400 px-10">Your transaction has been securely processed. Redirecting...</p>
+        <div className={`text-center py-16 rounded-xl border ${isDark ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
+          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
+          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>Payment Successful!</p>
+          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Your transaction has been securely processed. Redirecting...</p>
         </div>
       ) : paymentError ? (
-        <div className="text-center py-24 glass rounded-[3.5rem] border-rose-500/20 bg-rose-500/5 shadow-2xl animate-shake">
-          <AlertTriangle className="w-16 h-16 text-rose-500 mx-auto mb-6" />
-          <p className="text-xl font-black text-white uppercase tracking-tighter mb-2">Payment Failed</p>
-          <p className="text-xs font-bold text-slate-400 px-10">{paymentError} Please try again.</p>
-          <button 
+        <div className={`text-center py-16 rounded-xl border ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>Payment Failed</p>
+          <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{paymentError} Please try again.</p>
+          <button
             onClick={() => { setPaymentError(null); setIsProcessing(false); setTransactionId(generateTransactionId()); }}
-            className="btn-premium h-14 rounded-2xl mt-8 px-8 text-[10px] font-black uppercase tracking-widest"
+            className="h-12 rounded-xl bg-slate-900 text-white text-sm font-medium px-8 active:scale-[0.98] transition-all"
           >
             Retry Payment
           </button>
         </div>
       ) : (
         <div className="space-y-6">
-          <div className="glass p-8 rounded-[3rem] border-white/10 bg-slate-900/40 shadow-2xl space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-white/10">
-              <p className="text-lg font-black uppercase text-slate-400 tracking-widest">Amount Due</p>
+          <div className={`p-6 rounded-xl border space-y-6 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-200'}`}>
+            <div className={`flex items-center justify-between pb-4 border-b ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+              <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Amount Due</p>
               <div className="flex items-center gap-2">
-                <IndianRupee className="w-8 h-8 text-white" />
-                <span className="text-5xl font-black text-white tracking-tighter">{paymentAmount.toFixed(2)}</span>
+                <IndianRupee className={`w-6 h-6 ${isDark ? 'text-white' : 'text-slate-900'}`} />
+                <span className={`text-3xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{paymentAmount.toFixed(2)}</span>
               </div>
             </div>
 
-            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest text-center">
+            <p className={`text-xs text-center ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               Choose your secure payment method
             </p>
 
             {isMobile && (
-              <div className="space-y-4 animate-reveal">
-                <h3 className="text-sm font-black uppercase tracking-tighter text-white text-center">Pay with UPI Apps</h3>
-                <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-4">
+                <h3 className={`text-sm font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>Pay with UPI Apps</h3>
+                <div className="grid grid-cols-3 gap-3">
                   {UPI_APPS.map(app => (
                     <button
                       key={app.id}
                       onClick={() => handleUpiPayment(app.id)}
                       disabled={isProcessing}
-                      className="glass p-4 rounded-2xl flex flex-col items-center justify-center gap-2 border-white/10 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+                      className={`p-4 rounded-xl flex flex-col items-center justify-center gap-2 border active:scale-[0.98] transition-all disabled:opacity-50 ${
+                        isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                      }`}
                     >
                       <img src={app.logo} alt={app.name} className="w-10 h-10 object-contain" />
-                      <span className="text-[9px] font-black uppercase tracking-widest text-white">{app.name}</span>
+                      <span className={`text-[10px] font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{app.name}</span>
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center justify-center gap-2 mt-4 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                <div className={`flex items-center justify-center gap-2 mt-4 text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                   <Lock className="w-3 h-3" />
-                  <span>Encrypted Transaction Node</span>
+                  <span>Encrypted transaction</span>
                 </div>
               </div>
             )}
 
-            <div className="space-y-4 animate-reveal border-t border-white/10 pt-6">
-              <h3 className="text-sm font-black uppercase tracking-tighter text-white text-center">Scan to Pay (Any UPI App)</h3>
+            <div className={`space-y-4 border-t pt-6 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+              <h3 className={`text-sm font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>Scan to Pay (Any UPI App)</h3>
               <div className="flex items-center justify-center">
                 <QRCanvas value={upiQrData} />
               </div>
-              <div className="text-center text-slate-400 text-xs mt-4 leading-relaxed">
+              <div className={`text-center text-xs mt-4 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 <p>Scan this QR code using any UPI-enabled mobile application (e.g., Google Pay, PhonePe, Paytm, BHIM) to complete your payment.</p>
-                <div className="flex items-center justify-center gap-2 mt-4 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                <div className={`flex items-center justify-center gap-2 mt-4 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                   <ScanLine className="w-3 h-3" />
                   <span>Transaction ID: {transactionId}</span>
                 </div>
-                <div className="flex items-center justify-center gap-2 mt-2 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                <div className={`flex items-center justify-center gap-2 mt-2 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                   <ShieldCheck className="w-3 h-3" />
                   <span>Payee UPI ID: {upiId}</span>
                 </div>
@@ -209,24 +195,22 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView }) => 
             {isProcessing && (
               <div className="flex flex-col items-center justify-center py-4 gap-3 text-center">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 animate-pulse">Processing Secure Payment...</p>
+                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Processing secure payment...</p>
               </div>
             )}
           </div>
 
           {/* Trust Badges */}
-          <div className="text-center mt-8 space-y-4">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">
-              Your security is our priority.
-            </p>
+          <div className="text-center space-y-3">
+            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Your security is our priority</p>
             <div className="flex items-center justify-center gap-6">
-              <div className="flex items-center gap-2 text-emerald-500">
-                <ShieldCheck className="w-5 h-5" />
-                <span className="text-xs font-black uppercase tracking-widest">SSL SECURED</span>
+              <div className="flex items-center gap-1.5 text-emerald-500">
+                <ShieldCheck className="w-4 h-4" />
+                <span className="text-xs font-medium">SSL Secured</span>
               </div>
-              <div className="flex items-center gap-2 text-emerald-500">
-                <Lock className="w-5 h-5" />
-                <span className="text-xs font-black uppercase tracking-widest">PCI-DSS COMPLIANT</span>
+              <div className="flex items-center gap-1.5 text-emerald-500">
+                <Lock className="w-4 h-4" />
+                <span className="text-xs font-medium">PCI-DSS Compliant</span>
               </div>
             </div>
           </div>

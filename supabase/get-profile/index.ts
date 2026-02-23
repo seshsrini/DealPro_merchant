@@ -138,15 +138,20 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized: Cannot access another user\'s profile.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 });
     }
 
-    // Directly query the user_profiles table
+    // Determine table from auth user metadata (set at registration time)
+    const userRole = authenticatedUser.user_metadata?.role || 'consumer';
+    const profileTable = (userRole === 'merchant' || userRole === 'dealadmin')
+      ? 'merchant_profiles'
+      : 'user_profiles';
+
     const { data: profileData, error: profileError } = await supabase
-      .from('user_profiles')
+      .from(profileTable)
       .select('*')
       .eq('id', userId)
       .single();
 
     if (profileError) {
-      console.error(`[user/get-profile EF] Error fetching profile from user_profiles:`, profileError.message);
+      console.error(`[user/get-profile EF] Error fetching profile from ${profileTable}:`, profileError.message);
       return new Response(JSON.stringify({ error: 'Profile data incomplete or not found.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 });
     }
 

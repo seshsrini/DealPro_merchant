@@ -1,88 +1,80 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppView, Deal } from './types';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
+import { NotificationBadge } from './components/NotificationBadge';
 import {
   Store,
   Plus,
   QrCode,
   Zap,
-  Globe,
   Megaphone,
   AlertCircle,
-  Clock,
-  Calculator,
-  Edit2,
-  Award, // For general metrics
-  ShieldCheck,
-  Gift, // New icon for the festival banner
+  Gift,
   ChevronRight
 } from 'lucide-react';
-// QRscan is now imported and rendered in App.tsx
 
 type CampaignTab = 'review' | 'active' | 'expired' | 'needs review';
 
 interface MerchantDashboardProps {
-  view: AppView; // Although it will primarily be 'merchant_dashboard', it's good to keep
+  view: AppView;
   setView: (view: AppView) => void;
   user: any;
   setUser: (user: any) => void;
-  deals: Deal[]; // Now directly receives merchant-specific deals from MerchantStack
+  deals: Deal[];
   loading: boolean;
   setLoading: (loading: boolean) => void;
   theme: 'light' | 'dark';
   refreshDeals: () => Promise<void>;
   setDealIdToEdit: (id: string | null) => void;
   onClearDealIdToEdit: () => void;
-  isScanning: boolean; // Passed from App.tsx
-  // Fix: Corrected function signature for setIsScanning
+  isScanning: boolean;
   setIsScanning: (val: boolean) => void;
   setPreSelectedTab?: (tab: CampaignTab | null) => void;
 }
 
-// Helper function to get the nearest upcoming festival
 interface Festival {
   name: string;
-  month: number; // 1-12
-  day: number;   // 1-31
-  themeKey: string; // Added themeKey for dynamic backgrounds
+  month: number;
+  day: number;
+  themeKey: string;
 }
 
 const UPCOMING_FESTIVALS: Festival[] = [
   { name: 'New Year', month: 1, day: 1, themeKey: 'defaultBlue' },
   { name: 'Makar Sankranti', month: 1, day: 14, themeKey: 'defaultBlue' },
-  { name: 'Republic Day', month: 1, day: 26, themeKey: 'indianFlag' }, 
-  { name: 'Holi', month: 3, day: 8, themeKey: 'holiColors' }, // Approximate
-  { name: 'Ugadi / Gudi Padwa', month: 3, day: 22, themeKey: 'defaultBlue' }, // Approximate
-  { name: 'Eid al-Fitr', month: 4, day: 21, themeKey: 'defaultBlue' }, // Approximate
+  { name: 'Republic Day', month: 1, day: 26, themeKey: 'indianFlag' },
+  { name: 'Holi', month: 3, day: 8, themeKey: 'holiColors' },
+  { name: 'Ugadi / Gudi Padwa', month: 3, day: 22, themeKey: 'defaultBlue' },
+  { name: 'Eid al-Fitr', month: 4, day: 21, themeKey: 'defaultBlue' },
   { name: 'Independence Day', month: 8, day: 15, themeKey: 'indianFlag' },
-  { name: 'Ganesh Chaturthi', month: 9, day: 19, themeKey: 'defaultBlue' }, // Approximate
+  { name: 'Ganesh Chaturthi', month: 9, day: 19, themeKey: 'defaultBlue' },
   { name: 'Gandhi Jayanti', month: 10, day: 2, themeKey: 'defaultBlue' },
-  { name: 'Dussehra', month: 10, day: 24, themeKey: 'diwaliColors' }, // Approximate, using Diwali theme
-  { name: 'Diwali', month: 11, day: 12, themeKey: 'diwaliColors' }, // Approximate
+  { name: 'Dussehra', month: 10, day: 24, themeKey: 'diwaliColors' },
+  { name: 'Diwali', month: 11, day: 12, themeKey: 'diwaliColors' },
   { name: 'Christmas', month: 12, day: 25, themeKey: 'christmasColors' },
 ];
 
 const getNearestFestival = (): Festival => {
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize to start of day
+  today.setHours(0, 0, 0, 0);
 
-  let nearestFestival: Festival = UPCOMING_FESTIVALS[0]; 
+  let nearestFestival: Festival = UPCOMING_FESTIVALS[0];
   let minDaysUntil = Infinity;
 
-  // Find the nearest upcoming festival
   for (const festival of UPCOMING_FESTIVALS) {
     let festivalDateThisYear = new Date(today.getFullYear(), festival.month - 1, festival.day);
     festivalDateThisYear.setHours(0, 0, 0, 0);
 
     let daysUntil = (festivalDateThisYear.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
 
-    if (daysUntil < 0) { // If already passed this year, consider it for next year
+    if (daysUntil < 0) {
       let festivalDateNextYear = new Date(today.getFullYear() + 1, festival.month - 1, festival.day);
       festivalDateNextYear.setHours(0, 0, 0, 0);
       daysUntil = (festivalDateNextYear.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
     }
-    
-    if (daysUntil >= 0 && daysUntil < minDaysUntil) { // Only positive days or today
+
+    if (daysUntil >= 0 && daysUntil < minDaysUntil) {
       minDaysUntil = daysUntil;
       nearestFestival = festival;
     }
@@ -90,11 +82,9 @@ const getNearestFestival = (): Festival => {
   return nearestFestival;
 };
 
-// Helper to get dynamic banner classes based on themeKey and current theme
 const getBannerThemeClasses = (themeKey: string, isDark: boolean) => {
   switch (themeKey) {
     case 'indianFlag':
-      // The custom CSS class 'indian-flag-banner' handles both dark and light modes internally
       return 'indian-flag-banner';
     case 'diwaliColors':
       return isDark ? 'diwali-banner-dark' : 'diwali-banner-light';
@@ -102,20 +92,18 @@ const getBannerThemeClasses = (themeKey: string, isDark: boolean) => {
       return isDark ? 'holi-banner-dark' : 'holi-banner-light';
     case 'christmasColors':
       return isDark ? 'christmas-banner-dark' : 'christmas-banner-light';
-    default: // Default blue theme
+    default:
       return isDark ? 'default-banner-dark' : 'default-banner-light';
   }
 };
 
-
 export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   view, setView, user, setUser, deals, loading, setLoading, theme, refreshDeals,
-  setDealIdToEdit, onClearDealIdToEdit, isScanning, setIsScanning, // Received from App.tsx
+  setDealIdToEdit, onClearDealIdToEdit, isScanning, setIsScanning,
   setPreSelectedTab
 }) => {
   const isDark = theme === 'dark';
 
-  // Campaign usage state
   const [campaignUsage, setCampaignUsage] = useState({
     campaigns_used: 0,
     campaigns_limit: 0,
@@ -124,23 +112,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     has_subscription: false,
   });
 
-  // State for nearest upcoming festival
   const [nearestFestival, setNearestFestival] = useState<Festival>({ name: 'Special Event', month: 1, day: 1, themeKey: 'defaultBlue' });
 
-  // `deals` prop now directly contains merchant-specific deals
   const allMerchantDeals = useMemo(() => {
     const statusWeight: Record<string, number> = { 'review': 0, 'active': 1, 'expired': 2 };
-    return [...deals] // Use the already filtered 'deals' prop
+    return [...deals]
       .sort((a, b) => {
         const weightA = statusWeight[a.status || 'active'] ?? 1;
         const weightB = statusWeight[b.status || 'active'] ?? 1;
         if (weightA !== weightB) return weightA - weightB;
-        return (b.campaign_id || '').localeCompare(a.campaign_id || ''); // Fix: Use campaign_id
+        return (b.campaign_id || '').localeCompare(a.campaign_id || '');
       });
   }, [deals]);
 
-  // Fetch individual Lifetime Analytics metrics
-  // Fetch campaign usage
   useEffect(() => {
     const fetchCampaignUsage = async () => {
       try {
@@ -156,178 +140,110 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     }
   }, [user?.id, deals]);
 
-  // Effect to find the nearest festival
   useEffect(() => {
     setNearestFestival(getNearestFestival());
   }, []);
 
-  const headingClass = isDark ? "text-white" : "text-slate-950";
-  const subTextClass = isDark ? "text-slate-400" : "text-slate-600";
-  const labelClass = isDark ? "text-slate-500" : "text-slate-700";
-
-  // Count campaigns with "needs review" status for the current merchant only
   const reviewCampaignsCount = useMemo(() => {
-    console.log('[MerchantDashboard] Current User ID:', user.id);
-    console.log('[MerchantDashboard] Total deals:', deals.length);
-
-    // Log all "needs review" status campaigns
-    const needsReviewDeals = deals.filter(deal => deal.status === 'needs review');
-    console.log('[MerchantDashboard] Campaigns with "needs review" status:', needsReviewDeals.length);
-    needsReviewDeals.forEach((deal, idx) => {
-      const dealMerchantId = deal.merchantId || (deal as any).merchant_id;
-      console.log(`[MerchantDashboard] Needs Review deal ${idx + 1}:`, {
-        campaign_id: deal.campaign_id,
-        merchantId: dealMerchantId,
-        status: deal.status,
-        matches: dealMerchantId === user.id
-      });
-    });
-
-    const count = deals.filter(deal => {
+    return deals.filter(deal => {
       const dealMerchantId = deal.merchantId || (deal as any).merchant_id;
       return deal.status === 'needs review' && dealMerchantId === user.id;
     }).length;
-    console.log('[MerchantDashboard] Final "needs review" filtered count (matching merchant):', count);
-    return count;
   }, [deals, user.id]);
 
   return (
-    <div className="px-6 pt-6 pb-32 animate-reveal space-y-8">
-      {/* QRscan is now rendered at the App level */}
+    <div className={`px-6 pt-6 pb-32 space-y-6 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
 
-      {/* Prominent "Needs Review" Alert Banner */}
-      {reviewCampaignsCount > 0 && (
-        <div className="animate-reveal">
-          <style>{`
-            @keyframes flash-border {
-              0%, 100% { border-color: rgba(239, 68, 68, 0.6); }
-              50% { border-color: rgba(239, 68, 68, 1); }
-            }
-            @keyframes pulse-glow {
-              0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.3), 0 0 40px rgba(239, 68, 68, 0.1); }
-              50% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.5), 0 0 60px rgba(239, 68, 68, 0.2); }
-            }
-            @keyframes shimmer {
-              0% { background-position: -200% 0; }
-              100% { background-position: 200% 0; }
-            }
-            @keyframes bounce-x {
-              0%, 100% { transform: translateX(0); }
-              50% { transform: translateX(4px); }
-            }
-            .flash-border {
-              animation: flash-border 2s ease-in-out infinite;
-            }
-            .pulse-glow {
-              animation: pulse-glow 2s ease-in-out infinite;
-            }
-            .animate-shimmer {
-              animation: shimmer 3s ease-in-out infinite;
-            }
-            .animate-bounce-x {
-              animation: bounce-x 1s ease-in-out infinite;
-            }
-          `}</style>
-          <button
-            onClick={() => {
-              if (setPreSelectedTab) {
-                setPreSelectedTab('needs review');
-              }
-              setView('merchant_deals');
-            }}
-            className={`w-full p-6 rounded-[2.5rem] flex items-center gap-4 text-left group transition-all duration-300 relative overflow-hidden border-4 flash-border pulse-glow
-              active:scale-[0.98] hover:scale-[1.01] ${
-                isDark
-                  ? 'bg-gradient-to-r from-red-950/80 via-red-900/60 to-red-950/80 backdrop-blur-md'
-                  : 'bg-gradient-to-r from-red-50 via-red-100 to-red-50 shadow-2xl'
-              }`}
-          >
-            {/* Animated Background Pattern */}
-            <div className="absolute inset-0 opacity-20">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-red-500/30 to-transparent animate-shimmer"
-                   style={{ backgroundSize: '200% 100%', animation: 'shimmer 3s ease-in-out infinite' }}></div>
-            </div>
-
-            {/* Pulsing Alert Icon */}
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 relative z-10 shadow-lg animate-pulse
-              ${isDark ? 'bg-red-500/30' : 'bg-red-500'}`}>
-              <AlertCircle className={`w-8 h-8 ${isDark ? 'text-red-400' : 'text-white'}`} strokeWidth={2.5} />
-            </div>
-
-            {/* Alert Content */}
-            <div className="relative z-10 flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
-                <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${
-                  isDark ? 'text-red-400' : 'text-red-600'
-                }`}>
-                  Action Required
-                </p>
-              </div>
-              <p className={`text-xl font-black leading-tight ${
-                isDark ? 'text-white' : 'text-red-900'
-              }`}>
-                {reviewCampaignsCount} Campaign{reviewCampaignsCount > 1 ? 's' : ''} Need{reviewCampaignsCount === 1 ? 's' : ''} Review
-              </p>
-              <p className={`text-xs font-bold mt-1 ${
-                isDark ? 'text-red-300' : 'text-red-700'
-              }`}>
-                Tap to review and approve your campaigns
-              </p>
-            </div>
-
-            {/* Arrow Indicator */}
-            <ChevronRight className={`w-7 h-7 ml-auto shrink-0 relative z-10 ${
-              isDark ? 'text-red-400' : 'text-red-600'
-            } group-hover:translate-x-1 transition-transform duration-300 animate-bounce-x`} />
-          </button>
-        </div>
-      )}
-
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className={`text-3xl font-black uppercase tracking-tighter leading-none ${headingClass}`}>{user.store_name}</h2>
-          <div className="flex items-center gap-2 mt-2">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em]">Merchant Dashboard Home</p>
-          </div>
+          <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            Dashboard
+          </h1>
+          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            Welcome back, {user.full_name || user.store_name || 'Merchant'}
+          </p>
         </div>
-        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg border ${isDark ? 'glass border-white/10' : 'bg-white border-slate-100'}`}>
-          <Store className="w-6 h-6 text-blue-600" />
-        </div>
+        <NotificationBadge
+          merchantId={user.id}
+          onClick={() => setView('merchant_notifications')}
+          theme={theme}
+        />
       </div>
 
-      {/* Campaign Usage Counter */}
+      {/* Needs Review Alert */}
+      {reviewCampaignsCount > 0 && (
+        <button
+          onClick={() => {
+            if (setPreSelectedTab) {
+              setPreSelectedTab('needs review');
+            }
+            setView('merchant_deals');
+          }}
+          className={`w-full p-4 rounded-xl flex items-center gap-3 text-left active:scale-[0.98] transition-all border ${
+            isDark
+              ? 'bg-red-500/10 border-red-500/20'
+              : 'bg-red-50 border-red-200'
+          }`}
+        >
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+            isDark ? 'bg-red-500/20' : 'bg-red-100'
+          }`}>
+            <AlertCircle className="w-5 h-5 text-red-500" />
+          </div>
+          <div className="flex-1">
+            <p className={`text-xs font-medium ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+              Action Required
+            </p>
+            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-red-900'}`}>
+              {reviewCampaignsCount} Campaign{reviewCampaignsCount > 1 ? 's' : ''} Need{reviewCampaignsCount === 1 ? 's' : ''} Review
+            </p>
+          </div>
+          <ChevronRight className={`w-5 h-5 shrink-0 ${isDark ? 'text-red-400' : 'text-red-500'}`} />
+        </button>
+      )}
+
+      {/* Store Info */}
+      <div className={`p-4 rounded-xl border ${
+        isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'
+      }`}>
+        <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{user.store_name}</p>
+        <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Merchant Dashboard</p>
+      </div>
+
+      {/* Campaign Usage */}
       {campaignUsage.has_subscription && (
-        <div className={`rounded-2xl p-4 shadow-xl border ${isDark ? 'glass border-white/10 bg-slate-900/40' : 'bg-white border-slate-200'}`}>
+        <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isDark ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-100 border-blue-200'}`}>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                isDark ? 'bg-blue-500/10' : 'bg-blue-50'
+              }`}>
                 <Megaphone className="w-5 h-5 text-blue-500" />
               </div>
               <div>
-                <p className={`text-[9px] font-black uppercase tracking-wider ${labelClass}`}>Campaigns</p>
-                <p className={`text-lg font-black ${headingClass}`}>
-                  <span className={campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? "text-rose-500" : "text-emerald-500"}>
+                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Campaigns</p>
+                <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  <span className={campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? 'text-rose-500' : 'text-emerald-500'}>
                     {campaignUsage.campaigns_used}
                   </span>
-                  <span className={`${isDark ? 'text-slate-600' : 'text-slate-400'}`}>/{campaignUsage.campaigns_limit}</span>
-                  <span className={`text-xs ml-1 ${subTextClass}`}>this month</span>
+                  <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>/{campaignUsage.campaigns_limit}</span>
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-100 border-amber-200'}`}>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                isDark ? 'bg-amber-500/10' : 'bg-amber-50'
+              }`}>
                 <Zap className="w-5 h-5 text-amber-500" />
               </div>
               <div>
-                <p className={`text-[9px] font-black uppercase tracking-wider ${labelClass}`}>DOTD</p>
-                <p className={`text-lg font-black ${headingClass}`}>
-                  <span className={campaignUsage.dotd_used >= campaignUsage.dotd_limit ? "text-rose-500" : "text-emerald-500"}>
+                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Deal of the Day</p>
+                <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  <span className={campaignUsage.dotd_used >= campaignUsage.dotd_limit ? 'text-rose-500' : 'text-emerald-500'}>
                     {campaignUsage.dotd_used}
                   </span>
-                  <span className={`${isDark ? 'text-slate-600' : 'text-slate-400'}`}>/{campaignUsage.dotd_limit}</span>
-                  <span className={`text-xs ml-1 ${subTextClass}`}>this month</span>
+                  <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>/{campaignUsage.dotd_limit}</span>
                 </p>
               </div>
             </div>
@@ -337,23 +253,23 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
           {(campaignUsage.campaigns_used >= campaignUsage.campaigns_limit || campaignUsage.dotd_used >= campaignUsage.dotd_limit) && (
             <div className="mt-4 space-y-2">
               {campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
-                <div className={`flex items-start gap-2 p-3 rounded-xl border ${isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-200'}`}>
-                  <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 flex-shrink-0" />
+                <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-200'}`}>
+                  <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
                   <p className={`text-xs ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>
                     {campaignUsage.campaigns_used > campaignUsage.campaigns_limit
-                      ? <>You have exceeded your monthly campaign limit ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className={`underline font-bold transition-colors ${isDark ? 'hover:text-rose-200' : 'hover:text-rose-600'}`}>upgrade</button> your plan to create more campaigns.</>
-                      : <>You have reached your monthly campaign limit ({campaignUsage.campaigns_limit}/{campaignUsage.campaigns_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className={`underline font-bold transition-colors ${isDark ? 'hover:text-rose-200' : 'hover:text-rose-600'}`}>upgrade</button> your plan to create more campaigns.</>
+                      ? <>You have exceeded your monthly campaign limit ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.</>
+                      : <>You have reached your monthly campaign limit ({campaignUsage.campaigns_limit}/{campaignUsage.campaigns_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.</>
                     }
                   </p>
                 </div>
               )}
               {campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
-                <div className={`flex items-start gap-2 p-3 rounded-xl border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
-                  <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+                  <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                   <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
                     {campaignUsage.dotd_used > campaignUsage.dotd_limit
-                      ? <>You have exceeded your monthly Deal of the Day limit ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className={`underline font-bold transition-colors ${isDark ? 'hover:text-amber-200' : 'hover:text-amber-600'}`}>upgrade</button> your plan.</>
-                      : <>You have reached your monthly Deal of the Day limit ({campaignUsage.dotd_limit}/{campaignUsage.dotd_limit}). Please <button onClick={() => setView('merchant_subscriptions')} className={`underline font-bold transition-colors ${isDark ? 'hover:text-amber-200' : 'hover:text-amber-600'}`}>upgrade</button> your plan.</>
+                      ? <>You have exceeded your monthly Deal of the Day limit ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.</>
+                      : <>You have reached your monthly Deal of the Day limit ({campaignUsage.dotd_limit}/{campaignUsage.dotd_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.</>
                     }
                   </p>
                 </div>
@@ -363,52 +279,64 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <button onClick={() => setView('merchant_deals')} className={`p-6 rounded-[2.5rem] flex flex-col gap-5 text-left group active:scale-[0.98] transition-all border ${isDark ? 'glass border-blue-500/20 bg-blue-500/5' : 'bg-white border-slate-200 shadow-md'}`}>
-          <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-            <Plus className="w-6 h-6 text-white" strokeWidth={3} />
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => setView('merchant_deals')}
+          className={`p-4 rounded-xl flex flex-col gap-3 text-left active:scale-[0.98] transition-all border ${
+            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+          }`}
+        >
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+            isDark ? 'bg-blue-500/10' : 'bg-blue-50'
+          }`}>
+            <Plus className="w-5 h-5 text-blue-500" />
           </div>
           <div>
-            <p className={`text-base font-black leading-none mb-1 ${headingClass}`}>New Deal Launch</p>
-            <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest">Launch Campaign</p>
+            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>New Deal</p>
+            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Launch Campaign</p>
           </div>
         </button>
-        <button onClick={() => setIsScanning(true)} className={`p-6 rounded-[2.5rem] flex flex-col gap-5 text-left group active:scale-[0.98] transition-all border ${isDark ? 'glass border-white/5' : 'bg-white border-slate-200 shadow-md'}`}>
-          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform ${isDark ? 'bg-slate-800' : 'bg-slate-900'}`}>
-            <QrCode className="w-6 h-6 text-white" />
+
+        <button
+          onClick={() => setIsScanning(true)}
+          className={`p-4 rounded-xl flex flex-col gap-3 text-left active:scale-[0.98] transition-all border ${
+            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+          }`}
+        >
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+            isDark ? 'bg-slate-800' : 'bg-slate-100'
+          }`}>
+            <QrCode className="w-5 h-5 text-slate-500" />
           </div>
           <div>
-            <p className={`text-base font-black leading-none mb-1 ${headingClass}`}>Scan & Verify</p>
-            <p className={`text-[8px] font-black uppercase tracking-widest ${subTextClass}`}>Redeem Voucher</p>
+            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Scan & Verify</p>
+            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Redeem Voucher</p>
           </div>
         </button>
       </div>
 
-      {/* Dynamic Festival Banner - Refined with themed background */}
-      <button 
+      {/* Festival Banner */}
+      <button
         onClick={() => setView('merchant_deals')}
-        className={`w-full p-6 rounded-[2.5rem] flex items-center gap-4 text-left group transition-all duration-300 relative overflow-hidden glass shadow-3xl
-          active:scale-[0.99] hover:scale-[1.01] 
-          ${getBannerThemeClasses(nearestFestival.themeKey, isDark)}`}
+        className={`w-full p-4 rounded-xl flex items-center gap-3 text-left active:scale-[0.98] transition-all border relative overflow-hidden ${
+          getBannerThemeClasses(nearestFestival.themeKey, isDark)
+        } ${isDark ? 'border-slate-800' : 'border-slate-200'}`}
       >
-          {/* Decorative Background Elements */}
-          <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/[0.03] to-transparent z-0"></div>
-          <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-blue-500 opacity-5 blur-xl animate-slow-pulse z-0"></div>
-
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 transition-transform duration-300 relative z-10 
-            group-hover:scale-105 group-active:scale-95 shadow-[inset_0_0_15px_rgba(59,130,246,0.2)]
-            ${isDark ? 'bg-blue-500/20' : 'bg-blue-200'}`}>
-              <Gift className="w-7 h-7 text-blue-500 animate-pulse-slow" />
-          </div>
-          <div className="relative z-10">
-              <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isDark ? 'text-slate-300' : 'text-blue-700'}`}>
-                  New opportunities for <span className="text-blue-500 text-sm">{nearestFestival.name}!</span>
-              </p>
-              <p className={`text-lg font-black leading-tight ${isDark ? 'text-white' : 'text-blue-900'}`}>
-                  Want to create an amazing deal? <span className="text-blue-500 text-lg">{nearestFestival.name}</span> is coming up!
-              </p>
-          </div>
-          <ChevronRight className={`w-6 h-6 ml-auto shrink-0 relative z-10 ${isDark ? 'text-blue-400' : 'text-blue-700'} group-hover:translate-x-1 transition-transform duration-300`} />
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+          isDark ? 'bg-blue-500/10' : 'bg-blue-50'
+        }`}>
+          <Gift className="w-5 h-5 text-blue-500" />
+        </div>
+        <div className="flex-1">
+          <p className={`text-xs font-medium mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            Upcoming: {nearestFestival.name}
+          </p>
+          <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            Create a special deal for {nearestFestival.name}!
+          </p>
+        </div>
+        <ChevronRight className={`w-5 h-5 shrink-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
       </button>
 
     </div>

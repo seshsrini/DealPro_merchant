@@ -61,6 +61,9 @@ Thumbs.db
 *.tsbuildinfo
 .eslintcache
 
-# Firebase Service Account Keys (CRITICAL: Never commit!)
+# Firebase / Google Services (CRITICAL: Never commit!)
 *-firebase-adminsdk-*.json
 firebase-service-account.json
+google-services.json
+android/app/google-services.json
+nul

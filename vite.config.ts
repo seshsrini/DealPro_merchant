@@ -8,6 +8,15 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          // Proxy SerpApi in dev to avoid CORS. In production (Capacitor native),
+          // the app calls SerpApi directly — CORS doesn't apply to native HTTP.
+          '/serpapi': {
+            target: 'https://serpapi.com',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/serpapi/, ''),
+          },
+        },
       },
       plugins: [react()],
       define: {

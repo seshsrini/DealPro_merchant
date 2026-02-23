@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
       .from('favorites')
       .select(`
         *,
-        user_profiles!fk_favorites_merchant (
+        merchant_profiles!fk_favorites_merchant (
           store_name,
           category
         ),
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
     const mappedData = (data || []).map((fav: any) => {
         const c = fav.campaigns;
         const mStore = c?.merchant_stores; 
-        const mProfile = fav.user_profiles;
+        const mProfile = fav.merchant_profiles;
 
         return {
           id: String(fav.campaign_id),

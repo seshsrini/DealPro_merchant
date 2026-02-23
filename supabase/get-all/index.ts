@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
         .from('campaigns')
         .select(`
           *,
-          user_profiles:merchant_id (store_name),
+          merchant_profiles:merchant_id (store_name),
           merchant_stores:store_id (address, city, state, landmark, latitude, longitude, store_hrs)
         `)
         .eq('status', 'active')
@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
       return {
         campaign_id: String(d.campaign_id || d.id),
         merchantId: d.merchant_id,
-        shopName: d.shop_name || d.user_profiles?.store_name || 'Retail Partner',
+        shopName: d.shop_name || d.merchant_profiles?.store_name || 'Retail Partner',
         thumbnail: d.image_url || DEFAULT_DEAL_IMAGE,
         deal_heading: d.deal_heading || '',
         offer_value: d.offer_value || '',

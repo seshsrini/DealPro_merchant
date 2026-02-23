@@ -1,18 +1,19 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, X, ImageIcon, Loader2 } from 'lucide-react';
+import { Camera, X, Loader2 } from 'lucide-react';
 
 interface ImageUploadProps {
   onImageSelected: (file: File | null) => void;
   previewUrl?: string;
+  theme?: 'light' | 'dark';
 }
 
-export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSelected, previewUrl }) => {
+export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSelected, previewUrl, theme = 'dark' }) => {
   const [internalPreview, setInternalPreview] = useState<string | null>(previewUrl || null);
   const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isDark = theme === 'dark';
 
-  // Requirement: Populate visual box when external URL is provided
   useEffect(() => {
     if (previewUrl) {
       setInternalPreview(previewUrl);
@@ -104,13 +105,13 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSelected, previ
       />
 
       {internalPreview ? (
-        <div className="relative group aspect-[16/10] rounded-[2.5rem] overflow-hidden border-2 border-white/10 shadow-2xl animate-reveal bg-slate-900/40">
+        <div className={`relative group aspect-[16/10] rounded-xl overflow-hidden border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
           <img src={internalPreview} className="w-full h-full object-cover" alt="Preview" />
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="px-5 py-2.5 bg-blue-600 rounded-xl text-white text-[10px] font-black uppercase tracking-widest border border-white/20 shadow-xl active:scale-95 transition-all"
+              className="px-4 py-2 bg-blue-600 rounded-lg text-white text-xs font-medium active:scale-[0.98] transition-all"
             >
               Replace Photo
             </button>
@@ -118,9 +119,9 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSelected, previ
           <button
             type="button"
             onClick={removeImage}
-            className="absolute top-5 right-5 w-10 h-10 bg-black/60 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/10 hover:bg-rose-500 transition-colors shadow-lg active:scale-90"
+            className="absolute top-3 right-3 w-8 h-8 bg-black/60 rounded-lg flex items-center justify-center text-white hover:bg-red-500 transition-colors active:scale-[0.98]"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       ) : (
@@ -128,20 +129,24 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSelected, previ
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isCompressing}
-          className="w-full aspect-[16/10] glass border-2 border-dashed border-white/10 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 hover:border-blue-500/50 hover:bg-blue-500/5 transition-all group active:scale-[0.98] shadow-inner"
+          className={`w-full aspect-[16/10] border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-3 transition-all group active:scale-[0.98] ${
+            isDark
+              ? 'border-slate-700 hover:border-blue-500/50 hover:bg-blue-500/5'
+              : 'border-slate-300 hover:border-blue-400 hover:bg-blue-50'
+          }`}
         >
           {isCompressing ? (
-            <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
           ) : (
-            <div className="w-16 h-16 rounded-3xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg border border-blue-500/20">
-              <Camera className="w-8 h-8 text-blue-500" />
+            <div className={`w-14 h-14 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
+              <Camera className="w-7 h-7 text-blue-500" />
             </div>
           )}
           <div className="text-center">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-300">
-              {isCompressing ? 'Optimizing Grid Image...' : 'Capture Campaign Visual'}
+            <p className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+              {isCompressing ? 'Optimizing image...' : 'Upload Campaign Image'}
             </p>
-            <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter">
+            <p className={`text-[10px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
               JPEG/PNG up to 500KB (Auto-compressed)
             </p>
           </div>

@@ -40,15 +40,16 @@ export const merchantService = {
       });
 
       if (!response.ok) {
-        let errorData;
+        const rawBody = await response.text();
+        console.error('[merchantService] Raw error body:', rawBody);
+        let errorMessage = `Registration failed: ${response.status}`;
         try {
-          errorData = await response.json();
-          // If the Edge Function returns an application-level error (e.g., duplicate username)
-          throw new Error(errorData.error || errorData.message || `Server error: ${response.status} ${response.statusText}`);
-        } catch (jsonError) {
-          // If response is not JSON or other parsing error
-          throw new Error(`Registration failed: ${response.status} ${response.statusText || 'Unknown error'}.`);
+          const errorData = JSON.parse(rawBody);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          if (rawBody) errorMessage = rawBody;
         }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();

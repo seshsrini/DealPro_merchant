@@ -5,7 +5,7 @@ declare const Deno: {
 };
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.49.1';
-import { validateInput, validatePassword, validateUsername, validateIndianPhone, validateGSTIN, validatePAN } from '../_shared/validation.ts';
+import { validateInput, validateUsername, validateIndianPhone, validateGSTIN, validatePAN, validateUdyam, validateFSSAI, validateTradeLicense } from '../_shared/validation.ts';
 import { applyRateLimit, RateLimitTiers } from '../_shared/rateLimiter.ts';
 
 const corsHeaders = {
@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
     const validation = validateInput(body, {
       required: ['fullName', 'username', 'email', 'password', 'phone', 'storeName', 'stores'],
       email: 'email',
-      phone: 'phone',
+      // phone validated separately below via validateIndianPhone (supports +91 prefix)
       minLength: { fullName: 1, username: 3, storeName: 1 },
       maxLength: { fullName: 100, username: 30, email: 100, storeName: 100 }
     });
@@ -54,7 +54,9 @@ Deno.serve(async (req) => {
 
     const {
         fullName, username, email, password, phone, role,
-        storeName, category, gstin, pan, stores, languagePreference
+        storeName, category, gstin, pan, stores, languagePreference,
+        businessType, udyamNo, fssaiNo, tradeLicenseNo,
+        termsAccepted, privacyAccepted
     } = validation.sanitizedData;
 
     // 2. Additional validations
@@ -66,9 +68,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.valid) {
-      return new Response(JSON.stringify({ error: passwordValidation.error }), {
+    if (!password || password.length < 6) {
+      return new Response(JSON.stringify({ error: 'Password must be at least 6 characters' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       });
@@ -82,22 +83,47 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validate GSTIN if provided
-    if (gstin) {
-      const gstinValidation = validateGSTIN(gstin);
-      if (!gstinValidation.valid) {
-        return new Response(JSON.stringify({ error: gstinValidation.error }), {
+    // Validate business document based on businessType
+    const bType = businessType || 'gstin';
+    if (bType === 'gstin') {
+      if (gstin) {
+        const gstinValidation = validateGSTIN(gstin);
+        if (!gstinValidation.valid) {
+          return new Response(JSON.stringify({ error: gstinValidation.error }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          });
+        }
+      }
+      if (pan) {
+        const panValidation = validatePAN(pan);
+        if (!panValidation.valid) {
+          return new Response(JSON.stringify({ error: panValidation.error }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          });
+        }
+      }
+    } else if (bType === 'udyam' && udyamNo) {
+      const udyamValidation = validateUdyam(udyamNo);
+      if (!udyamValidation.valid) {
+        return new Response(JSON.stringify({ error: udyamValidation.error }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 400,
         });
       }
-    }
-
-    // Validate PAN if provided
-    if (pan) {
-      const panValidation = validatePAN(pan);
-      if (!panValidation.valid) {
-        return new Response(JSON.stringify({ error: panValidation.error }), {
+    } else if (bType === 'fssai' && fssaiNo) {
+      const fssaiValidation = validateFSSAI(fssaiNo);
+      if (!fssaiValidation.valid) {
+        return new Response(JSON.stringify({ error: fssaiValidation.error }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        });
+      }
+    } else if (bType === 'trade_license' && tradeLicenseNo) {
+      const tradeValidation = validateTradeLicense(tradeLicenseNo);
+      if (!tradeValidation.valid) {
+        return new Response(JSON.stringify({ error: tradeValidation.error }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 400,
         });
@@ -133,9 +159,9 @@ Deno.serve(async (req) => {
     
     const userId = authData.user.id;
 
-    // 4. Insert Profile into user_profiles
+    // 4. Insert Profile into merchant_profiles
     const { data: profileData, error: profileInsertError } = await serviceRoleSupabase
-      .from('user_profiles')
+      .from('merchant_profiles')
       .insert([{
         id: userId,
         username,
@@ -146,8 +172,14 @@ Deno.serve(async (req) => {
         active_status: true,
         store_name: storeName, // The brand name
         category,
-        gstin,
-        pan,
+        gstin: bType === 'gstin' ? gstin : null,
+        pan: bType === 'gstin' ? pan : null,
+        business_type: bType,
+        udyam_no: bType === 'udyam' ? (udyamNo ? udyamNo.toUpperCase() : null) : null,
+        fssai_no: bType === 'fssai' ? fssaiNo : null,
+        trade_license_no: bType === 'trade_license' ? (tradeLicenseNo ? tradeLicenseNo.toUpperCase() : null) : null,
+        terms_accepted: termsAccepted === true,
+        privacy_accepted: privacyAccepted === true,
         lang_preference: languagePreference || 'en', // Default to English if not provided
       }])
       .select()
@@ -180,7 +212,7 @@ Deno.serve(async (req) => {
 
     if (storeError) {
       // Extensive Rollback
-      await serviceRoleSupabase.from('user_profiles').delete().eq('id', userId);
+      await serviceRoleSupabase.from('merchant_profiles').delete().eq('id', userId);
       await serviceRoleSupabase.auth.admin.deleteUser(userId);
       throw new Error(`Store Insertion Error: ${storeError.message}`);
     }

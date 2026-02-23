@@ -102,6 +102,11 @@ ROOT_FUNCTIONS=(
 
 mkdir -p supabase/functions
 
+# Copy _shared directory so relative imports resolve correctly
+if [ -d "supabase/_shared" ]; then
+  cp -r "supabase/_shared" "supabase/functions/_shared"
+fi
+
 for fn in "${ROOT_FUNCTIONS[@]}"; do
   if [ -d "supabase/$fn" ]; then
     echo "→ Deploying $fn..."
@@ -112,6 +117,9 @@ for fn in "${ROOT_FUNCTIONS[@]}"; do
     echo "  (skip $fn - directory not found)"
   fi
 done
+
+# Clean up _shared copy
+rm -rf "supabase/functions/_shared"
 
 echo ""
 echo "=== Done! All functions deployed to QA project ==="

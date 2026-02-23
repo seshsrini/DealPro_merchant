@@ -43,30 +43,31 @@ export const merchantService = {
    */
   registerMerchant: async (payload: any) => {
     // CRITICAL: Ensure the Edge Function is deployed at this exact path on your Supabase instance.
-    const FUNCTION_URL = `https://gkulyxglzqlhpqxlwjqw.supabase.co/functions/v1/register-merchant`; // Corrected FUNCTION_URL
-    
+    const FUNCTION_URL = `${supabaseUrl}/functions/v1/register-merchant`;
+
     try {
       console.log("[merchantService] Direct fetch for merchant registration to:", FUNCTION_URL);
       const response = await fetch(FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': supabaseAnonKey, // Use the imported anon key
-          'Authorization': `Bearer ${supabaseAnonKey}`, // Also send anon key as bearer for some edge cases
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        let errorData;
+        const rawBody = await response.text();
+        console.error('[merchantService] Raw error body:', rawBody);
+        let errorMessage = `Registration failed: ${response.status}`;
         try {
-          errorData = await response.json();
-          // If the Edge Function returns an application-level error (e.g., duplicate username)
-          throw new Error(errorData.error || errorData.message || `Server error: ${response.status} ${response.statusText}`);
-        } catch (jsonError) {
-          // If response is not JSON or other parsing error
-          throw new Error(`Registration failed: ${response.status} ${response.statusText || 'Unknown error'}.`);
+          const errorData = JSON.parse(rawBody);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          if (rawBody) errorMessage = rawBody;
         }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();

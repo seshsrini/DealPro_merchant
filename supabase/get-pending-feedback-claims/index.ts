@@ -160,7 +160,7 @@ Deno.serve(async (req) => {
     // Fetch all redeemed interactions for the user
     const { data: interactions, error: interactionsError } = await supabase
       .from('campaign_interactions')
-      .select('*, campaigns (deal_heading, offer_value, image_url, long_description, localized_heading, localized_offer, localized_shop_name, end_date), user_profiles:merchant_id (store_name)')
+      .select('*, campaigns (deal_heading, offer_value, image_url, long_description, localized_heading, localized_offer, localized_shop_name, end_date), merchant_profiles:merchant_id (store_name)')
       .eq('consumer_id', userId)
       .eq('is_redeemed', true)
       .order('interaction_id', { ascending: false });
@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
       .map((i: any) => {
         // Ensure campaign_details is always an object with fallbacks
         const campaignDetails = {
-          shop_name: i.user_profiles?.store_name || i.campaigns?.shop_name || 'Retail Partner',
+          shop_name: i.merchant_profiles?.store_name || i.campaigns?.shop_name || 'Retail Partner',
           deal_heading: i.campaigns?.deal_heading || 'Reward Details Unavailable',
           offer_value: i.campaigns?.offer_value || 'Offer Unavailable',
           image_url: i.campaigns?.image_url || DEFAULT_DEAL_IMAGE,

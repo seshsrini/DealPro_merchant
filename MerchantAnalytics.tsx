@@ -1,18 +1,16 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { User } from './types';
-import { Loader2, TrendingUp, PieChart, BarChart3, Calendar, AlertCircle, TicketCheck, MousePointer2, Percent, HeartHandshake, CheckCircle2, BarChart } from 'lucide-react';
+import { Loader2, TrendingUp, BarChart3, Calendar, AlertCircle, TicketCheck, MousePointer2, Percent, HeartHandshake, CheckCircle2, BarChart, Package, Eye, Heart, Star, Zap, TrendingDown, Award, Brain, Target, Clock, ChevronRight } from 'lucide-react';
 import { supabase } from './services/supabaseClient';
 import { mDashboardService } from './services/mDashboardService';
+import { aiInsightsService, AIInsight } from './services/aiInsightsService';
+import { performanceScoreService, PerformanceScore, ScoreFactor } from './services/performanceScoreService';
 
 interface MerchantAnalyticsProps {
   user: User;
   theme: 'light' | 'dark';
-}
-
-interface CategoryData {
-  category: string;
-  count: number;
-  percentage: number;
+  setView?: (view: any) => void;
 }
 
 interface TrendData {
@@ -33,167 +31,219 @@ interface AnalyticsData {
   };
 }
 
-export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, theme }) => {
+export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, theme, setView }) => {
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<'7' | '30' | 'lifetime'>('30');
 
-  // Lifetime analytics states
   const [totalLifetimeDeals, setTotalLifetimeDeals] = useState(0);
   const [totalLifetimeClicks, setTotalLifetimeClicks] = useState(0);
   const [totalLifetimeRedemptions, setTotalLifetimeRedemptions] = useState(0);
   const [totalInvitesSent, setTotalInvitesSent] = useState(0);
   const [totalInvitesAccepted, setTotalInvitesAccepted] = useState(0);
 
-  // Lifetime analytics loading states
   const [loadingTotalDeals, setLoadingTotalDeals] = useState(false);
   const [loadingTotalClicks, setLoadingTotalClicks] = useState(false);
   const [loadingTotalRedemptions, setLoadingTotalRedemptions] = useState(false);
   const [loadingInvitesSent, setLoadingInvitesSent] = useState(false);
   const [loadingInvitesAccepted, setLoadingInvitesAccepted] = useState(false);
 
+  const [catalogueStats, setCatalogueStats] = useState({
+    activeProducts: 0,
+    totalViews: 0,
+    totalLikes: 0,
+  });
+  const [loadingCatalogue, setLoadingCatalogue] = useState(false);
+
+  interface ProductPerformance {
+    id: string;
+    name: string;
+    category: string;
+    imageUrl: string | null;
+    views: number;
+    likes: number;
+    engagementScore: number;
+  }
+  const [topProducts, setTopProducts] = useState<ProductPerformance[]>([]);
+  const [loadingTopProducts, setLoadingTopProducts] = useState(false);
+
+  const [productInsights, setProductInsights] = useState({
+    bestCategory: '',
+    avgViewsPerProduct: 0,
+    avgLikesPerProduct: 0,
+    topPerformerName: '',
+    lowPerformerCount: 0,
+  });
+
+  const [aiInsights, setAiInsights] = useState<AIInsight[]>([]);
+  const [loadingAiInsights, setLoadingAiInsights] = useState(false);
+
+  const [performanceScore, setPerformanceScore] = useState<PerformanceScore | null>(null);
+  const [loadingPerformanceScore, setLoadingPerformanceScore] = useState(false);
+
   const isDark = theme === 'dark';
 
-  // Lifetime conversion rate
   const lifetimeConversionRate = useMemo(() => {
     return totalLifetimeClicks > 0
       ? ((totalLifetimeRedemptions / totalLifetimeClicks) * 100).toFixed(1) + '%'
       : '0%';
   }, [totalLifetimeRedemptions, totalLifetimeClicks]);
 
-  // Overall loading for the lifetime analytics section
   const isAnyAnalyticsLoading = loadingTotalDeals || loadingTotalClicks || loadingTotalRedemptions || loadingInvitesSent || loadingInvitesAccepted;
 
   useEffect(() => {
     fetchAnalytics();
   }, [selectedPeriod]);
 
-  // Fetch lifetime analytics
   useEffect(() => {
     const fetchLifetimeAnalytics = async () => {
-      if (!user?.id) {
-        console.log("[MerchantAnalytics] User ID not available for lifetime analytics, skipping fetch.");
-        return;
-      }
-
+      if (!user?.id) return;
       const merchantId = user.id;
 
       const fetches = [
         (async () => {
           setLoadingTotalDeals(true);
           try {
-            console.log("[MerchantAnalytics] Fetching totalLifetimeDeals for user ID:", merchantId);
             const { count } = await mDashboardService.getTotalLifetimeDeals(merchantId);
             setTotalLifetimeDeals(count || 0);
-            console.log("[MerchantAnalytics] totalLifetimeDeals fetched:", count);
-          } catch (error) {
-            console.error("[MerchantAnalytics] Error fetching totalLifetimeDeals:", error);
-            setTotalLifetimeDeals(0);
-          } finally {
-            setLoadingTotalDeals(false);
-          }
+          } catch { setTotalLifetimeDeals(0); }
+          finally { setLoadingTotalDeals(false); }
         })(),
         (async () => {
           setLoadingTotalClicks(true);
           try {
-            console.log("[MerchantAnalytics] Fetching totalLifetimeClicks for user ID:", merchantId);
             const { count } = await mDashboardService.getTotalLifetimeClicks(merchantId);
             setTotalLifetimeClicks(count || 0);
-            console.log("[MerchantAnalytics] totalLifetimeClicks fetched:", count);
-          } catch (error) {
-            console.error("[MerchantAnalytics] Error fetching totalLifetimeClicks:", error);
-            setTotalLifetimeClicks(0);
-          } finally {
-            setLoadingTotalClicks(false);
-          }
+          } catch { setTotalLifetimeClicks(0); }
+          finally { setLoadingTotalClicks(false); }
         })(),
         (async () => {
           setLoadingTotalRedemptions(true);
           try {
-            console.log("[MerchantAnalytics] Fetching totalLifetimeRedemptions for user ID:", merchantId);
             const { count } = await mDashboardService.getTotalLifetimeRedemptions(merchantId);
             setTotalLifetimeRedemptions(count || 0);
-            console.log("[MerchantAnalytics] totalLifetimeRedemptions fetched:", count);
-          } catch (error) {
-            console.error("[MerchantAnalytics] Error fetching totalLifetimeRedemptions:", error);
-            setTotalLifetimeRedemptions(0);
-          } finally {
-            setLoadingTotalRedemptions(false);
-          }
+          } catch { setTotalLifetimeRedemptions(0); }
+          finally { setLoadingTotalRedemptions(false); }
         })(),
         (async () => {
           setLoadingInvitesSent(true);
           try {
-            console.log("[MerchantAnalytics] Fetching totalInvitesSent for user ID:", merchantId);
             const { count } = await mDashboardService.getTotalInvitesSent(merchantId);
             setTotalInvitesSent(count || 0);
-            console.log("[MerchantAnalytics] totalInvitesSent fetched:", count);
-          } catch (error) {
-            console.error("[MerchantAnalytics] Error fetching totalInvitesSent:", error);
-            setTotalInvitesSent(0);
-          } finally {
-            setLoadingInvitesSent(false);
-          }
+          } catch { setTotalInvitesSent(0); }
+          finally { setLoadingInvitesSent(false); }
         })(),
         (async () => {
           setLoadingInvitesAccepted(true);
           try {
-            console.log("[MerchantAnalytics] Fetching totalInvitesAccepted for user ID:", merchantId);
             const { count } = await mDashboardService.getTotalInvitesAccepted(merchantId);
             setTotalInvitesAccepted(count || 0);
-            console.log("[MerchantAnalytics] totalInvitesAccepted fetched:", count);
-          } catch (error) {
-            console.error("[MerchantAnalytics] Error fetching totalInvitesAccepted:", error);
-            setTotalInvitesAccepted(0);
-          } finally {
-            setLoadingInvitesAccepted(false);
-          }
+          } catch { setTotalInvitesAccepted(0); }
+          finally { setLoadingInvitesAccepted(false); }
         })(),
       ];
 
       await Promise.allSettled(fetches);
-      console.log("[MerchantAnalytics] All lifetime analytics fetches attempted.");
     };
 
     fetchLifetimeAnalytics();
   }, [user?.id]);
 
+  useEffect(() => {
+    const fetchCatalogueStats = async () => {
+      if (!user?.id) return;
+      setLoadingCatalogue(true);
+      setLoadingTopProducts(true);
+
+      try {
+        const { data, error } = await supabase.functions.invoke('get-product-analytics', {
+          body: { merchantId: user.id },
+        });
+        if (error) throw error;
+
+        const { topProducts: topPerformers, productInsights, totalProducts, totalViews, totalLikes } = data;
+        setTopProducts(topPerformers || []);
+        setProductInsights(productInsights || {
+          bestCategory: '', avgViewsPerProduct: 0, avgLikesPerProduct: 0,
+          topPerformerName: '', lowPerformerCount: 0,
+        });
+        setCatalogueStats({
+          activeProducts: totalProducts || 0,
+          totalViews: totalViews || 0,
+          totalLikes: totalLikes || 0,
+        });
+      } catch {
+        setCatalogueStats({ activeProducts: 0, totalViews: 0, totalLikes: 0 });
+        setTopProducts([]);
+      } finally {
+        setLoadingCatalogue(false);
+        setLoadingTopProducts(false);
+      }
+    };
+
+    fetchCatalogueStats();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const fetchPerformanceScore = async () => {
+      if (!user?.id) return;
+      setLoadingPerformanceScore(true);
+      try {
+        const score = await performanceScoreService.getScore(user.id);
+        setPerformanceScore(score);
+      } catch {
+        setPerformanceScore(null);
+      } finally {
+        setLoadingPerformanceScore(false);
+      }
+    };
+
+    fetchPerformanceScore();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const fetchAIInsights = async () => {
+      if (!user?.id) return;
+      setLoadingAiInsights(true);
+      try {
+        const insights = await aiInsightsService.getAIInsights(user.id);
+        setAiInsights(insights);
+      } catch {
+        setAiInsights([]);
+      } finally {
+        setLoadingAiInsights(false);
+      }
+    };
+
+    fetchAIInsights();
+  }, [user?.id]);
+
   const fetchAnalytics = async () => {
     setLoading(true);
     setError(null);
-
     try {
       const { data, error } = await supabase.functions.invoke('merchant-analytics', {
         body: { period: selectedPeriod }
       });
-
       if (error) {
-        console.error('[MerchantAnalytics] Error fetching analytics:', error);
         setError(error.message || 'Failed to fetch analytics');
         return;
       }
-
-      console.log('[MerchantAnalytics] Analytics data:', data);
       setAnalytics(data);
     } catch (err: any) {
-      console.error('[MerchantAnalytics] Exception:', err);
       setError(err.message || 'An error occurred');
     } finally {
       setLoading(false);
     }
   };
 
-  const COLORS = ['#f59e0b', '#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#ef4444', '#06b6d4', '#f97316'];
-
   if (loading) {
     return (
-      <div className="px-6 pt-6 pb-32 animate-reveal">
+      <div className={`px-6 pt-6 pb-32 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
         <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <Loader2 className="w-12 h-12 text-yellow-500 animate-spin" />
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 animate-pulse">
-            Loading Intel
-          </p>
+          <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Loading analytics...</p>
         </div>
       </div>
     );
@@ -201,13 +251,13 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
 
   if (error) {
     return (
-      <div className="px-6 pt-6 pb-32 animate-reveal">
+      <div className={`px-6 pt-6 pb-32 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
         <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <AlertCircle className="w-12 h-12 text-red-500" />
-          <p className="text-sm font-bold text-red-500">{error}</p>
+          <AlertCircle className="w-8 h-8 text-red-500" />
+          <p className="text-sm font-medium text-red-500">{error}</p>
           <button
             onClick={fetchAnalytics}
-            className="px-6 py-3 bg-yellow-500 text-white rounded-xl font-bold hover:bg-yellow-600 transition-colors"
+            className="h-10 px-6 bg-slate-900 text-white rounded-xl text-sm font-medium active:scale-[0.98] transition-all"
           >
             Retry
           </button>
@@ -216,36 +266,54 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
     );
   }
 
-  if (!analytics) {
-    return null;
-  }
+  if (!analytics) return null;
 
   const maxTrendValue = Math.max(...analytics.campaignTrend.map(d => d.count), 1);
 
   return (
-    <div className="px-6 pt-6 pb-32 animate-reveal">
+    <div className={`px-6 pt-6 pb-32 space-y-6 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
+
+      {/* AI Insights CTA */}
+      {setView && (
+        <button
+          onClick={() => setView('merchant_ai_insights')}
+          className={`w-full p-4 rounded-xl flex items-center gap-3 text-left active:scale-[0.98] transition-all border ${
+            isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'
+          }`}
+        >
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+            isDark ? 'bg-purple-500/10' : 'bg-purple-50'
+          }`}>
+            <Brain className="w-5 h-5 text-purple-500" />
+          </div>
+          <div className="flex-1">
+            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>AI Insights Dashboard</p>
+            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Full AI-powered analysis & predictions</p>
+          </div>
+          <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+        </button>
+      )}
+
       {/* Header */}
-      <div className="mb-8">
-        <h2 className="text-3xl font-black uppercase tracking-tighter leading-none text-white">
-          Campaign<br />
-          <span className="text-yellow-500">Intel</span>
-        </h2>
-        <div className="flex items-center gap-2 mt-2">
-          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-          <p className="text-[10px] font-black text-yellow-600 uppercase tracking-[0.3em]">{user.store_name || 'MY INSIGHTS'}</p>
-        </div>
+      <div>
+        <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+          Campaign Analytics
+        </h1>
+        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+          {user.store_name || 'My Insights'}
+        </p>
       </div>
 
       {/* Period Selector */}
-      <div className="flex gap-2 mb-6">
+      <div className={`flex gap-1 p-1 rounded-lg border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
         {(['7', '30', 'lifetime'] as const).map(period => (
           <button
             key={period}
             onClick={() => setSelectedPeriod(period)}
-            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+            className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-all ${
               selectedPeriod === period
-                ? 'bg-yellow-600 text-white shadow-xl'
-                : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                ? 'bg-slate-900 text-white'
+                : isDark ? 'text-slate-400' : 'text-slate-500'
             }`}
           >
             {period === 'lifetime' ? 'Lifetime' : `${period} Days`}
@@ -254,80 +322,71 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="glass rounded-2xl p-4 border-white/10">
-          <div className="flex items-center gap-2 mb-2">
-            <BarChart3 className="w-4 h-4 text-yellow-500" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Campaigns</span>
+      <div className="grid grid-cols-3 gap-3">
+        <div className={`rounded-xl p-3 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <BarChart3 className="w-3.5 h-3.5 text-blue-500" />
+            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Campaigns</span>
           </div>
-          <p className="text-3xl font-black text-white text-center">{analytics.totalCampaigns}</p>
+          <p className={`text-2xl font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>{analytics.totalCampaigns}</p>
         </div>
 
-        <div className="glass rounded-2xl p-4 border-white/10">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-4 h-4 text-green-500" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Active</span>
+        <div className={`rounded-xl p-3 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Active</span>
           </div>
-          <p className="text-3xl font-black text-white text-center">{analytics.activeCampaigns}</p>
+          <p className={`text-2xl font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>{analytics.activeCampaigns}</p>
         </div>
 
-        <div className="glass rounded-2xl p-4 border-white/10">
-          <div className="flex items-center gap-2 mb-2">
-            <TicketCheck className="w-4 h-4 text-emerald-500" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Redemptions</span>
+        <div className={`rounded-xl p-3 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className="flex items-center gap-1.5 mb-2">
+            <TicketCheck className="w-3.5 h-3.5 text-amber-500" />
+            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Redeemed</span>
           </div>
-          <p className="text-3xl font-black text-white text-center">{totalLifetimeRedemptions.toLocaleString()}</p>
+          <p className={`text-2xl font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>{totalLifetimeRedemptions.toLocaleString()}</p>
         </div>
       </div>
 
-      {/* Status Breakdown */}
-      <div className="glass rounded-2xl p-5 border-white/10 mb-6">
-        <h3 className="text-sm font-black uppercase tracking-widest text-white mb-4">Campaign Status</h3>
+      {/* Campaign Status */}
+      <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>Campaign Status</h3>
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3">
-            <p className="text-[9px] font-black uppercase tracking-widest text-green-400 mb-1">Approved</p>
-            <p className="text-2xl font-black text-green-500">{analytics.statusBreakdown.approved}</p>
+          <div className={`rounded-lg p-3 border ${isDark ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
+            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Approved</p>
+            <p className="text-xl font-semibold text-emerald-500">{analytics.statusBreakdown.approved}</p>
           </div>
-          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3">
-            <p className="text-[9px] font-black uppercase tracking-widest text-yellow-400 mb-1">In Review</p>
-            <p className="text-2xl font-black text-yellow-500">{analytics.statusBreakdown.review}</p>
+          <div className={`rounded-lg p-3 border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>In Review</p>
+            <p className="text-xl font-semibold text-amber-500">{analytics.statusBreakdown.review}</p>
           </div>
-          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3">
-            <p className="text-[9px] font-black uppercase tracking-widest text-orange-400 mb-1">Needs Review</p>
-            <p className="text-2xl font-black text-orange-500">{analytics.statusBreakdown.needs_review}</p>
+          <div className={`rounded-lg p-3 border ${isDark ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-50 border-orange-200'}`}>
+            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>Needs Review</p>
+            <p className="text-xl font-semibold text-orange-500">{analytics.statusBreakdown.needs_review}</p>
           </div>
-          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
-            <p className="text-[9px] font-black uppercase tracking-widest text-red-400 mb-1">Expired</p>
-            <p className="text-2xl font-black text-red-500">{analytics.statusBreakdown.expired}</p>
+          <div className={`rounded-lg p-3 border ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
+            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-red-400' : 'text-red-600'}`}>Expired</p>
+            <p className="text-xl font-semibold text-red-500">{analytics.statusBreakdown.expired}</p>
           </div>
         </div>
       </div>
 
       {/* Campaign Trend Chart */}
-      <div className="glass rounded-2xl p-5 border-white/10 mb-6">
+      <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center gap-2 mb-4">
-          <Calendar className="w-4 h-4 text-yellow-500" />
-          <h3 className="text-sm font-black uppercase tracking-widest text-white">Campaign Creation Trend</h3>
+          <Calendar className="w-4 h-4 text-blue-500" />
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Campaign Trend</h3>
         </div>
 
-        {/* Line Chart */}
-        <div className="relative h-48 mt-6">
+        <div className="relative h-48 mt-4">
           <svg viewBox="0 0 400 150" className="w-full h-full" preserveAspectRatio="none">
             <defs>
-              {/* Gradient for area fill */}
               <linearGradient id="areaGradientMerchant" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.3" />
-                <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
-              </linearGradient>
-
-              {/* Gradient for line */}
-              <linearGradient id="lineGradientMerchant" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#f59e0b" />
-                <stop offset="100%" stopColor="#f97316" />
+                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.2" />
+                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
               </linearGradient>
             </defs>
 
-            {/* Grid lines */}
             {[0, 1, 2, 3, 4].map((i) => (
               <line
                 key={i}
@@ -335,65 +394,45 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
                 y1={i * 30}
                 x2="400"
                 y2={i * 30}
-                stroke="rgba(255,255,255,0.05)"
+                stroke={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}
                 strokeWidth="1"
               />
             ))}
 
-            {/* Data visualization */}
             {(() => {
               const data = analytics.campaignTrend;
               const maxValue = Math.max(...data.map(d => d.count), 1);
               const points = data.map((item, index) => {
                 const x = (index / Math.max(data.length - 1, 1)) * 400;
-                const y = 120 - (item.count / maxValue) * 100; // Invert Y and scale
+                const y = 120 - (item.count / maxValue) * 100;
                 return { x, y, count: item.count };
               });
 
-              // Create path data for the line
               const linePath = points.map((p, i) =>
                 `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`
               ).join(' ');
 
-              // Create path data for the area (filled region under the line)
               const areaPath = `${linePath} L ${points[points.length - 1].x} 120 L ${points[0].x} 120 Z`;
 
               return (
                 <>
-                  {/* Area fill */}
-                  <path
-                    d={areaPath}
-                    fill="url(#areaGradientMerchant)"
-                  />
-
-                  {/* Line */}
+                  <path d={areaPath} fill="url(#areaGradientMerchant)" />
                   <path
                     d={linePath}
                     fill="none"
-                    stroke="url(#lineGradientMerchant)"
-                    strokeWidth="3"
+                    stroke="#3b82f6"
+                    strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-
-                  {/* Data points with values */}
                   {points.map((point, index) => (
                     <g key={index}>
-                      {/* Small dot at the point */}
-                      <circle
-                        cx={point.x}
-                        cy={point.y}
-                        r="2"
-                        fill="#f59e0b"
-                        stroke="white"
-                        strokeWidth="1"
-                      />
-                      {/* Value label above the point */}
+                      <circle cx={point.x} cy={point.y} r="2" fill="#3b82f6" stroke="white" strokeWidth="1" />
                       <text
                         x={point.x}
                         y={point.y - 8}
                         textAnchor="middle"
-                        className="text-[8px] font-black fill-yellow-400"
+                        className={`text-[8px] font-medium ${isDark ? 'fill-slate-400' : 'fill-slate-500'}`}
                         style={{ fontFamily: 'inherit' }}
                       >
                         {point.count}
@@ -405,20 +444,17 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
             })()}
           </svg>
 
-          {/* X-axis labels (dates) */}
           <div className="flex justify-between mt-3 px-1">
             {analytics.campaignTrend.map((item, index) => {
-              // Show only every Nth label to avoid crowding
               const showLabel = analytics.campaignTrend.length <= 7 ||
                                 index === 0 ||
                                 index === analytics.campaignTrend.length - 1 ||
                                 index % Math.ceil(analytics.campaignTrend.length / 5) === 0;
-
               return (
                 <span
                   key={index}
-                  className={`text-[8px] font-black uppercase tracking-wider ${
-                    showLabel ? 'text-slate-400' : 'text-transparent'
+                  className={`text-[8px] font-medium ${
+                    showLabel ? (isDark ? 'text-slate-500' : 'text-slate-400') : 'text-transparent'
                   }`}
                   style={{ flex: 1, textAlign: index === 0 ? 'left' : index === analytics.campaignTrend.length - 1 ? 'right' : 'center' }}
                 >
@@ -428,85 +464,407 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
             })}
           </div>
 
-          {/* Y-axis label */}
-          <div className="absolute -left-1 top-0 text-[8px] font-black text-slate-400 uppercase tracking-wider">
+          <div className={`absolute -left-1 top-0 text-[8px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
             {maxTrendValue}
           </div>
-          <div className="absolute -left-1 bottom-8 text-[8px] font-black text-slate-400 uppercase tracking-wider">
+          <div className={`absolute -left-1 bottom-8 text-[8px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
             0
           </div>
         </div>
       </div>
 
-      {/* Lifetime Analytics Report */}
-      <div className="mt-10 space-y-6">
-        <div className="flex items-center justify-between px-2">
-          <h3 className="text-[11px] font-black uppercase tracking-[0.4em] text-yellow-600">Lifetime Analytics Report</h3>
-          <div className="px-2 py-1 glass rounded-lg border-white/5">
-            <span className="text-[10px] font-black text-yellow-500">Overall</span>
-          </div>
-        </div>
+      {/* Lifetime Analytics */}
+      <div className="space-y-4">
+        <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Lifetime Analytics</h3>
 
         {isAnyAnalyticsLoading ? (
-          <div className="p-12 rounded-[2.5rem] border border-white/5 bg-slate-900/20 text-center animate-reveal">
-            <BarChart className="w-8 h-8 mx-auto mb-4 text-slate-800" />
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Fetching Lifetime Data...</p>
+          <div className={`p-12 rounded-xl border text-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <Loader2 className="w-6 h-6 mx-auto mb-3 text-slate-400 animate-spin" />
+            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Loading lifetime data...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Total Clicks */}
-            <div className="group glass p-5 rounded-[2.5rem] flex flex-col items-start gap-4 border border-amber-500/20 bg-gradient-to-br from-amber-900/10 to-amber-500/5 shadow-2xl shadow-amber-500/10 overflow-hidden relative">
-              <div className="absolute -right-8 -bottom-8 w-24 h-24 rounded-full opacity-10 group-hover:opacity-20 transition-opacity duration-300 bg-amber-500"></div>
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-amber-500/10">
-                <MousePointer2 className="w-6 h-6 text-amber-500" />
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Total Clicks', value: totalLifetimeClicks.toLocaleString(), icon: MousePointer2, color: 'amber' },
+              { label: 'Conversion Rate', value: lifetimeConversionRate, icon: Percent, color: 'blue' },
+              { label: 'Invites Sent', value: totalInvitesSent.toLocaleString(), icon: HeartHandshake, color: 'purple' },
+              { label: 'Invites Accepted', value: totalInvitesAccepted.toLocaleString(), icon: CheckCircle2, color: 'emerald' },
+            ].map(({ label, value, icon: Icon, color }) => (
+              <div
+                key={label}
+                className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              >
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${
+                  isDark ? `bg-${color}-500/10` : `bg-${color}-50`
+                }`}>
+                  <Icon className={`w-5 h-5 text-${color}-500`} />
+                </div>
+                <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
+                <p className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{value}</p>
               </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-slate-300">Total Clicks</p>
-                <p className="text-3xl font-black text-white">{totalLifetimeClicks.toLocaleString()}</p>
-              </div>
-            </div>
-
-            {/* Lifetime Conversion Rate */}
-            <div className="group glass p-5 rounded-[2.5rem] flex flex-col items-start gap-4 border border-orange-500/20 bg-gradient-to-br from-orange-900/10 to-orange-500/5 shadow-2xl shadow-orange-500/10 overflow-hidden relative">
-              <div className="absolute -right-8 -bottom-8 w-24 h-24 rounded-full opacity-10 group-hover:opacity-20 transition-opacity duration-300 bg-orange-500"></div>
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-orange-500/10">
-                <Percent className="w-6 h-6 text-orange-500" />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-slate-300">Conversion Rate</p>
-                <p className="text-3xl font-black text-white">{lifetimeConversionRate}</p>
-              </div>
-            </div>
-
-            {/* Referral Invites Sent */}
-            <div className="group glass p-5 rounded-[2.5rem] flex flex-col items-start gap-4 border border-indigo-500/20 bg-gradient-to-br from-indigo-900/10 to-indigo-500/5 shadow-2xl shadow-indigo-500/10 overflow-hidden relative">
-              <div className="absolute -right-8 -bottom-8 w-24 h-24 rounded-full opacity-10 group-hover:opacity-20 transition-opacity duration-300 bg-indigo-500"></div>
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-indigo-500/10">
-                <HeartHandshake className="w-6 h-6 text-indigo-500" />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-slate-300">Referral Invites Sent</p>
-                <p className="text-3xl font-black text-white">{totalInvitesSent.toLocaleString()}</p>
-              </div>
-            </div>
-
-            {/* Referral Invites Accepted */}
-            <div className="group glass p-5 rounded-[2.5rem] flex flex-col items-start gap-4 border border-purple-500/20 bg-gradient-to-br from-purple-900/10 to-purple-500/5 shadow-2xl shadow-purple-500/10 overflow-hidden relative">
-              <div className="absolute -right-8 -bottom-8 w-24 h-24 rounded-full opacity-10 group-hover:opacity-20 transition-opacity duration-300 bg-purple-500"></div>
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-purple-500/10">
-                <CheckCircle2 className="w-6 h-6 text-purple-500" />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest mb-1 text-slate-300">Referral Invites Accepted</p>
-                <p className="text-3xl font-black text-white">{totalInvitesAccepted.toLocaleString()}</p>
-              </div>
-            </div>
+            ))}
           </div>
         )}
       </div>
 
-      <div className="text-center mt-10">
-        <p className="text-[9px] font-black uppercase tracking-[0.6em] text-slate-700">MERCHANT INTEL</p>
+      {/* Product Catalogue Stats */}
+      <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Product Catalogue</h3>
+          {loadingCatalogue && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Products', value: catalogueStats.activeProducts, icon: Package, color: 'blue' },
+            { label: 'Views', value: catalogueStats.totalViews, icon: Eye, color: 'slate' },
+            { label: 'Likes', value: catalogueStats.totalLikes, icon: Heart, color: 'pink' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className={`rounded-lg p-3 text-center ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+              <Icon className={`w-5 h-5 text-${color}-500 mx-auto mb-1.5`} />
+              <p className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{value}</p>
+              <p className={`text-[10px] font-medium mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Top Performing Products */}
+      {catalogueStats.activeProducts > 0 && (
+        <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Award className="w-4 h-4 text-amber-500" />
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Top Performers</h3>
+            </div>
+            {loadingTopProducts && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
+          </div>
+
+          {topProducts.length > 0 ? (
+            <div className="space-y-2">
+              {topProducts.map((product, index) => (
+                <div
+                  key={product.id}
+                  className={`p-3 rounded-lg flex items-center gap-3 border ${
+                    isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-semibold ${
+                    index === 0
+                      ? 'bg-amber-500 text-white'
+                      : index === 1
+                      ? 'bg-slate-400 text-white'
+                      : index === 2
+                      ? 'bg-amber-700 text-white'
+                      : isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    {index + 1}
+                  </div>
+
+                  <div className={`w-10 h-10 rounded-lg overflow-hidden shrink-0 ${isDark ? 'bg-slate-700' : 'bg-slate-100'}`}>
+                    {product.imageUrl ? (
+                      <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{product.name}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{product.category}</p>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5 text-right">
+                    <div className="flex items-center gap-1">
+                      <Eye className="w-3 h-3 text-blue-500" />
+                      <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{product.views}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Heart className="w-3 h-3 text-pink-500" />
+                      <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{product.likes}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-6">
+              <Package className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
+              <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>No product data yet</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Product Insights */}
+      {catalogueStats.activeProducts > 0 && (
+        <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="w-4 h-4 text-amber-500" />
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Smart Insights</h3>
+          </div>
+
+          <div className="space-y-2">
+            <div className={`p-3 rounded-lg border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-start gap-3">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
+                  <Star className="w-4 h-4 text-emerald-500" />
+                </div>
+                <div>
+                  <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Top Category</p>
+                  <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{productInsights.bestCategory}</p>
+                  <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Focus on adding more products in this category</p>
+                </div>
+              </div>
+            </div>
+
+            <div className={`p-3 rounded-lg border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-start gap-3">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
+                  <BarChart3 className="w-4 h-4 text-blue-500" />
+                </div>
+                <div>
+                  <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Avg Performance</p>
+                  <div className="flex gap-4 mt-1">
+                    <div>
+                      <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{productInsights.avgViewsPerProduct}</p>
+                      <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>views/product</p>
+                    </div>
+                    <div>
+                      <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{productInsights.avgLikesPerProduct}</p>
+                      <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>likes/product</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {productInsights.lowPerformerCount > 0 && (
+              <div className={`p-3 rounded-lg border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isDark ? 'bg-orange-500/10' : 'bg-orange-50'}`}>
+                    <TrendingDown className="w-4 h-4 text-orange-500" />
+                  </div>
+                  <div>
+                    <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Needs Attention</p>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{productInsights.lowPerformerCount} products</p>
+                    <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Update images or descriptions to boost engagement</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Performance Score */}
+      <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Award className="w-4 h-4 text-blue-500" />
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Performance Score</h3>
+          </div>
+          {loadingPerformanceScore && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
+        </div>
+
+        {performanceScore ? (
+          <div className="space-y-4">
+            {/* Score Gauge */}
+            <div className="flex flex-col items-center py-4">
+              <div className="relative w-28 h-28">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle
+                    cx="56" cy="56" r="48"
+                    stroke={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
+                    strokeWidth="10" fill="none"
+                  />
+                  <circle
+                    cx="56" cy="56" r="48"
+                    stroke="#3b82f6"
+                    strokeWidth="10" fill="none"
+                    strokeDasharray={`${2 * Math.PI * 48}`}
+                    strokeDashoffset={`${2 * Math.PI * 48 * (1 - performanceScore.totalScore / 100)}`}
+                    strokeLinecap="round"
+                    className="transition-all duration-1000"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <p className={`text-3xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{performanceScore.totalScore}</p>
+                  <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/ 100</p>
+                </div>
+              </div>
+
+              <div className={`mt-3 px-3 py-1 rounded-full text-xs font-medium ${
+                performanceScore.grade === 'Excellent' ? isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600' :
+                performanceScore.grade === 'Good' ? isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600' :
+                performanceScore.grade === 'Fair' ? isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-600' :
+                isDark ? 'bg-orange-500/10 text-orange-400' : 'bg-orange-50 text-orange-600'
+              }`}>
+                {performanceScore.grade}
+              </div>
+            </div>
+
+            {/* Score Breakdown */}
+            <div className="space-y-2">
+              <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Score Breakdown</p>
+              {performanceScore.factors.map((factor) => (
+                <div key={factor.name} className={`rounded-lg p-3 border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${
+                        factor.status === 'excellent' ? 'bg-emerald-500' :
+                        factor.status === 'good' ? 'bg-blue-500' :
+                        'bg-orange-500'
+                      }`} />
+                      <p className={`text-xs font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{factor.name}</p>
+                    </div>
+                    <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {factor.score}/{factor.maxScore}
+                    </p>
+                  </div>
+
+                  <div className={`w-full h-1.5 rounded-full overflow-hidden mb-2 ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}>
+                    <div
+                      className={`h-full transition-all duration-500 rounded-full ${
+                        factor.status === 'excellent' ? 'bg-emerald-500' :
+                        factor.status === 'good' ? 'bg-blue-500' :
+                        'bg-orange-500'
+                      }`}
+                      style={{ width: `${(factor.score / factor.maxScore) * 100}%` }}
+                    />
+                  </div>
+
+                  <p className={`text-[10px] leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{factor.message}</p>
+
+                  {factor.tips && factor.tips.length > 0 && (
+                    <div className={`mt-2 pt-2 border-t ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+                      {factor.tips.map((tip, idx) => (
+                        <p key={idx} className="text-[10px] text-orange-500 flex items-start gap-1 mt-0.5">
+                          <span className="mt-0.5">*</span>
+                          <span>{tip}</span>
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Quick Wins */}
+            {performanceScore.quickWins.length > 0 && (
+              <div className={`p-4 rounded-lg border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <p className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Quick Wins</p>
+                </div>
+                <div className="space-y-2">
+                  {performanceScore.quickWins.map((win, idx) => (
+                    <div key={idx} className="flex items-start gap-2">
+                      <p className={`flex-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{win.tip}</p>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'
+                      }`}>+{win.points}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {setView && (
+              <button
+                onClick={() => setView('merchant_ai_insights')}
+                className="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+              >
+                <Brain className="w-4 h-4" />
+                View AI Insights Dashboard
+              </button>
+            )}
+          </div>
+        ) : !loadingPerformanceScore ? (
+          <div className="text-center py-6">
+            <Award className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
+            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Calculating your performance score...</p>
+          </div>
+        ) : null}
+      </div>
+
+      {/* AI Recommendations */}
+      <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Brain className="w-4 h-4 text-purple-500" />
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>AI Recommendations</h3>
+          </div>
+          {loadingAiInsights && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
+        </div>
+
+        {aiInsights.length > 0 ? (
+          <div className="space-y-2">
+            {aiInsights.map((insight) => {
+              const impactColors = {
+                high: { bg: isDark ? 'bg-red-500/10' : 'bg-red-50', border: isDark ? 'border-red-500/20' : 'border-red-200', text: 'text-red-500' },
+                medium: { bg: isDark ? 'bg-orange-500/10' : 'bg-orange-50', border: isDark ? 'border-orange-500/20' : 'border-orange-200', text: 'text-orange-500' },
+                low: { bg: isDark ? 'bg-blue-500/10' : 'bg-blue-50', border: isDark ? 'border-blue-500/20' : 'border-blue-200', text: 'text-blue-500' },
+              };
+
+              const typeIcons = {
+                pricing: Target,
+                timing: Clock,
+                action: Zap,
+                category: Package,
+                engagement: TrendingUp,
+              };
+
+              const colors = impactColors[insight.impact];
+              const Icon = typeIcons[insight.type];
+
+              return (
+                <div key={insight.id} className={`p-3 rounded-lg border ${colors.bg} ${colors.border}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                      isDark ? 'bg-slate-800' : 'bg-white'
+                    }`}>
+                      <Icon className={`w-4 h-4 ${colors.text}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className={`text-xs font-semibold ${colors.text}`}>{insight.title}</p>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-medium ${colors.text} ${
+                          isDark ? 'bg-slate-800' : 'bg-white'
+                        }`}>
+                          {insight.impact}
+                        </span>
+                      </div>
+                      <p className={`text-xs leading-relaxed mb-2 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                        {insight.recommendation}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <div className={`flex-1 h-1 rounded-full overflow-hidden ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}>
+                          <div
+                            className={`h-full rounded-full ${
+                              insight.impact === 'high' ? 'bg-red-500' :
+                              insight.impact === 'medium' ? 'bg-orange-500' : 'bg-blue-500'
+                            }`}
+                            style={{ width: `${insight.confidence}%` }}
+                          />
+                        </div>
+                        <span className={`text-[9px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{insight.confidence}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : !loadingAiInsights ? (
+          <div className="text-center py-6">
+            <Brain className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
+            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>AI is analyzing your data...</p>
+            <p className={`text-[10px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Insights will appear as you add products and create deals</p>
+          </div>
+        ) : null}
       </div>
     </div>
   );

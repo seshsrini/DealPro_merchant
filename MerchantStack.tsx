@@ -13,6 +13,10 @@ import { MerchantSubscriptions } from './MerchantSubscriptions'; // New import
 import { PaymentPlans } from './PaymentPlans'; // Import PaymentPlans
 import { BankVerification } from './BankVerification'; // NEW: Import BankVerification
 import { MerchantAnalytics } from './MerchantAnalytics'; // Import MerchantAnalytics
+import { MerchantCatalogue } from './MerchantCatalogue';
+import { SmartNotifications } from './SmartNotifications'; // Import SmartNotifications
+import { MerchantAIInsights } from './MerchantAIInsights'; // Import AI Insights Dashboard
+import { AIAssistantChat } from './AIAssistantChat'; // Import AI Assistant Chat
 
 type CampaignTab = 'review' | 'active' | 'expired' | 'needs review';
 
@@ -53,29 +57,31 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
   if (!user.hasActiveSubscription && !allowedWithoutSubscription.includes(view)) {
     console.log('[MerchantStack] No active subscription, showing subscriptions page');
     // Show subscriptions page if trying to access restricted pages
-    return <MerchantSubscriptions user={user} setView={setView} setUser={setUser} />;
+    return (
+      <>
+        <MerchantSubscriptions user={user} setView={setView} setUser={setUser} />
+        <AIAssistantChat user={user} theme={theme} setView={setView} />
+      </>
+    );
   }
 
-  if (view === 'profile') return <MerchantProfile user={user} setUser={setUser} setView={setView} />;
-  if (view === 'edit_profile') return <EditProfile user={user} setUser={setUser} setView={setView} />;
+  // Render current view
+  let currentView;
 
-  // NEW: Render MerchantSubscriptions when view is 'merchant_subscriptions'
-  if (view === 'merchant_subscriptions') return <MerchantSubscriptions user={user} setView={setView} setUser={setUser} />;
+  if (view === 'profile') currentView = <MerchantProfile user={user} setUser={setUser} setView={setView} theme={theme} />;
+  else if (view === 'edit_profile') currentView = <EditProfile user={user} setUser={setUser} setView={setView} theme={theme} />;
+  else if (view === 'merchant_subscriptions') currentView = <MerchantSubscriptions user={user} setView={setView} setUser={setUser} />;
+  else if (view === 'payment_plans') currentView = <PaymentPlans user={user} setView={setView} />;
 
-  // Render PaymentPlans when view is 'payment_plans'
-  if (view === 'payment_plans') return <PaymentPlans user={user} setView={setView} />;
-
-  // NEW: Render BankVerification when view is 'bank_verification'
-  if (view === 'bank_verification') return <BankVerification user={user} setUser={setUser} setView={setView} />;
-
-  if (view === 'merchant_deals') {
+  else if (view === 'bank_verification') currentView = <BankVerification user={user} setUser={setUser} setView={setView} />;
+  else if (view === 'merchant_deals') {
     // Clear the preSelectedTab after using it
     const tabToSelect = preSelectedTab;
     if (setPreSelectedTab && preSelectedTab) {
       setPreSelectedTab(null);
     }
 
-    return (
+    currentView = (
       <MerchantMyCampaigns
         user={user}
         deals={deals}
@@ -86,18 +92,18 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
         preSelectedEditDealId={dealIdToEdit}
         onClearPreSelected={onClearDealIdToEdit}
         preSelectedTab={tabToSelect}
+        theme={theme}
       />
     );
   }
-
-  if (view === 'merchant_deal_of_day') return (
+  else if (view === 'merchant_deal_of_day') currentView = (
     <MerchantDealOfDay
       user={user}
       setView={setView}
+      theme={theme}
     />
   );
-
-  if (view === 'merchant_dashboard') return (
+  else if (view === 'merchant_dashboard') currentView = (
     <MerchantDashboard
       view={view}
       setView={setView}
@@ -115,8 +121,36 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
       setPreSelectedTab={setPreSelectedTab}
     />
   );
+  else if (view === 'merchant_analytics') currentView = <MerchantAnalytics user={user} theme={theme} setView={setView} />;
+  else if (view === 'merchant_catalogue') currentView = <MerchantCatalogue user={user} theme={theme} setView={setView} />;
+  else if (view === 'merchant_notifications') currentView = (
+    <SmartNotifications
+      user={user}
+      theme={theme}
+      onNavigate={(route) => {
+        // Route mapping for navigation
+        if (route === '/merchant/campaigns') setView('merchant_deals');
+        else if (route === '/merchant/catalogue') setView('merchant_catalogue');
+        else if (route === '/merchant/analytics') setView('merchant_analytics');
+      }}
+    />
+  );
+  else if (view === 'merchant_ai_insights') currentView = (
+    <MerchantAIInsights
+      user={user}
+      theme={theme}
+      setView={setView}
+    />
+  );
+  else {
+    currentView = null;
+  }
 
-  if (view === 'merchant_analytics') return <MerchantAnalytics user={user} theme={theme} />;
-
-  return null;
+  // Render current view with global AI Assistant
+  return (
+    <>
+      {currentView}
+      <AIAssistantChat user={user} theme={theme} setView={setView} />
+    </>
+  );
 };

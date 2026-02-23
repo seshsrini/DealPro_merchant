@@ -8,7 +8,7 @@ export const userService = {
     try {
       // Added explicit headers to ensure Content-Type is set for the JSON body
       const { data, error } = await supabase.functions.invoke('login', {
-        body: { identifier, password },
+        body: { identifier, password, userType: 'merchant' },
         headers: {
           'Content-Type': 'application/json',
         }
@@ -126,7 +126,7 @@ export const userService = {
    * @param value The GSTIN or PAN value to check
    * @returns Promise<boolean> true if value exists (taken), false otherwise.
    */
-  validateMerchantField: async (field: 'gstin' | 'pan', value: string): Promise<boolean> => {
+  validateMerchantField: async (field: 'gstin' | 'pan' | 'udyam_no' | 'fssai_no' | 'trade_license_no', value: string): Promise<boolean> => {
     try {
       const { data, error: invokeError } = await supabase.functions.invoke('validate-merchant-field', {
         body: { field, value },

@@ -70,9 +70,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 4. Check Role in user_profiles
+    // 4. Check Role in merchant_profiles (dealadmin is a merchant-app role)
     const { data: profile, error: profileError } = await userClient
-      .from('user_profiles')
+      .from('merchant_profiles')
       .select('role')
       .eq('id', user.id)
       .single();

@@ -205,15 +205,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Perform update on custom user_profiles table
+    // Perform update on the correct profile table based on role
+    const profileTable = (role === 'merchant' || role === 'dealadmin')
+      ? 'merchant_profiles'
+      : 'user_profiles';
     if (Object.keys(profileUpdatePayload).length > 0) {
       const { error: profileError } = await serviceRoleSupabase
-        .from('user_profiles') // Always update user_profiles
+        .from(profileTable)
         .update(profileUpdatePayload)
         .eq('id', id);
 
       if (profileError) {
-        console.error(`[user/update-profile EF] Supabase user_profiles update failed:`, profileError.message);
+        console.error(`[user/update-profile EF] ${profileTable} update failed:`, profileError.message);
         throw profileError;
       }
     }

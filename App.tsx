@@ -1,29 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AppView, User, Deal } from './types'; // Import User type
-import { userService } from './services/userService';
-import { biometricService } from './services/biometricService'; // Corrected import syntax
+import { biometricService } from './services/biometricService';
 import { AuthStack } from './AuthStack';
 import { MemberJoin } from './memberJoin';
-import { ConsumerStack } from './ConsumerStack';
 import { MerchantStack } from './MerchantStack';
-import { DealAdminStack } from './DealAdminStack'; // NEW: Import DealAdminStack
-import { RedemptionSurvey } from './RedemptionSurvey';
-import { Onboarding } from './Onboarding';
+import { DealAdminStack } from './DealAdminStack';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { LanguageSelection } from './components/LanguageSelection';
-import { Header, BottomNav, MerchantBottomNav, DealAdminBottomNav } from './components/Navigation'; // Added imports
-import { Loader2 } from 'lucide-react';
-// OLD: import { MyredeemService } from './services/MyredeemService';
-// NEW: Import the dedicated redemption history service
-import { redemptionHistoryService } from './services/redemptionHistoryService';
+import { Header, MerchantBottomNav, DealAdminBottomNav } from './components/Navigation';
 import { QRscan } from './QRscan';
-import { updateSupabaseSession } from './services/supabaseClient'; // Import the session updater
+import { updateSupabaseSession } from './services/supabaseClient';
 import { addCampaignService } from './services/addCampaignService';
-import { getCampaignsConsumer } from './services/getCampaignsConsumer'; // NEW: Import getCampaignsConsumer
-import { OtpVerificationModal } from './OtpVerificationModal'; // New Import
-import { fetchFavoritesService } from './services/fetchFavorites'; // NEW: Import fetchFavoritesService
-import { pinnedDealsService } from './services/pinnedDealsService'; // NEW: Import pinnedDealsService
-import { notificationsService } from './services/notificationsService';
+import { OtpVerificationModal } from './OtpVerificationModal';
+import { TrendingUp, BarChart3, Zap } from 'lucide-react';
 import { PrivacyPolicy } from './PrivacyPolicy'; // Privacy Policy component
 import { TermsOfService } from './TermsOfService'; // Terms of Service component
 import { PrivacyPolicySignup } from './PrivacyPolicySignup'; // Privacy Policy for signup
@@ -32,12 +21,13 @@ import { TermsOfServiceSignup } from './TermsOfServiceSignup'; // Terms of Servi
 const AppContent: React.FC = () => {
   const [view, setView] = useState<AppView>('splash');
   const [lastListView, setLastListView] = useState<AppView>('home');
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [loading, setLoading] = useState(false);
   const [hasBiometricSession, setHasBiometricSession] = useState(false);
   const [dealIdToEdit, setDealIdToEdit] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [preSelectedTab, setPreSelectedTab] = useState<'review' | 'active' | 'expired' | 'needs review' | null>(null);
+  const [pendingAuthView, setPendingAuthView] = useState<AppView>('login');
 
   // User state now correctly initialized with the User interface structure
   const [user, setUser] = useState<User>({
@@ -51,19 +41,10 @@ const AppContent: React.FC = () => {
     onboarding_complete: false, // Initialize onboarding status
     hasActiveSubscription: false, // Initialize subscription status
   });
-  const [deals, setDeals] = useState<Deal[]>([]); // This will now only hold merchant deals or be an empty array for consumers
-  const [adminDeals, setAdminDeals] = useState<Deal[]>([]); // NEW: State for DealAdmin deals
-  const [favoriteIds, setFavoriteIds] = useState<Map<string, string>>(new Map());
-  // Fix: Corrected the initialization of `redeemedIds` to use `useState` properly.
-  const [redeemedIds, setRedeemedIds] = useState<Set<string>>(new Set());
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [adminDeals, setAdminDeals] = useState<Deal[]>([]);
 
-  // NEW: State to hold full Deal objects for favorites
-  const [favoriteDeals, setFavoriteDeals] = useState<Deal[]>([]);
-
-  // NEW: State to hold pinned deals
-  const [pinnedDeals, setPinnedDeals] = useState<any[]>([]);
-
-  // OTP Modal State for Consumer Phone Verification during Registration
+  // OTP Modal State for Merchant Phone Verification during Registration
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpPhoneNumber, setOtpPhoneNumber] = useState('');
   const [isPhoneVerifiedForRegistration, setIsPhoneVerifiedForRegistration] = useState(false);
@@ -71,87 +52,32 @@ const AppContent: React.FC = () => {
   // New state for registration success message
   const [registrationSuccessMessage, setRegistrationSuccessMessage] = useState<string | null>(null);
 
-  // State to track if consumer has completed location selection
-  const [isLocationComplete, setIsLocationComplete] = useState(false);
-
   // Terms and Privacy acceptance state (lifted up from MemberJoin to share with Terms/Privacy pages)
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
   // Role selection state for signup (persist across navigation)
-  const [signupRole, setSignupRole] = useState<'user' | 'merchant'>('user');
-  const [showRoleSelector, setShowRoleSelector] = useState(true);
+  // Merchant app: always sign up as merchant, no role selector
+  const signupRole: 'user' | 'merchant' = 'merchant';
+  const setSignupRole = (_: 'user' | 'merchant') => {};
+  const showRoleSelector = false;
+  const setShowRoleSelector = (_: boolean) => {};
 
-  // Notification bell: unread count for consumer
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const unreadNotifications = 0;
 
+
+  const prevViewRef = useRef<AppView | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
 
   const navigateTo = (newView: AppView) => {
     if (['home', 'deals', 'deals_of_day', 'favorites', 'merchant_dashboard', 'merchant_deals', 'profile', 'store_search', 'dealadmin_review_deals', 'dealadmin_dashboard', 'dealadmin_analytics'].includes(newView)) {
       setLastListView(newView);
     }
+    prevViewRef.current = view;
     setView(newView);
   };
 
-  // NEW: Function to fetch and update consumer favorites
-  const updateConsumerFavorites = useCallback(async (consumerId: string) => {
-    if (!consumerId || user.role !== 'consumer') {
-      console.log("[App.tsx updateConsumerFavorites] Not a consumer or user ID missing, skipping favorites fetch.");
-      setFavoriteIds(new Map());
-      setFavoriteDeals([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      console.log("[App.tsx updateConsumerFavorites] Fetching favorites for consumer ID:", consumerId);
-      // Pass the access token from user state
-      const favsData = await fetchFavoritesService.fetchFavorites(consumerId, user.access_token);
-
-      const favMap = new Map<string, string>();
-      favsData.forEach(item => {
-        // Fix: Use item.campaign_id instead of item.id
-        if (item.campaign_id) favMap.set(String(item.campaign_id), item.status || 'active');
-      });
-      setFavoriteIds(favMap);
-      setFavoriteDeals(favsData); // Populate the full favorite deals state
-      console.log("[App.tsx updateConsumerFavorites] Fetched favsData:", favsData);
-    } catch (err) {
-      console.error("[App.tsx - updateConsumerFavorites] Failed to fetch favorites:", err);
-      setFavoriteIds(new Map());
-      setFavoriteDeals([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [user.role, user.access_token]); // Depend on user.role and access_token
-
-  // NEW: Function to fetch and update consumer pinned deals
-  const updateConsumerPinnedDeals = useCallback(async (consumerId: string) => {
-    if (!consumerId || user.role !== 'consumer') {
-      console.log("[App.tsx updateConsumerPinnedDeals] Not a consumer or user ID missing, skipping pinned deals fetch.");
-      setPinnedDeals([]);
-      return;
-    }
-    try {
-      console.log("[App.tsx updateConsumerPinnedDeals] Fetching pinned deals for consumer ID:", consumerId);
-      const pinsData = await pinnedDealsService.getUserPinnedDeals(consumerId);
-
-      console.log("[App.tsx updateConsumerPinnedDeals] Raw pinned deals data:", pinsData);
-
-      // Sort by created_at descending (newest first)
-      const sortedPins = pinsData.sort((a, b) => {
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      });
-
-      setPinnedDeals(sortedPins);
-      console.log("[App.tsx updateConsumerPinnedDeals] Fetched and sorted pinned deals:", sortedPins.length, sortedPins);
-    } catch (err) {
-      console.error("[App.tsx - updateConsumerPinnedDeals] Failed to fetch pinned deals:", err);
-      console.error("[App.tsx - updateConsumerPinnedDeals] Error details:", err);
-      setPinnedDeals([]);
-    }
-  }, [user.role]); // Depend on user.role
-
-  // refreshDeals is now primarily for Merchant Deals and consumer-specific redemptions
+  // refreshDeals fetches merchant's own campaigns
   const refreshDeals = useCallback(async () => {
     if (!user.isLoggedIn || !user.id || !user.access_token) {
       console.log("[App.tsx refreshDeals] Authentication state incomplete. Aborting fetch.");
@@ -168,19 +94,7 @@ const AppContent: React.FC = () => {
         console.log(`[App.tsx refreshDeals] Pipeline Success: Received ${fetchedDeals.length} campaigns.`);
       }
       
-      setDeals(fetchedDeals); 
-      
-      // Conditionally fetch redemption history only for consumers
-      if (user.role === 'consumer') {
-        const historyData = await redemptionHistoryService.getRedemptionHistory(user.id);
-        const trulyRedeemedCampaignIds = new Set<string>();
-        historyData.forEach(item => {
-          if (item.is_redeemed === true) {
-            trulyRedeemedCampaignIds.add(String(item.campaign_id));
-          }
-        });
-        setRedeemedIds(trulyRedeemedCampaignIds);
-      }
+      setDeals(fetchedDeals);
     } catch (err) {
       console.error("[App.tsx refreshDeals] Data pipeline failure:", err);
     }
@@ -209,8 +123,8 @@ const AppContent: React.FC = () => {
   }, [user.id, user.role, user.isLoggedIn, user.access_token]);
 
   useEffect(() => {
-    if (user.id && user.isLoggedIn) { 
-      if (user.role === 'merchant' || user.role === 'consumer') {
+    if (user.id && user.isLoggedIn) {
+      if (user.role === 'merchant') {
         refreshDeals();
       } else if (user.role === 'dealadmin') {
         refreshAdminDeals();
@@ -236,45 +150,38 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (view === 'splash') {
-      const timer = setTimeout(() => {
-        // Always navigate to login after splash, AuthStack will handle session restore.
-        setView('login');
-      }, 4000); // 4-second splash screen
+      let hasSession = false;
 
       biometricService.isAvailable().then(available => {
         setHasBiometricSession(available);
+        if (available) hasSession = true;
       });
+
+      const timer = setTimeout(() => {
+        const hasCompletedLangSelection = localStorage.getItem('hasCompletedLanguageSelection') === 'true';
+        // Returning users (biometric or already selected language) → login
+        // First-time users → welcome
+        setView((hasSession || hasCompletedLangSelection) ? 'login' : 'welcome');
+      }, 4000);
 
       return () => clearTimeout(timer);
     }
   }, [view]);
 
-  // Always show role selector when navigating to register view
+  // Show role selector when navigating to register, but NOT when returning from terms/privacy pages
   useEffect(() => {
-    if (view === 'register') {
+    const fromSignupSubflow = prevViewRef.current === 'terms_of_service_signup' || prevViewRef.current === 'privacy_policy_signup';
+    if (view === 'register' && !fromSignupSubflow) {
       setShowRoleSelector(true);
     }
-  }, [view]);
-
-  // Fetch unread notification count for consumers + realtime subscription
-  useEffect(() => {
-    if (!user.isLoggedIn || user.role !== 'consumer' || !user.id) {
-      setUnreadNotifications(0);
-      return;
+    if (view === 'register' && fromSignupSubflow) {
+      setTimeout(() => {
+        if (mainRef.current) {
+          mainRef.current.scrollTo({ top: mainRef.current.scrollHeight, behavior: 'smooth' });
+        }
+      }, 100);
     }
-
-    const fetchUnreadCount = async () => {
-      const count = await notificationsService.getUnreadCount(user.id);
-      setUnreadNotifications(count);
-    };
-
-    fetchUnreadCount();
-
-    // Poll every 30 seconds for new notifications (avoids WebSocket/Realtime dependency)
-    const interval = setInterval(fetchUnreadCount, 30000);
-
-    return () => { clearInterval(interval); };
-  }, [user.id, user.isLoggedIn, user.role]);
+  }, [view]);
 
   // Biometric Auto-Login
   useEffect(() => {
@@ -286,15 +193,12 @@ const AppContent: React.FC = () => {
 
           if (authenticatedUser) {
             setUser(authenticatedUser);
-            const userRole = authenticatedUser.role || 'consumer';
-            const onboardingDone = authenticatedUser.onboarding_complete;
+            const userRole = authenticatedUser.role;
 
             if (userRole === 'merchant') {
               navigateTo('merchant_dashboard');
             } else if (userRole === 'dealadmin') {
               navigateTo('dealadmin_review_deals');
-            } else {
-              navigateTo(onboardingDone ? 'home' : 'onboarding');
             }
           }
         } catch (error) {
@@ -312,7 +216,9 @@ const AppContent: React.FC = () => {
   const isLoginScreen = !user.isLoggedIn && (view === 'login' || view === 'forgot_password' || view === 'register');
 
   const handleBackNavigation = () => {
-    if (!user.isLoggedIn && (view === 'register' || view === 'forgot_password' || view === 'verify_phone')) {
+    if (view === 'language_selection') {
+      navigateTo('welcome');
+    } else if (!user.isLoggedIn && (view === 'register' || view === 'forgot_password' || view === 'verify_phone')) {
       navigateTo('login');
     } else if (view === 'merchant_deals') {
       navigateTo('merchant_dashboard');
@@ -326,32 +232,94 @@ const AppContent: React.FC = () => {
 
 
   return (
-    <div className={`max-w-md mx-auto min-h-screen relative flex flex-col transition-colors duration-500 ${
-      isLoginScreen 
-        ? (theme === 'dark' ? 'bg-black text-white' : 'bg-slate-50 text-slate-900') // Specific for login screens
-        : (theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900') // General app screens
+    <div className={`max-w-md mx-auto h-screen overflow-hidden relative flex flex-col transition-colors duration-500 ${
+      theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
     } ${theme === 'light' ? 'light-mode' : ''}`}> {/* Apply light-mode class to the root div */}
       {view === 'splash' ? (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6">
           <div className="relative mb-8 w-48 h-48">
-            <div className="absolute inset-0 bg-yellow-500/20 blur-3xl rounded-full animate-pulse"></div>
-            <img src="/assets/logo.svg" alt="DealPro Logo" className="w-full h-full object-contain animate-float relative z-10" />
+            <img src="/assets/merchantlogo.svg" alt="DealPro Merchant Logo" className="w-full h-full object-contain animate-float" />
           </div>
-          <h1 className="text-5xl font-black tracking-tighter text-white uppercase text-center">
-            DEAL<span className="text-yellow-500">Pro</span>
+          <h1 className="text-4xl font-semibold text-white text-center">
+            Deal<span className="text-yellow-500">Pro</span>
           </h1>
-          <p className="mt-4 text-[12px] indian-flag-text text-center font-black tracking-[0.3em]">ENGINEERED BY VEDIC JAALAM</p>
+          <p className="mt-4 text-xs text-slate-400 text-center font-medium">Engineered by Vedic Jaalam</p>
+          <img src="/assets/vedicjaalam.svg" alt="Vedic Jaalam" className="mt-2 h-6 w-auto opacity-80" />
           <div className="absolute bottom-24 text-center w-full px-8">
-             <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden mb-4">
+             <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mb-4">
                 <div className="h-full bg-yellow-500 animate-[loading_4s_linear]"></div>
              </div>
-             <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.5em]">SYSTEM INITIALIZING | 4.0s</p>
+             <p className="text-[10px] font-medium text-slate-500">Loading...</p>
+          </div>
+        </div>
+      ) : view === 'welcome' ? (
+        <div className="h-screen bg-white flex flex-col px-8 pt-16 pb-10">
+          {/* Logo + DealPro branding */}
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
+              <img src="/assets/merchantlogo.svg" alt="Logo" className="w-full h-full object-contain" />
+            </div>
+            <span className="font-semibold text-xl leading-none text-slate-900">Deal<span className="text-yellow-500">Pro</span></span>
+          </div>
+
+          {/* Headline */}
+          <h2 className="text-[2rem] leading-tight font-semibold text-slate-900 mb-2">
+            Grow <span className="italic text-blue-700">your</span> business
+          </h2>
+          <h2 className="text-[2rem] leading-tight font-semibold text-slate-900 mb-10">
+            with smart deals
+          </h2>
+
+          {/* Benefits */}
+          <p className="text-sm font-semibold text-slate-800 mb-6">
+            Everything you need to succeed:
+          </p>
+
+          <div className="space-y-6 flex-1">
+            <div className="flex items-start gap-4">
+              <TrendingUp className="w-5 h-5 text-slate-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-base font-semibold text-slate-900">Reach</p>
+                <p className="text-sm text-slate-500">Get discovered by local customers.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <BarChart3 className="w-5 h-5 text-slate-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-base font-semibold text-slate-900">Insights</p>
+                <p className="text-sm text-slate-500">Track campaign performance in real-time.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <Zap className="w-5 h-5 text-slate-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-base font-semibold text-slate-900">Easy</p>
+                <p className="text-sm text-slate-500">Create and manage deals in seconds.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3 mt-8">
+            <button
+              onClick={() => { setPendingAuthView('login'); navigateTo('language_selection'); }}
+              className="flex-1 h-12 rounded-xl border-2 border-slate-900 text-slate-900 text-sm font-semibold tracking-wide active:scale-[0.98] transition-all"
+            >
+              SIGN IN
+            </button>
+            <button
+              onClick={() => { setPendingAuthView('register'); navigateTo('language_selection'); }}
+              className="flex-1 h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold tracking-wide active:scale-[0.98] transition-all"
+            >
+              JOIN
+            </button>
           </div>
         </div>
       ) : (
         <>
-          {view === 'language_selection' && <LanguageSelection setView={navigateTo} />}
-          {user.role === 'consumer' && view === 'onboarding' && <Onboarding setView={navigateTo} user={user} setUser={setUser} />} {/* Only show onboarding for consumers */}
+          {view === 'language_selection' && <LanguageSelection setView={navigateTo} nextView={pendingAuthView} />}
           <Header
             currentView={view}
             setView={navigateTo}
@@ -364,36 +332,45 @@ const AppContent: React.FC = () => {
             unreadNotifications={unreadNotifications}
             onBellClick={user.isLoggedIn ? () => navigateTo('notifications') : undefined}
           />
-          <main className="flex-1 overflow-y-auto hide-scrollbar pb-32">
+          <main ref={mainRef} className="flex-1 overflow-y-auto hide-scrollbar pb-32">
             {!user.isLoggedIn ? (
               view === 'privacy_policy' ?
                 <PrivacyPolicy setView={navigateTo} theme={theme} /> :
               view === 'terms_of_service' ?
                 <TermsOfService setView={navigateTo} theme={theme} /> :
-              view === 'privacy_policy_signup' ?
-                <PrivacyPolicySignup setView={navigateTo} theme={theme} setPrivacyAccepted={setPrivacyAccepted} /> :
-              view === 'terms_of_service_signup' ?
-                <TermsOfServiceSignup setView={navigateTo} theme={theme} setTermsAccepted={setTermsAccepted} /> :
-              view === 'register' ?
-                <MemberJoin
-                  setView={navigateTo}
-                  loading={loading}
-                  setLoading={setLoading}
-                  setShowOtpModal={setShowOtpModal}
-                  setOtpPhoneNumber={setOtpPhoneNumber}
-                  otpPhoneNumber={otpPhoneNumber}
-                  isPhoneVerifiedForRegistration={isPhoneVerifiedForRegistration}
-                  setRegistrationSuccessMessage={setRegistrationSuccessMessage} // Pass setter here
-                  theme={theme} // Pass theme to MemberJoin
-                  termsAccepted={termsAccepted}
-                  setTermsAccepted={setTermsAccepted}
-                  privacyAccepted={privacyAccepted}
-                  setPrivacyAccepted={setPrivacyAccepted}
-                  signupRole={signupRole}
-                  setSignupRole={setSignupRole}
-                  showRoleSelector={showRoleSelector}
-                  setShowRoleSelector={setShowRoleSelector}
-                /> :
+              (view === 'register' || view === 'terms_of_service_signup' || view === 'privacy_policy_signup') ? (
+                <>
+                  <MemberJoin
+                    setView={navigateTo}
+                    loading={loading}
+                    setLoading={setLoading}
+                    setShowOtpModal={setShowOtpModal}
+                    setOtpPhoneNumber={setOtpPhoneNumber}
+                    otpPhoneNumber={otpPhoneNumber}
+                    isPhoneVerifiedForRegistration={isPhoneVerifiedForRegistration}
+                    setRegistrationSuccessMessage={setRegistrationSuccessMessage}
+                    theme={theme}
+                    termsAccepted={termsAccepted}
+                    setTermsAccepted={setTermsAccepted}
+                    privacyAccepted={privacyAccepted}
+                    setPrivacyAccepted={setPrivacyAccepted}
+                    signupRole={signupRole}
+                    setSignupRole={setSignupRole}
+                    showRoleSelector={showRoleSelector}
+                    setShowRoleSelector={setShowRoleSelector}
+                  />
+                  {view === 'terms_of_service_signup' && (
+                    <div className="fixed inset-0 z-50 overflow-y-auto bg-white dark:bg-gray-900">
+                      <TermsOfServiceSignup setView={navigateTo} theme={theme} setTermsAccepted={setTermsAccepted} />
+                    </div>
+                  )}
+                  {view === 'privacy_policy_signup' && (
+                    <div className="fixed inset-0 z-50 overflow-y-auto bg-white dark:bg-gray-900">
+                      <PrivacyPolicySignup setView={navigateTo} theme={theme} setPrivacyAccepted={setPrivacyAccepted} />
+                    </div>
+                  )}
+                </>
+              ) :
               // The OtpVerificationModal no longer relies on a specific `setView` directly
               <AuthStack
                 view={view}
@@ -442,32 +419,12 @@ const AppContent: React.FC = () => {
                   setView('dealadmin_review_deals'); // Navigate back to review list
                 }}
               />
-            ) : ( // Default to consumer stack for 'consumer' role
-              <ConsumerStack
-                view={view === 'onboarding' ? 'onboarding' : view}
-                setView={navigateTo}
-                user={user}
-                setUser={setUser}
-                deals={deals} // This `deals` prop is mostly unused by ConsumerStack now, kept for backward compatibility/potential future use but primary deal fetching is internal.
-                favoriteIds={favoriteIds}
-                setFavoriteIds={setFavoriteIds as any}
-                redeemedIds={redeemedIds}
-                setRedeemedIds={setRedeemedIds}
-                loading={loading}
-                theme={theme}
-                favoriteDeals={favoriteDeals} // NEW: Pass full favorite deals to ConsumerStack
-                updateConsumerFavorites={updateConsumerFavorites} // NEW: Pass the update function
-                pinnedDeals={pinnedDeals} // NEW: Pass pinned deals to ConsumerStack
-                updateConsumerPinnedDeals={updateConsumerPinnedDeals} // NEW: Pass the update function
-                onLocationComplete={setIsLocationComplete} // NEW: Callback to update location completion status
-                onUnreadCountChange={setUnreadNotifications}
-              />
-            )}
+            ) : null}
           </main>
-          {user.isLoggedIn && !['redemption_survey', 'onboarding', 'verify_phone'].includes(view) && (
+          {user.isLoggedIn && !['verify_phone'].includes(view) && (
             user.role === 'merchant' ? <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} /> :
-            user.role === 'dealadmin' ? <DealAdminBottomNav currentView={view} setView={navigateTo} theme={theme} /> : // NEW: Admin Bottom Nav
-            <BottomNav currentView={view} setView={navigateTo} theme={theme} user={user} isLocationComplete={isLocationComplete} />
+            user.role === 'dealadmin' ? <DealAdminBottomNav currentView={view} setView={navigateTo} theme={theme} /> :
+            null
           )}
 
           <QRscan

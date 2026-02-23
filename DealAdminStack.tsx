@@ -38,12 +38,13 @@ export const DealAdminStack: React.FC<DealAdminStackProps> = ({
     return (
       <DealAdminReviewDeals
         user={user}
-        deals={adminDeals} // Pass the filtered adminDeals
+        deals={adminDeals}
         loading={loading}
         setLoading={setLoading}
-        refreshDeals={refreshAdminDeals} // Use admin-specific refresh
+        refreshDeals={refreshAdminDeals}
         setView={setView}
         setDealIdToEdit={setDealIdToEdit}
+        theme={theme}
       />
     );
   }
@@ -54,17 +55,18 @@ export const DealAdminStack: React.FC<DealAdminStackProps> = ({
       <DealAdminEditCampaign
         user={user}
         campaignIdToEdit={dealIdToEdit}
-        onCloseEdit={onClearDealIdToEdit} // Clears preSelectedEditDealId and navigates back
+        onCloseEdit={onClearDealIdToEdit}
         refreshAdminDeals={refreshAdminDeals}
         setLoading={setLoading}
         loading={loading}
+        theme={theme}
       />
     );
   }
 
   // Admin Profile view (reuses existing EditProfile)
   if (view === 'profile') {
-    return <EditProfile user={user} setUser={setUser} setView={setView} />;
+    return <EditProfile user={user} setUser={setUser} setView={setView} theme={theme} />;
   }
 
   // Admin Analytics view

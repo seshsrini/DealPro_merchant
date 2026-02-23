@@ -186,7 +186,14 @@ export function validateUsername(username: string): ValidationResult {
  * Validate Indian phone number
  */
 export function validateIndianPhone(phone: string): ValidationResult {
-  const cleanPhone = phone.replace(/\D/g, '');
+  let cleanPhone = phone.replace(/\D/g, '');
+
+  // Strip +91 / 0091 / 91 country code prefix if present (results in 12 or 13 digits)
+  if (cleanPhone.length === 12 && cleanPhone.startsWith('91')) {
+    cleanPhone = cleanPhone.slice(2);
+  } else if (cleanPhone.length === 13 && cleanPhone.startsWith('091')) {
+    cleanPhone = cleanPhone.slice(3);
+  }
 
   if (cleanPhone.length !== 10) {
     return { valid: false, error: 'Phone number must be 10 digits' };
@@ -231,6 +238,60 @@ export function validatePAN(pan: string): ValidationResult {
   }
 
   return { valid: true, sanitizedData: pan.toUpperCase() };
+}
+
+/**
+ * Validate Udyam (MSME) registration number
+ * Format: UDYAM-XX-00-0000000 (e.g., UDYAM-MH-01-0000001)
+ */
+export function validateUdyam(udyam: string): ValidationResult {
+  if (!udyam) {
+    return { valid: true }; // Optional field
+  }
+
+  const udyamRegex = /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/;
+
+  if (!udyamRegex.test(udyam.toUpperCase())) {
+    return { valid: false, error: 'Invalid Udyam format. Expected: UDYAM-XX-00-0000000' };
+  }
+
+  return { valid: true, sanitizedData: udyam.toUpperCase() };
+}
+
+/**
+ * Validate FSSAI food license number
+ * Format: 14 digits (e.g., 11234567891234)
+ */
+export function validateFSSAI(fssai: string): ValidationResult {
+  if (!fssai) {
+    return { valid: true }; // Optional field
+  }
+
+  const fssaiRegex = /^[0-9]{14}$/;
+
+  if (!fssaiRegex.test(fssai)) {
+    return { valid: false, error: 'Invalid FSSAI format. Must be exactly 14 digits' };
+  }
+
+  return { valid: true, sanitizedData: fssai };
+}
+
+/**
+ * Validate Trade License (Shop & Establishment) number
+ * Format: 2-letter state code followed by alphanumeric/dash/slash (e.g., KA/2024/123456)
+ */
+export function validateTradeLicense(license: string): ValidationResult {
+  if (!license) {
+    return { valid: true }; // Optional field
+  }
+
+  const licenseRegex = /^[A-Z]{2}[A-Z0-9\/\-]{3,20}$/i;
+
+  if (!licenseRegex.test(license.toUpperCase())) {
+    return { valid: false, error: 'Invalid Trade License format. Must start with state code (e.g., KA/2024/123456)' };
+  }
+
+  return { valid: true, sanitizedData: license.toUpperCase() };
 }
 
 /**

@@ -1,41 +1,38 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
-  User as UserIcon, 
-  Mail, 
-  Phone, 
-  Lock, 
-  ShieldCheck, 
-  Store, 
-  Activity, 
-  LogOut, 
-  Loader2, 
-  CheckCircle2, 
-  Eye, 
+import {
+  User as UserIcon,
+  Mail,
+  Phone,
+  Lock,
+  Store,
+  LogOut,
+  Loader2,
+  CheckCircle2,
+  Eye,
   EyeOff,
   ShieldAlert,
-  ChevronRight
+  ArrowLeft
 } from 'lucide-react';
-import { userService } from './services/userService';
 import { biometricService } from './services/biometricService';
 import { fcmService } from './services/fcmService';
 import { AppView } from './types';
-// Removed decryptPassword import as it's no longer used
 import { addCampaignService } from './services/addCampaignService';
-import { editProfileService } from './services/editProfileService'; // New import
-import { supabase } from './services/supabaseClient'; // Import supabase for logging headers
+import { editProfileService } from './services/editProfileService';
 
 interface EditProfileProps {
   user: any;
   setUser: (user: any) => void;
   setView: (view: AppView) => void;
+  theme?: 'dark' | 'light';
 }
 
-export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView }) => {
+export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView, theme = 'dark' }) => {
+  const isDark = theme === 'dark';
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Profile States
   const [fullName, setFullName] = useState(user.full_name || '');
   const [email, setEmail] = useState(user.email || '');
@@ -47,14 +44,11 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
 
   // Password Reset States
   const [showPwd, setShowPwd] = useState(false);
-  // Old password is not needed for Supabase.auth.updateUser, only newPassword and confirmPassword.
-  // The backend will verify identity based on the JWT.
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const isMerchant = user.role?.startsWith('merchant');
 
-  // Load categories from DB for merchants
   useEffect(() => {
     if (isMerchant) {
       setIsCatsLoading(true);
@@ -82,33 +76,24 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         updateData.category = category;
       }
 
-      // Password Logic: only update if new password is provided
       if (newPassword) {
         if (newPassword.length < 8) {
-          throw new Error("New credential must be 8-15 characters, contain one uppercase letter, one number, and no spaces.");
+          throw new Error("Password must be at least 8 characters with one uppercase letter and one number.");
         }
         if (newPassword !== confirmPassword) {
-          throw new Error("Credential confirmation failed. Passwords do not match.");
+          throw new Error("Passwords do not match. Please try again.");
         }
-        updateData.password = newPassword; // Plain text password sent to Edge Function for Supabase Auth
+        updateData.password = newPassword;
       }
 
-      console.log(`[EditProfile] Attempting to update profile for user ID: ${user.id}`);
-      console.log(`[EditProfile] User Role: ${user.role}`);
-      console.log(`[EditProfile] Payload sent to updateUserProfile service:`, updateData);
-      console.log(`[EditProfile] Supabase client Authorization header before updateProfile: ${supabase.headers['Authorization'] ? supabase.headers['Authorization'].substring(0, 30) + '...' : 'Not set'}`);
+      await editProfileService.updateUserProfile(user.id, user.role, updateData);
 
-      await editProfileService.updateUserProfile(user.id, user.role, updateData); // Use new service
-      
-      // Update local user state with new data, excluding the password itself
       const updatedUser = { ...user, ...updateData };
       if (newPassword) {
-        // If password was changed, clear existing access token, forcing re-login.
-        // Supabase often invalidates sessions on password change for security.
         setUser({ ...updatedUser, isLoggedIn: false, access_token: null, refresh_token: null });
         setView('login');
-        alert("Password updated successfully. Please log in again with your new password.");
-        await biometricService.clearSession(); // Clear biometric session if password changed
+        alert("Password updated successfully. Please log in again.");
+        await biometricService.clearSession();
         return;
       }
 
@@ -116,183 +101,204 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
       setSuccess(true);
       setNewPassword('');
       setConfirmPassword('');
-      
+
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
-      setError(err.message || "Uplink failed.");
+      setError(err.message || "Failed to update profile.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    if (confirm("Terminate secure session and exit grid?")) {
-      // Cleanup push notifications
+    if (confirm("Are you sure you want to sign out?")) {
       try {
         await fcmService.unregisterToken();
         await fcmService.cleanup();
-        console.log('[EditProfile] Push notifications cleaned up');
       } catch (error) {
         console.error('[EditProfile] Failed to cleanup push notifications:', error);
-        // Don't block logout if FCM cleanup fails
       }
 
-      await biometricService.clearSession(); // Clears local storage and signs out from Supabase Auth
+      await biometricService.clearSession();
       setUser({ id: '', username: '', isLoggedIn: false, role: 'user', access_token: null, refresh_token: null });
       setView('login');
     }
   };
 
+  const inputClass = `w-full h-12 px-4 rounded-lg text-sm font-normal outline-none transition-all ${
+    isDark
+      ? 'bg-slate-800 text-white placeholder-slate-500 border border-slate-700 focus:border-slate-500'
+      : 'bg-slate-50 text-slate-900 placeholder-slate-400 border border-slate-200 focus:border-slate-400'
+  }`;
+
   return (
-    <div className="px-8 pt-6 pb-32 animate-reveal space-y-10">
-      <div className="flex items-end justify-between">
-        <div>
-          <h2 className="text-4xl font-black uppercase tracking-tighter leading-none text-white">
-            Identity<br/><span className="text-blue-500">Protocol</span>
-          </h2>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Manage Grid Credentials</p>
+    <div className={`px-6 pt-6 pb-32 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setView('profile')}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center active:scale-90 transition-all ${isDark ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'}`}
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              Edit Profile
+            </h2>
+            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Update your store details</p>
+          </div>
         </div>
-        <button 
+        <button
           onClick={handleLogout}
-          className="w-14 h-14 glass rounded-2xl flex items-center justify-center border-rose-500/20 text-rose-500 active:scale-90 transition-transform"
+          className={`w-10 h-10 rounded-lg flex items-center justify-center active:scale-90 transition-all ${isDark ? 'bg-slate-800' : 'bg-red-50'}`}
         >
-          <LogOut className="w-6 h-6" />
+          <LogOut className="w-5 h-5 text-red-500" />
         </button>
       </div>
 
+      {/* Success Message */}
       {success && (
-        <div className="p-5 glass border-emerald-500/20 bg-emerald-500/5 rounded-3xl flex items-center gap-4 animate-reveal">
-          <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Identity successfully synchronized</p>
+        <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${isDark ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-200'}`}>
+          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+          <span className="text-xs font-medium text-emerald-500">Profile updated successfully</span>
         </div>
       )}
 
+      {/* Error Message */}
       {error && (
-        <div className="p-5 glass border-rose-500/20 bg-rose-500/5 rounded-3xl flex items-center gap-4 animate-shake">
-          <ShieldAlert className="w-6 h-6 text-rose-500" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-rose-400">{error}</p>
+        <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${isDark ? 'bg-red-500/10 border border-red-500/20' : 'bg-red-50 border border-red-200'}`}>
+          <ShieldAlert className="w-4 h-4 text-red-500 shrink-0" />
+          <span className="text-xs font-medium text-red-500">{error}</span>
         </div>
       )}
 
-      <form onSubmit={handleUpdate} className="space-y-8">
-        {/* Core Identity */}
-        <div className="space-y-4">
-          <div className="px-2 flex items-center gap-2">
-            <UserIcon className="w-3 h-3 text-blue-500" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Core Identity</span>
+      <form onSubmit={handleUpdate} className="space-y-6">
+        {/* Personal Information */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <UserIcon className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+            <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Personal Information</span>
           </div>
-          <div className="space-y-4">
-            <input 
-              value={fullName} 
-              onChange={e => setFullName(e.target.value)}
-              placeholder="Full Name" 
-              className="input-premium" 
-              required 
+
+          <input
+            value={fullName}
+            onChange={e => setFullName(e.target.value)}
+            placeholder="Full Name"
+            className={inputClass}
+            required
+          />
+
+          <div className="relative">
+            <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="Email Address"
+              className={`${inputClass} pl-11`}
+              required
             />
-            <div className="relative group">
-              <Mail className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-              <input 
-                type="email"
-                value={email} 
-                onChange={e => setEmail(e.target.value)}
-                placeholder="Email Address" 
-                className="input-premium pl-14" 
-                required 
-              />
-            </div>
-            <div className="relative group">
-              <Phone className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-              <input 
-                value={phone} 
-                onChange={e => setPhone(e.target.value)}
-                placeholder="Phone Number" 
-                className="input-premium pl-14" 
-                required 
-              />
-            </div>
+          </div>
+
+          <div className="relative">
+            <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+            <input
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="Phone Number"
+              className={`${inputClass} pl-11`}
+              required
+            />
           </div>
         </div>
 
-        {/* Merchant Parameters */}
+        {/* Store Information */}
         {isMerchant && (
-          <div className="space-y-4 animate-reveal">
-            <div className="px-2 flex items-center gap-2">
-              <Store className="w-3 h-3 text-blue-500" />
-              <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Node Parameters</span>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <Store className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+              <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Store Information</span>
             </div>
-            <div className="space-y-4">
-              <input 
-                value={storeName} 
-                onChange={e => setStoreName(e.target.value)}
-                placeholder="Store Name" 
-                className="input-premium" 
-                required 
-              />
-              <div className="relative group">
-                <Activity className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <select 
-                  value={category} 
-                  onChange={e => setCategory(e.target.value)}
-                  className="input-premium pl-14"
-                  required
-                  disabled={isCatsLoading}
-                >
-                  <option value="">{isCatsLoading ? 'Syncing Sectors...' : 'Select Sector'}</option>
-                  {dbCategories.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-                {isCatsLoading && <Loader2 className="absolute right-12 top-1/2 -translate-y-1/2 w-3 h-3 animate-spin text-blue-500" />}
-              </div>
+
+            <input
+              value={storeName}
+              onChange={e => setStoreName(e.target.value)}
+              placeholder="Store Name"
+              className={inputClass}
+              required
+            />
+
+            <div className="relative">
+              <select
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                className={inputClass}
+                required
+                disabled={isCatsLoading}
+              >
+                <option value="">{isCatsLoading ? 'Loading categories...' : 'Select Category'}</option>
+                {dbCategories.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              {isCatsLoading && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-slate-400" />}
             </div>
           </div>
         )}
 
-        {/* Security Vault */}
-        <div className="space-y-4">
-          <div className="px-2 flex items-center gap-2">
-            <Lock className="w-3 h-3 text-amber-500" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Security Vault</span>
+        {/* Change Password */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <Lock className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+            <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Change Password</span>
           </div>
-          <div className="glass p-6 rounded-[2rem] border-white/5 bg-slate-900/40 space-y-4">
-            {/* Old password input removed as it's not needed for Supabase.auth.updateUser for logged in users */}
-            <input 
+
+          <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+            <div className="relative">
+              <input
+                type={showPwd ? "text" : "password"}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="New Password"
+                className={inputClass}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPwd(!showPwd)}
+                className={`absolute right-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}
+              >
+                {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+
+            <input
               type={showPwd ? "text" : "password"}
-              value={newPassword} 
-              onChange={e => setNewPassword(e.target.value)}
-              placeholder="New Secure Pass" 
-              className="input-premium border-transparent bg-white/5" 
-            />
-            <input 
-              type={showPwd ? "text" : "password"}
-              value={confirmPassword} 
+              value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
-              placeholder="Confirm New Pass" 
-              className="input-premium border-transparent bg-white/5" 
+              placeholder="Confirm New Password"
+              className={inputClass}
             />
-            <p className="text-[8px] font-bold uppercase tracking-widest text-slate-600 px-2 italic text-center">
-              Leave blank to retain current security clearance
+
+            <p className={`text-[10px] text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              Leave blank to keep your current password
             </p>
           </div>
         </div>
 
-        <button 
-          type="submit" 
+        {/* Save Button */}
+        <button
+          type="submit"
           disabled={loading}
-          className="w-full btn-premium h-20 shadow-2xl shadow-blue-500/20 active:scale-95 transition-all rounded-[2rem]"
+          className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {loading ? <Loader2 className="w-8 h-8 animate-spin" /> : (
-            <div className="flex items-center gap-4">
-              <ShieldCheck className="w-8 h-8 text-white" />
-              <span className="font-black text-xl tracking-widest uppercase">Update Protocol</span>
-            </div>
+          {loading ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            'Save Changes'
           )}
         </button>
       </form>
-
-      <div className="text-center opacity-30">
-        <p className="text-[8px] font-black uppercase tracking-[0.5em] text-slate-600">Instance ID: {user.id.toUpperCase()}</p>
-      </div>
     </div>
   );
 };

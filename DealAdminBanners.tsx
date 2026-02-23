@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User } from './types';
 import { hoardingService, Hoarding } from './services/hoardingService';
 import { bannerService } from './services/bannerService';
-import { Loader2, Upload, Image as ImageIcon, Save } from 'lucide-react';
+import { Loader2, Upload, Image as ImageIcon, Save, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 interface DealAdminBannersProps {
   user: User;
@@ -26,6 +26,12 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
 
   const isDark = theme === 'dark';
 
+  const inputClass = `w-full h-11 px-3 rounded-lg text-sm outline-none transition-all ${
+    isDark
+      ? 'bg-slate-800 text-white placeholder-slate-500 border border-slate-700 focus:border-slate-500'
+      : 'bg-white text-slate-900 placeholder-slate-400 border border-slate-200 focus:border-slate-400'
+  }`;
+
   // Fetch all hoardings on mount
   useEffect(() => {
     const fetchHoardings = async () => {
@@ -33,13 +39,6 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
       const { data, error } = await hoardingService.getAllHoardings();
       if (data && data.length > 0) {
         console.log('[DealAdminBanners] Loaded hoardings:', data);
-        console.log('[DealAdminBanners] First hoarding details:', {
-          hoarding_no: data[0].hoarding_no,
-          topic: data[0].topic,
-          heading: data[0].heading,
-          description: data[0].description,
-          images: data[0].images
-        });
         setHoardings(data);
       } else {
         console.error('[DealAdminBanners] Error loading hoardings:', error);
@@ -54,12 +53,10 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
   useEffect(() => {
     const fetchBanner = async () => {
       if (selectedHoardingNo === null) {
-        console.log('[DealAdminBanners] Clearing form data');
         setFormData({ topic: '', heading: '', description: '', images: [] });
         return;
       }
 
-      console.log('[DealAdminBanners] Fetching banner:', selectedHoardingNo);
       setLoading(true);
 
       try {
@@ -73,17 +70,13 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
         }
 
         if (hoarding) {
-          console.log('[DealAdminBanners] Fetched hoarding:', hoarding);
-          const newFormData = {
+          setFormData({
             topic: hoarding.topic || '',
             heading: hoarding.heading || '',
             description: hoarding.description || '',
             images: hoarding.images || []
-          };
-          console.log('[DealAdminBanners] Setting form data:', newFormData);
-          setFormData(newFormData);
+          });
         } else {
-          console.warn('[DealAdminBanners] No hoarding found for number:', selectedHoardingNo);
           setErrorMessage(`Banner ${selectedHoardingNo} not found`);
         }
       } catch (err: any) {
@@ -109,7 +102,6 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
           let width = img.width;
           let height = img.height;
 
-          // Resize if image is larger than maxWidth
           if (width > maxWidth) {
             height = (height * maxWidth) / width;
             width = maxWidth;
@@ -120,7 +112,6 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
 
-          // Convert to base64 with compression
           const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
           resolve(compressedBase64);
         };
@@ -134,13 +125,11 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       setErrorMessage('Please upload an image file');
       return;
     }
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       setErrorMessage('Image size must be less than 5MB');
       return;
@@ -150,7 +139,6 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
     setErrorMessage(null);
 
     try {
-      // Compress image before storing
       const compressedBase64 = await compressImage(file, 1200, 0.7);
       setFormData(prev => ({
         ...prev,
@@ -180,8 +168,6 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
     setSuccessMessage(null);
 
     try {
-      console.log('[DealAdminBanners] Updating banner:', selectedHoardingNo, formData);
-
       await bannerService.updateBanner(selectedHoardingNo, {
         topic: formData.topic,
         heading: formData.heading,
@@ -191,13 +177,11 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
 
       setSuccessMessage('Banner updated successfully!');
 
-      // Refresh hoardings list
       const { data } = await hoardingService.getAllHoardings();
       if (data) {
         setHoardings(data);
       }
 
-      // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       console.error('[DealAdminBanners] Update error:', err);
@@ -207,47 +191,42 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
     }
   };
 
-  if (loading) {
+  if (loading && selectedHoardingNo === null && hoardings.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+        <p className={`text-xs font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Loading banners...</p>
       </div>
     );
   }
 
   return (
-    <div className="px-6 pt-6 pb-32 animate-reveal">
+    <div className={`px-4 pt-4 pb-28 space-y-4 ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
       {/* Header */}
-      <div className="mb-8">
-        <h2 className="text-3xl font-black uppercase tracking-tighter leading-none text-white">
-          Banner<br />
-          <span className="text-yellow-500">Management</span>
-        </h2>
-        <div className="flex items-center gap-2 mt-2">
-          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-          <p className="text-[10px] font-black text-yellow-600 uppercase tracking-[0.3em]">ADMIN CONTROLS</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Banner Management</h2>
+          <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Update promotional banners</p>
+        </div>
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
+          <ImageIcon className="w-4 h-4 text-amber-500" />
         </div>
       </div>
 
       {/* Banner Selection Dropdown */}
-      <div className="mb-6">
-        <label className="block text-sm font-black uppercase tracking-widest text-slate-300 mb-3">
-          Select Banner
-        </label>
+      <div className="space-y-1.5">
+        <label className={`text-xs font-medium pl-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Select Banner</label>
         <select
           value={selectedHoardingNo ?? ''}
           onChange={(e) => {
             const value = e.target.value ? Number(e.target.value) : null;
-            console.log('[DealAdminBanners] Dropdown changed to:', value);
             setSelectedHoardingNo(value);
           }}
-          className="w-full h-14 px-4 glass rounded-2xl text-white text-sm font-medium outline-none border border-white/10 focus:border-blue-500/50 transition-all"
+          className={inputClass}
         >
-          <option value="" className="bg-slate-900 text-slate-400">
-            -- Select a banner --
-          </option>
+          <option value="">-- Select a banner --</option>
           {hoardings.map((hoarding) => (
-            <option key={hoarding.id} value={hoarding.hoarding_no} className="bg-slate-900 text-white">
+            <option key={hoarding.id} value={hoarding.hoarding_no}>
               Banner {hoarding.hoarding_no}: {hoarding.topic}
             </option>
           ))}
@@ -256,139 +235,144 @@ export const DealAdminBanners: React.FC<DealAdminBannersProps> = ({ user, theme 
 
       {/* Form - Only show when a banner is selected */}
       {selectedHoardingNo !== null && (
-        <div className="space-y-6">
-          {/* Topic Field */}
-          <div>
-            <label className="block text-sm font-black uppercase tracking-widest text-slate-300 mb-3">
-              Topic
-            </label>
-            <input
-              type="text"
-              value={formData.topic}
-              onChange={(e) => setFormData(prev => ({ ...prev, topic: e.target.value }))}
-              placeholder="e.g., SUPPORT LOCAL. SAVE BIG."
-              className="w-full h-14 px-4 glass rounded-2xl text-white text-sm font-medium outline-none border border-white/10 focus:border-blue-500/50 transition-all"
-            />
-          </div>
+        <div className="space-y-4">
+          {loading && (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+            </div>
+          )}
 
-          {/* Heading Field */}
-          <div>
-            <label className="block text-sm font-black uppercase tracking-widest text-slate-300 mb-3">
-              Heading
-            </label>
-            <input
-              type="text"
-              value={formData.heading}
-              onChange={(e) => setFormData(prev => ({ ...prev, heading: e.target.value }))}
-              placeholder="e.g., Hyper-local Discovery"
-              className="w-full h-14 px-4 glass rounded-2xl text-white text-sm font-medium outline-none border border-white/10 focus:border-blue-500/50 transition-all"
-            />
-          </div>
-
-          {/* Description Field */}
-          <div>
-            <label className="block text-sm font-black uppercase tracking-widest text-slate-300 mb-3">
-              Description
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Enter banner description..."
-              rows={4}
-              className="w-full px-4 py-3 glass rounded-2xl text-white text-sm font-medium outline-none border border-white/10 focus:border-blue-500/50 transition-all resize-none"
-            />
-          </div>
-
-          {/* Image Upload */}
-          <div>
-            <label className="block text-sm font-black uppercase tracking-widest text-slate-300 mb-3">
-              Banner Image
-            </label>
-
-            {/* Current Image Preview */}
-            {formData.images.length > 0 && (
-              <div className="mb-4 relative w-full aspect-video rounded-2xl overflow-hidden border-2 border-white/10">
-                <img
-                  src={formData.images[0]}
-                  alt="Banner preview"
-                  className="w-full h-full object-cover"
+          {!loading && (
+            <>
+              {/* Topic Field */}
+              <div className="space-y-1.5">
+                <label className={`text-xs font-medium pl-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Topic</label>
+                <input
+                  type="text"
+                  value={formData.topic}
+                  onChange={(e) => setFormData(prev => ({ ...prev, topic: e.target.value }))}
+                  placeholder="e.g., Support Local. Save Big."
+                  className={inputClass}
                 />
               </div>
-            )}
 
-            {/* Upload Button */}
-            <label className="relative block">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                disabled={uploading}
-                className="hidden"
-              />
-              <div className="w-full h-14 px-4 glass rounded-2xl border border-white/10 flex items-center justify-center gap-3 cursor-pointer hover:border-blue-500/50 transition-all active:scale-95">
-                {uploading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-                    <span className="text-sm font-black uppercase tracking-wider text-slate-400">Uploading...</span>
-                  </>
+              {/* Heading Field */}
+              <div className="space-y-1.5">
+                <label className={`text-xs font-medium pl-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Heading</label>
+                <input
+                  type="text"
+                  value={formData.heading}
+                  onChange={(e) => setFormData(prev => ({ ...prev, heading: e.target.value }))}
+                  placeholder="e.g., Hyper-local Discovery"
+                  className={inputClass}
+                />
+              </div>
+
+              {/* Description Field */}
+              <div className="space-y-1.5">
+                <label className={`text-xs font-medium pl-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Description</label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Enter banner description..."
+                  rows={4}
+                  className={`${inputClass} h-auto pt-2 resize-none`}
+                />
+              </div>
+
+              {/* Image Upload */}
+              <div className="space-y-2">
+                <label className={`text-xs font-medium pl-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Banner Image</label>
+
+                {/* Current Image Preview */}
+                {formData.images.length > 0 && (
+                  <div className={`relative w-full aspect-video rounded-xl overflow-hidden border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+                    <img
+                      src={formData.images[0]}
+                      alt="Banner preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+
+                {/* Upload Button */}
+                <label className="relative block">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    disabled={uploading}
+                    className="hidden"
+                  />
+                  <div className={`w-full h-11 rounded-lg border flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] ${
+                    isDark
+                      ? 'bg-slate-800 border-slate-700 hover:border-slate-600'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
+                  }`}>
+                    {uploading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                        <span className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 text-blue-500" />
+                        <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-700'}`}>
+                          {formData.images.length > 0 ? 'Change Image' : 'Upload Image'}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </label>
+                <p className={`text-[10px] pl-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Max size: 5MB. Supported: JPG, PNG, GIF</p>
+              </div>
+
+              {/* Error Message */}
+              {errorMessage && (
+                <div className={`p-3 rounded-lg flex items-center gap-2 ${isDark ? 'bg-red-500/10 border border-red-500/20' : 'bg-red-50 border border-red-200'}`}>
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                  <span className="text-xs font-medium text-red-500">{errorMessage}</span>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {successMessage && (
+                <div className={`p-3 rounded-lg flex items-center gap-2 ${isDark ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-200'}`}>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span className="text-xs font-medium text-emerald-500">{successMessage}</span>
+                </div>
+              )}
+
+              {/* Update Button */}
+              <button
+                onClick={handleUpdate}
+                disabled={saving || uploading}
+                className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    <Upload className="w-5 h-5 text-blue-500" />
-                    <span className="text-sm font-black uppercase tracking-wider text-white">
-                      {formData.images.length > 0 ? 'Change Image' : 'Upload Image'}
-                    </span>
+                    <Save className="w-4 h-4" />
+                    <span>Update Banner</span>
                   </>
                 )}
-              </div>
-            </label>
-            <p className="text-xs text-slate-500 mt-2">Max size: 5MB. Supported: JPG, PNG, GIF</p>
-          </div>
-
-          {/* Error Message */}
-          {errorMessage && (
-            <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20">
-              <p className="text-sm font-bold text-red-400">{errorMessage}</p>
-            </div>
+              </button>
+            </>
           )}
-
-          {/* Success Message */}
-          {successMessage && (
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-              <p className="text-sm font-bold text-emerald-400">{successMessage}</p>
-            </div>
-          )}
-
-          {/* Update Button */}
-          <button
-            onClick={handleUpdate}
-            disabled={saving || uploading}
-            className="w-full h-16 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Updating...</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-5 h-5" />
-                <span>Update Banner</span>
-              </>
-            )}
-          </button>
         </div>
       )}
 
       {/* Empty State */}
       {selectedHoardingNo === null && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-24 h-24 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center mb-6">
-            <ImageIcon className="w-12 h-12 text-slate-600" />
+        <div className={`text-center py-12 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4 ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+            <ImageIcon className={`w-8 h-8 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
           </div>
-          <p className="text-lg font-black text-slate-400 uppercase tracking-wider">
+          <p className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
             Select a banner to edit
           </p>
-          <p className="text-sm text-slate-600 mt-2">
+          <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
             Choose a banner from the dropdown above
           </p>
         </div>

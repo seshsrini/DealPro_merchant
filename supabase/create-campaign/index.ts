@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
 
     // Check if the authenticated user is a merchant
     const { data: userProfile, error: profileError } = await supabase
-      .from('user_profiles')
+      .from('merchant_profiles')
       .select('role')
       .eq('id', user.id)
       .single();

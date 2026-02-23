@@ -6,7 +6,7 @@ import { LocationMap } from './components/LocationMap';
 import { useTranslation } from './contexts/LanguageContext';
 import { dealdetailsService } from './services/dealdetailsService';
 import { redeemNowservice } from './services/redeemNowservice';
-import { pinnedDealsService } from './services/pinnedDealsService'; 
+import { pinnedDealsService } from './services/pinnedDealsService';
 import {
   Heart,
   Loader2,
@@ -22,7 +22,6 @@ import {
   Calendar,
   CheckCircle2,
   Star,
-  Sparkles,
   Pin
 } from 'lucide-react';
 
@@ -36,15 +35,15 @@ interface CampaignDetailsProps {
   onRedeem: (deal: Deal) => void;
   onToggleFavorite: (deal: Deal) => void;
   onCloseClaim: () => void;
-  redeemedIds: Set<string>; 
-  claimedIds: Set<string>; 
+  redeemedIds: Set<string>;
+  claimedIds: Set<string>;
 }
 
 const DEFAULT_DEAL_IMAGE = 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=600&q=80';
 
 export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
   deal, user, theme, isFav, isRedeeming, activeClaimId, onRedeem, onToggleFavorite, onCloseClaim,
-  redeemedIds, claimedIds 
+  redeemedIds, claimedIds
 }) => {
   const { t, getLocalizedText } = useTranslation();
   const isDark = theme === 'dark';
@@ -58,24 +57,19 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
   const [showPinTooltip, setShowPinTooltip] = useState(false);
   const [showFavoriteTooltip, setShowFavoriteTooltip] = useState(false);
 
-  // Scroll to top when component mounts
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  // Show tooltips on first visit
   useEffect(() => {
-    // Check if tooltips have been shown before
     const tooltipsShown = localStorage.getItem('deal_tooltips_shown');
 
     if (!tooltipsShown) {
-      // Show tooltips after a brief delay
       setTimeout(() => {
         setShowPinTooltip(true);
         setShowFavoriteTooltip(true);
       }, 500);
 
-      // Hide tooltips after 10 seconds
       setTimeout(() => {
         setShowPinTooltip(false);
         setShowFavoriteTooltip(false);
@@ -84,11 +78,9 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
     }
   }, []);
 
-  // FIX: Use campaign_id instead of id
   const isFullyRedeemed = redeemedIds.has(String(deal.campaign_id));
   const hasBeenClaimed = claimedIds.has(String(deal.campaign_id));
 
-  // Check if deal is pinned when component mounts
   useEffect(() => {
     const checkPinStatus = async () => {
       if (user?.id && deal.campaign_id) {
@@ -99,39 +91,30 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
     checkPinStatus();
   }, [user?.id, deal.campaign_id]);
 
-  // FIX: LOGIC - SHOW POPUP ONLY ON "NEXT VISIT" TO PREVENT AGGRESSIVE UX
   useEffect(() => {
     if (hasBeenClaimed && !activeClaimId) {
-      // FIX: Use campaign_id
       const storageKey = `deal_visits_${user.id}_${deal.campaign_id}`;
       const visitCount = parseInt(sessionStorage.getItem(storageKey) || '0', 10);
 
       if (visitCount >= 1) {
-        // This is at least the "next" visit after initial claim
         setShowAlreadyClaimedPopup(true);
       }
 
-      // Increment visit count for this specific deal node
       sessionStorage.setItem(storageKey, (visitCount + 1).toString());
     }
-  // FIX: Use campaign_id
-  }, [hasBeenClaimed, deal.campaign_id, user.id, activeClaimId]); 
+  }, [hasBeenClaimed, deal.campaign_id, user.id, activeClaimId]);
 
   const shopName = getLocalizedText(deal.localized_shop_name, deal.shopName);
-  // FIX: Use deal_heading property
-  const heading = getLocalizedText(deal.localized_heading, deal.deal_heading || deal.details); 
-  // FIX: Use offer_value property
+  const heading = getLocalizedText(deal.localized_heading, deal.deal_heading || deal.details);
   const offerValue = getLocalizedText(deal.localized_offer, deal.offer_value);
   const fullDescription = getLocalizedText(deal.localized_description, deal.longDescription);
 
   const qrPayload = useMemo(() => ({
-    // FIX: Use campaign_id property
     campaign_id: deal.campaign_id,
     merchant_id: deal.merchantId,
     consumer_id: user.id,
     timestamp: Date.now(),
     claim_no: activeClaimId
-  // FIX: Use campaign_id property
   }), [deal.campaign_id, deal.merchantId, user.id, activeClaimId]);
 
   const handleGetDirections = (address: string) => {
@@ -185,73 +168,57 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
   };
 
   return (
-    <div className={`font-['Inter'] animate-reveal pb-32 transition-colors duration-500 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+    <div className={`font-['Inter'] pb-32 transition-colors duration-300 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+       {/* Hero Image */}
        <div className="relative h-[45vh] w-full overflow-hidden bg-slate-900">
           <img
             src={deal.thumbnail || DEFAULT_DEAL_IMAGE}
             onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_DEAL_IMAGE; }}
-            className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700"
+            className="w-full h-full object-cover"
             alt={shopName}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-slate-950/20"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent"></div>
 
-          {/* Animated gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 via-purple-500/10 to-pink-500/20 animate-pulse"></div>
-
-          {/* Category badge with glow */}
-          <div className="absolute top-6 left-6 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl shadow-2xl border border-white/20 backdrop-blur-sm">
-             <span className="text-[11px] font-black uppercase tracking-[0.25em] text-white flex items-center gap-2">
-               <Sparkles className="w-3 h-3" />
+          {/* Category badge */}
+          <div className={`absolute top-6 left-6 px-4 py-2 rounded-lg ${isDark ? 'bg-slate-900/80 border border-slate-700' : 'bg-white/90 border border-slate-200'}`}>
+             <span className={`text-xs font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
                {deal.category}
              </span>
           </div>
 
-          {/* Rating badge - always show, display NA if no rating */}
-          <div className="absolute top-6 right-6 px-4 py-2.5 bg-amber-500/90 backdrop-blur-sm rounded-2xl shadow-2xl border border-amber-400/30">
-             <div className="flex items-center gap-2">
-               <Star className="w-4 h-4 text-white fill-white" />
-               <span className="text-sm font-black text-white">
+          {/* Rating badge */}
+          <div className="absolute top-6 right-6 px-3 py-2 bg-amber-500 rounded-lg">
+             <div className="flex items-center gap-1.5">
+               <Star className="w-3.5 h-3.5 text-white fill-white" />
+               <span className="text-sm font-semibold text-white">
                  {deal.rating && deal.rating > 0 ? deal.rating.toFixed(1) : 'NA'}
                </span>
              </div>
           </div>
        </div>
 
-       <div className="px-6 -mt-16 relative z-10 space-y-8">
-          <div className={`relative p-8 pb-32 rounded-[3rem] border backdrop-blur-3xl shadow-2xl transform transition-all hover:shadow-3xl overflow-visible ${isDark ? "bg-slate-900/90 border-white/10 shadow-blue-500/10" : "bg-white border-slate-200 shadow-xl"}`}>
-             {/* Top glow effect */}
-             <div className="absolute -top-px left-1/2 -translate-x-1/2 w-1/2 h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
+       <div className="px-6 -mt-16 relative z-10 space-y-6">
+          {/* Main Content Card */}
+          <div className={`relative p-6 pb-28 rounded-xl border ${isDark ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"}`}>
+             <div className="space-y-4 mb-6">
+                {/* Shop name */}
+                <p className="text-blue-500 text-xs font-medium">{shopName}</p>
 
-             {/* Floating decorative elements */}
-             <div className="absolute top-8 right-8 w-32 h-32 bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-full blur-3xl"></div>
-             <div className="absolute bottom-8 left-8 w-24 h-24 bg-gradient-to-br from-purple-500/5 to-pink-500/5 rounded-full blur-2xl"></div>
-
-             <div className="relative space-y-5 mb-8">
-                {/* Shop name with enhanced styling */}
-                <div className="flex items-center gap-3">
-                   <div className="relative">
-                     <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse shadow-[0_0_15px_rgba(59,130,246,1)]"></div>
-                     <div className="absolute inset-0 w-2.5 h-2.5 bg-blue-500 rounded-full animate-ping opacity-75"></div>
-                   </div>
-                   <p className="text-blue-500 text-[11px] font-black uppercase tracking-[0.4em] leading-none">{shopName}</p>
-                </div>
-
-                {/* Deal heading with gradient */}
-                <h2 className={`text-3xl font-black leading-[1.05] tracking-tighter uppercase bg-gradient-to-r ${isDark ? "from-white via-blue-100 to-white bg-clip-text text-transparent" : "from-slate-950 via-blue-900 to-slate-950 bg-clip-text text-transparent"}`}>
+                {/* Deal heading */}
+                <h2 className={`text-2xl font-semibold leading-tight ${isDark ? "text-white" : "text-slate-900"}`}>
                    {heading}
                 </h2>
 
-                {/* Offer and validity badges with enhanced styling */}
-                <div className="flex flex-wrap gap-3">
-                  <div className="inline-flex items-center gap-2.5 px-5 py-3 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-2 border-amber-500/40 rounded-2xl shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 transition-all">
-                     <Tag className="w-4 h-4 text-amber-400" />
-                     <span className="text-xs font-black text-amber-400 uppercase tracking-widest">{offerValue}</span>
+                {/* Offer and validity badges */}
+                <div className="flex flex-wrap gap-2">
+                  <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+                     <Tag className="w-4 h-4 text-amber-500" />
+                     <span className="text-xs font-medium text-amber-500">{offerValue}</span>
                   </div>
-                  {/* FIX: Use end_date */}
                   {deal.end_date && (
-                    <div className="inline-flex items-center gap-2.5 px-5 py-3 bg-gradient-to-r from-rose-500/20 to-pink-500/20 border-2 border-rose-500/40 rounded-2xl shadow-lg shadow-rose-500/20">
-                       <Calendar className="w-4 h-4 text-rose-400" />
-                       <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">
+                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
+                       <Calendar className="w-4 h-4 text-red-500" />
+                       <span className="text-[11px] font-medium text-red-500">
                          Valid Till {formatDate(deal.end_date)}
                        </span>
                     </div>
@@ -259,38 +226,27 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                 </div>
              </div>
 
-             <div className="relative flex gap-4">
-                {/* Enhanced favorite button with tooltip */}
+             {/* Action buttons */}
+             <div className="flex gap-3">
+                {/* Favorite button with tooltip */}
                 <div className="relative">
                   <button
                     onClick={() => onToggleFavorite(deal)}
-                    className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all active:scale-95 border-2 shadow-lg ${
+                    className={`w-14 h-14 rounded-xl flex items-center justify-center transition-all active:scale-[0.98] border ${
                       isFav
-                        ? 'bg-gradient-to-br from-rose-500/30 to-pink-500/30 text-rose-400 border-rose-500/50 shadow-rose-500/30'
-                        : 'glass text-slate-500 border-white/10 hover:border-rose-500/30 hover:text-rose-400'
+                        ? isDark ? 'bg-red-500/10 text-red-400 border-red-500/30' : 'bg-red-50 text-red-500 border-red-200'
+                        : isDark ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-500 border-slate-200'
                     }`}
                   >
-                     <Heart className={`w-7 h-7 transition-all ${isFav ? 'fill-current animate-pulse' : ''}`} />
+                     <Heart className={`w-6 h-6 ${isFav ? 'fill-current' : ''}`} />
                   </button>
 
-                  {/* Favorite Tooltip */}
                   {showFavoriteTooltip && (
-                    <div className="absolute top-36 left-0 z-50 animate-bounce">
-                      <div className={`px-5 py-3 rounded-2xl shadow-2xl border-2 whitespace-nowrap min-w-max ${
-                        isDark
-                          ? 'bg-slate-900/95 border-rose-500/50 text-rose-300'
-                          : 'bg-white border-rose-400 text-rose-600'
+                    <div className="absolute top-full mt-2 left-0 z-50">
+                      <div className={`px-3 py-2 rounded-lg border whitespace-nowrap ${
+                        isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-700 shadow-lg'
                       }`}>
-                        {/* Extended arrow pointing up to favorites icon */}
-                        <div className={`absolute -top-16 left-8 w-0.5 h-16 ${
-                          isDark ? 'bg-rose-500/50' : 'bg-rose-400'
-                        }`}></div>
-                        <div className={`absolute -top-2 left-7 w-5 h-5 rotate-45 border-l-2 border-t-2 ${
-                          isDark
-                            ? 'bg-slate-900/95 border-rose-500/50'
-                            : 'bg-white border-rose-400'
-                        }`}></div>
-                        <p className="text-sm font-bold">Click to save as favorite</p>
+                        <p className="text-xs font-medium">Click to save as favorite</p>
                       </div>
                     </div>
                   )}
@@ -301,171 +257,128 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                   <button
                     onClick={handleTogglePin}
                     disabled={isPinning}
-                    className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all active:scale-95 border-2 shadow-lg ${
+                    className={`w-14 h-14 rounded-xl flex items-center justify-center transition-all active:scale-[0.98] border ${
                       isPinned
-                        ? 'bg-gradient-to-br from-blue-500/30 to-indigo-500/30 text-blue-400 border-blue-500/50 shadow-blue-500/30'
-                        : 'glass text-slate-500 border-white/10 hover:border-blue-500/30 hover:text-blue-400'
+                        ? isDark ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 'bg-blue-50 text-blue-500 border-blue-200'
+                        : isDark ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-500 border-slate-200'
                     }`}
                   >
                     {isPinning ? (
-                      <Loader2 className="w-7 h-7 animate-spin" />
+                      <Loader2 className="w-6 h-6 animate-spin" />
                     ) : (
-                      <Pin className={`w-7 h-7 transition-all ${isPinned ? 'fill-current' : ''}`} />
+                      <Pin className={`w-6 h-6 ${isPinned ? 'fill-current' : ''}`} />
                     )}
                   </button>
 
-                  {/* Pin Tooltip */}
                   {showPinTooltip && (
-                    <div className="absolute top-20 left-0 z-50 animate-bounce">
-                      <div className={`px-5 py-3 rounded-2xl shadow-2xl border-2 whitespace-nowrap min-w-max ${
-                        isDark
-                          ? 'bg-slate-900/95 border-blue-500/50 text-blue-300'
-                          : 'bg-white border-blue-400 text-blue-600'
+                    <div className="absolute top-full mt-2 left-0 z-50">
+                      <div className={`px-3 py-2 rounded-lg border whitespace-nowrap ${
+                        isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-700 shadow-lg'
                       }`}>
-                        {/* Arrow pointing up */}
-                        <div className={`absolute -top-2 left-8 w-4 h-4 rotate-45 border-l-2 border-t-2 ${
-                          isDark
-                            ? 'bg-slate-900/95 border-blue-500/50'
-                            : 'bg-white border-blue-400'
-                        }`}></div>
-                        <p className="text-sm font-bold">Click to pin this deal</p>
+                        <p className="text-xs font-medium">Click to pin this deal</p>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Enhanced redeem button */}
+                {/* Redeem button */}
                 <div className="flex-1">
                   <button
                     onClick={() => onRedeem(deal)}
                     disabled={isRedeeming || hasBeenClaimed}
-                    className={`relative w-full h-16 rounded-2xl shadow-xl flex items-center justify-center gap-3 overflow-hidden transition-all active:scale-[0.98] ${
+                    className={`w-full h-14 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
                       hasBeenClaimed
-                        ? 'bg-slate-700/50 text-slate-400 cursor-not-allowed border-2 border-slate-600/50'
-                        : 'btn-premium shadow-blue-500/30 hover:shadow-blue-500/50 border-2 border-blue-500/30'
+                        ? isDark ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed' : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                        : 'bg-slate-900 text-white'
                     }`}
                   >
-                     {/* Animated background gradient for active state */}
-                     {!hasBeenClaimed && !isRedeeming && (
-                       <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 animate-pulse opacity-90"></div>
+                     {isRedeeming ? (
+                       <Loader2 className="animate-spin w-5 h-5" />
+                     ) : (
+                       <QrCode className="w-5 h-5" />
                      )}
-
-                     <div className="relative flex items-center gap-3">
-                       {isRedeeming ? (
-                         <Loader2 className="animate-spin w-5 h-5" />
-                       ) : (
-                         <QrCode className="w-5 h-5" />
-                       )}
-                       <span className="text-xs font-black uppercase tracking-[0.15em]">
-                         {hasBeenClaimed ? 'Already Claimed' : (isRedeeming ? t('details_verifying') : t('details_redeem_btn'))}
-                       </span>
-                     </div>
+                     <span className="text-sm font-medium">
+                       {hasBeenClaimed ? 'Already Claimed' : (isRedeeming ? t('details_verifying') : t('details_redeem_btn'))}
+                     </span>
                   </button>
                 </div>
              </div>
           </div>
 
-          {/* Redesigned description section */}
-          <div className="space-y-4">
-             <div className="flex items-center gap-3 px-2">
-                <div className="w-1 h-8 bg-gradient-to-b from-blue-500 via-purple-500 to-pink-500 rounded-full shadow-lg shadow-blue-500/50"></div>
-                <div className="flex items-center gap-2">
-                  <Info className="w-4 h-4 text-blue-400" />
-                  <h4 className="text-xs font-black uppercase tracking-[0.3em] bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                    Deal Description
-                  </h4>
-                </div>
+          {/* Description section */}
+          <div className="space-y-3">
+             <div className="flex items-center gap-2 px-1">
+                <Info className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                <h4 className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Deal Description
+                </h4>
              </div>
-             <div className={`relative px-6 py-6 rounded-3xl ${isDark ? 'bg-gradient-to-br from-slate-900/40 via-slate-900/30 to-slate-900/40' : 'bg-gradient-to-br from-slate-50 via-white to-slate-50'} border-l-4 border-blue-500/50 shadow-lg`}>
-                {/* Decorative corner accent */}
-                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-500/10 to-transparent rounded-bl-full"></div>
+             <div className={`px-5 py-5 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
                 <div
-                  className={`relative text-[15px] font-medium leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-700'} rich-text-content`}
+                  className={`text-sm font-normal leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-700'} rich-text-content`}
                   dangerouslySetInnerHTML={{ __html: fullDescription }}
                 />
              </div>
           </div>
 
-          {/* Decorative divider */}
-          <div className="flex items-center gap-4 px-4 py-2">
-             <div className={`flex-1 h-px bg-gradient-to-r ${isDark ? 'from-transparent via-slate-700 to-transparent' : 'from-transparent via-slate-300 to-transparent'}`}></div>
-             <div className="flex gap-1">
-               <div className="w-1 h-1 rounded-full bg-blue-500/50"></div>
-               <div className="w-1 h-1 rounded-full bg-purple-500/50"></div>
-               <div className="w-1 h-1 rounded-full bg-pink-500/50"></div>
-             </div>
-             <div className={`flex-1 h-px bg-gradient-to-r ${isDark ? 'from-transparent via-slate-700 to-transparent' : 'from-transparent via-slate-300 to-transparent'}`}></div>
-          </div>
-
-          {/* Store details section - moved above map */}
-          <div className={`relative rounded-3xl border-2 overflow-hidden shadow-xl ${isDark ? "bg-slate-900/90 border-white/10" : "bg-white border-slate-200"}`}>
-             {/* Decorative corner accent */}
-             <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-purple-500/5 to-transparent rounded-bl-full pointer-events-none"></div>
-
-             <div className="relative p-8 space-y-6">
-                <div className="flex items-start gap-5 group hover:bg-blue-500/5 p-4 rounded-2xl transition-all">
-                   <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30 shrink-0 group-hover:scale-110 transition-transform">
-                     <MapPin className="w-5 h-5 text-blue-400" />
+          {/* Store details */}
+          <div className={`rounded-xl border overflow-hidden ${isDark ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"}`}>
+             <div className="p-5 space-y-1">
+                <div className="flex items-start gap-4 p-3 rounded-lg">
+                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
+                     <MapPin className="w-5 h-5 text-blue-500" />
                    </div>
                    <div className="flex-1">
-                      <p className="text-[9px] font-black uppercase text-blue-400 mb-2 tracking-wider">{t('details_coordinates')}</p>
-                      <p className={`text-sm font-semibold leading-relaxed ${isDark ? "text-white" : "text-slate-950"}`}>{storeAddress}</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('details_coordinates')}</p>
+                      <p className={`text-sm font-medium leading-relaxed ${isDark ? "text-white" : "text-slate-900"}`}>{storeAddress}</p>
                    </div>
                 </div>
 
-                <div className="flex items-start gap-5 group hover:bg-amber-500/5 p-4 rounded-2xl transition-all">
-                   <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center border border-amber-500/30 shrink-0 group-hover:scale-110 transition-transform">
-                     <Map className="w-5 h-5 text-amber-400" />
+                <div className="flex items-start gap-4 p-3 rounded-lg">
+                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
+                     <Map className="w-5 h-5 text-amber-500" />
                    </div>
                    <div className="flex-1">
-                      <p className="text-[9px] font-black uppercase text-amber-400 mb-2 tracking-wider">{t('details_landmark')}</p>
-                      <p className={`text-sm font-semibold leading-relaxed ${isDark ? "text-white" : "text-slate-950"}`}>{landmark}</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('details_landmark')}</p>
+                      <p className={`text-sm font-medium leading-relaxed ${isDark ? "text-white" : "text-slate-900"}`}>{landmark}</p>
                    </div>
                 </div>
 
-                <div className="flex items-start gap-5 group hover:bg-emerald-500/5 p-4 rounded-2xl transition-all">
-                   <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30 shrink-0 group-hover:scale-110 transition-transform">
-                     <Clock className="w-5 h-5 text-emerald-400" />
+                <div className="flex items-start gap-4 p-3 rounded-lg">
+                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
+                     <Clock className="w-5 h-5 text-emerald-500" />
                    </div>
                    <div className="flex-1">
-                      <p className="text-[9px] font-black uppercase text-emerald-400 mb-2 tracking-wider">{t('details_op_window')}</p>
-                      <p className={`text-sm font-semibold leading-relaxed ${isDark ? "text-white" : "text-slate-950"}`}>{storeHrs}</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('details_op_window')}</p>
+                      <p className={`text-sm font-medium leading-relaxed ${isDark ? "text-white" : "text-slate-900"}`}>{storeHrs}</p>
                    </div>
                 </div>
              </div>
           </div>
 
           {/* Navigate to Store section with map */}
-          <div className="space-y-5">
-             <div className="flex items-center justify-between px-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-1 h-8 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full shadow-lg shadow-blue-500/50"></div>
-                  <h3 className="text-xs font-black uppercase tracking-[0.35em] bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                    Navigate to Store
-                  </h3>
-                </div>
+          <div className="space-y-4">
+             <div className="flex items-center justify-between px-1">
+                <h3 className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Navigate to Store
+                </h3>
                 <button
                   onClick={() => handleGetDirections(storeAddress)}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 transition-all active:scale-95"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border active:scale-[0.98] transition-all ${
+                    isDark ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-blue-50 border-blue-200 text-blue-600'
+                  }`}
                 >
-                  <Navigation className="w-4 h-4 text-blue-400" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{t('details_start_gps')}</span>
+                  <Navigation className="w-4 h-4" />
+                  <span className="text-xs font-medium">{t('details_start_gps')}</span>
                 </button>
              </div>
 
-             <div className={`relative rounded-[3rem] border-2 overflow-hidden shadow-2xl ${isDark ? "bg-slate-900/90 border-white/10" : "bg-white border-slate-200"}`}>
-                {/* Decorative corner accent on map card */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/5 to-transparent rounded-bl-full pointer-events-none"></div>
-
-                {/* Map only */}
+             <div className={`rounded-xl border overflow-hidden ${isDark ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"}`}>
                 <div className="relative h-80 w-full">
                    <LocationMap theme={theme} targetCoords={{ latitude: deal.latitude, longitude: deal.longitude }} selectedLocation={shopName} targetAddress={storeAddress} />
-                   {/* Map overlay gradient */}
-                   <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-slate-900/20 to-transparent"></div>
                 </div>
 
-                {/* Google Maps Attribution */}
-                <div className="flex justify-end mt-2 px-4">
+                <div className="flex justify-end px-4 py-2">
                   <span className={`text-[8px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
                     Powered by{' '}
                     <span className="font-semibold text-blue-500">Google Maps</span>
@@ -475,145 +388,103 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
           </div>
        </div>
 
+       {/* QR Voucher Modal */}
        {activeClaimId && (
-         <div className="fixed inset-0 z-[400] bg-slate-950/95 backdrop-blur-3xl flex items-start justify-center p-4 pt-8 animate-reveal">
-           {/* Enhanced QR modal */}
-           <div className="w-full max-w-sm max-h-[90vh] glass p-8 rounded-[3rem] border-2 border-yellow-500/40 relative text-center shadow-[0_0_150px_rgba(234,179,8,0.3)]">
-              {/* Animated glow rings */}
-              <div className="absolute inset-0 rounded-[3rem] border-2 border-yellow-500/20 animate-ping"></div>
-              <div className="absolute inset-0 rounded-[3rem] bg-gradient-to-br from-yellow-500/10 via-transparent to-amber-500/10"></div>
-
+         <div className="fixed inset-0 z-[400] bg-black/50 flex items-start justify-center p-4 pt-8">
+           <div className={`w-full max-w-sm max-h-[90vh] p-6 rounded-2xl relative text-center ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
               <button
                 onClick={onCloseClaim}
-                className="absolute top-6 right-6 w-10 h-10 glass rounded-full flex items-center justify-center border-white/20 hover:border-white/40 active:scale-90 transition-all z-10 shadow-lg"
+                className={`absolute top-4 right-4 w-9 h-9 rounded-lg flex items-center justify-center active:scale-[0.98] transition-all z-10 ${
+                  isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-600'
+                }`}
               >
-                <X className="w-5 h-5 text-slate-300" />
+                <X className="w-5 h-5" />
               </button>
 
-              <div className="mb-6 text-center relative z-10">
-                {/* Enhanced shield icon */}
-                <div className="relative w-16 h-16 mx-auto mb-4">
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-yellow-500/30 to-amber-500/30 blur-xl animate-pulse"></div>
-                  <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-yellow-500/40 to-amber-500/40 flex items-center justify-center border-2 border-yellow-500/50 shadow-xl">
-                    <ShieldCheck className="w-8 h-8 text-yellow-400" />
-                  </div>
+              <div className="mb-5 text-center">
+                <div className={`w-14 h-14 mx-auto mb-4 rounded-xl flex items-center justify-center ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
+                  <ShieldCheck className="w-7 h-7 text-amber-500" />
                 </div>
 
-                <h3 className="text-lg font-black uppercase leading-none text-white mb-4 tracking-wide">
+                <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Voucher Established
                 </h3>
 
-                {/* Enhanced claim ID card */}
-                <div className="mt-4 p-4 glass bg-gradient-to-br from-yellow-500/10 to-amber-500/10 rounded-2xl border-2 border-yellow-500/30 shadow-inner">
-                   <p className="text-[8px] font-black uppercase tracking-[0.4em] text-yellow-400 mb-1.5">Instance ID</p>
-                   <p className="text-lg font-black font-mono text-yellow-400 tracking-wider">{String(activeClaimId).toUpperCase()}</p>
+                <div className={`p-3 rounded-xl border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+                   <p className={`text-[10px] font-medium mb-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>Instance ID</p>
+                   <p className={`text-base font-semibold font-mono ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{String(activeClaimId).toUpperCase()}</p>
                 </div>
               </div>
 
-              {/* Enhanced QR code container */}
-              <div className="relative glass p-6 rounded-3xl mb-6 w-full flex justify-center bg-white border-2 border-yellow-500/20 shadow-2xl">
-                {/* Corner decorations */}
-                <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-yellow-500/50 rounded-tl-2xl"></div>
-                <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-yellow-500/50 rounded-tr-2xl"></div>
-                <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-yellow-500/50 rounded-bl-2xl"></div>
-                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-yellow-500/50 rounded-br-2xl"></div>
-
+              <div className="p-4 rounded-xl mb-5 w-full flex justify-center bg-white border border-slate-200">
                 <QRCanvas value={qrPayload} />
               </div>
 
-              {/* Enhanced exit button */}
               <button
                 onClick={onCloseClaim}
-                className="relative w-full h-14 rounded-2xl overflow-hidden group"
+                className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-medium active:scale-[0.98] transition-all"
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-yellow-600 via-amber-600 to-yellow-600 animate-pulse"></div>
-                <div className="absolute inset-0 bg-gradient-to-r from-yellow-500 to-amber-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <span className="relative text-xs font-black uppercase tracking-[0.3em] text-white">Authorize Exit</span>
+                Close
               </button>
            </div>
          </div>
        )}
 
+       {/* Already Claimed Popup */}
        {showAlreadyClaimedPopup && (
-         <div className="fixed inset-0 z-[400] bg-slate-950/95 backdrop-blur-3xl flex items-start justify-center p-6 pt-20 animate-reveal">
-           {/* Enhanced already claimed popup */}
-           <div className={`w-full max-w-sm glass p-10 rounded-[4rem] border-2 relative text-center shadow-2xl ${
-             isFullyRedeemed
-               ? 'border-emerald-500/40 shadow-emerald-500/20'
-               : 'border-amber-500/40 shadow-amber-500/20'
-           }`}>
-              {/* Animated glow */}
-              <div className={`absolute inset-0 rounded-[4rem] border-2 animate-ping ${
-                isFullyRedeemed ? 'border-emerald-500/20' : 'border-amber-500/20'
-              }`}></div>
-
+         <div className="fixed inset-0 z-[400] bg-black/50 flex items-center justify-center p-6">
+           <div className={`w-full max-w-sm p-8 rounded-2xl relative text-center ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
               <button
                 onClick={() => setShowAlreadyClaimedPopup(false)}
-                className="absolute top-8 right-8 w-10 h-10 glass rounded-full flex items-center justify-center border-white/20 hover:border-white/40 active:scale-90 transition-all z-10 shadow-lg"
+                className={`absolute top-4 right-4 w-9 h-9 rounded-lg flex items-center justify-center active:scale-[0.98] transition-all z-10 ${
+                  isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-600'
+                }`}
               >
-                <X className="w-6 h-6 text-slate-300" />
+                <X className="w-5 h-5" />
               </button>
 
-              <div className="mb-8 text-center relative z-10">
-                {/* Enhanced status icon */}
-                <div className="relative w-20 h-20 mx-auto mb-5">
-                  <div className={`absolute inset-0 rounded-3xl blur-2xl animate-pulse ${
-                    isFullyRedeemed ? 'bg-emerald-500/40' : 'bg-amber-500/40'
-                  }`}></div>
-                  <div className={`relative w-20 h-20 rounded-3xl flex items-center justify-center border-2 shadow-2xl ${
-                    isFullyRedeemed
-                      ? 'bg-gradient-to-br from-emerald-500/30 to-green-500/30 border-emerald-500/50'
-                      : 'bg-gradient-to-br from-amber-500/30 to-orange-500/30 border-amber-500/50'
-                  }`}>
-                    {isFullyRedeemed ? (
-                      <CheckCircle2 className="w-10 h-10 text-emerald-400" />
-                    ) : (
-                      <Clock className="w-10 h-10 text-amber-400" />
-                    )}
-                  </div>
+              <div className="mb-6 text-center">
+                <div className={`w-16 h-16 mx-auto mb-4 rounded-xl flex items-center justify-center ${
+                  isFullyRedeemed
+                    ? isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'
+                    : isDark ? 'bg-amber-500/10' : 'bg-amber-50'
+                }`}>
+                  {isFullyRedeemed ? (
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                  ) : (
+                    <Clock className="w-8 h-8 text-amber-500" />
+                  )}
                 </div>
 
-                <h3 className="text-xl font-black uppercase text-white leading-none mb-6 tracking-wide">
+                <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Deal Already Claimed!
                 </h3>
 
-                {/* Enhanced status card */}
-                <div className={`p-5 glass rounded-3xl border-2 shadow-inner ${
+                <div className={`p-4 rounded-xl border ${
                   isFullyRedeemed
-                    ? 'bg-gradient-to-br from-emerald-500/10 to-green-500/10 border-emerald-500/30'
-                    : 'bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-500/30'
+                    ? isDark ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'
+                    : isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'
                 }`}>
-                   <p className={`text-[9px] font-black uppercase tracking-[0.45em] mb-2 ${
-                     isFullyRedeemed ? 'text-emerald-400' : 'text-amber-400'
+                   <p className={`text-xs font-medium mb-1 ${
+                     isFullyRedeemed ? 'text-emerald-500' : 'text-amber-500'
                    }`}>
                      Status
                    </p>
-                   <p className={`text-xl font-black font-mono tracking-widest ${
-                     isFullyRedeemed ? 'text-emerald-400' : 'text-amber-400'
+                   <p className={`text-base font-semibold ${
+                     isFullyRedeemed ? 'text-emerald-500' : 'text-amber-500'
                    }`}>
-                     {isFullyRedeemed ? 'VERIFIED ✓' : 'AWAITING MERCHANT'}
+                     {isFullyRedeemed ? 'Verified' : 'Awaiting Merchant'}
                    </p>
                 </div>
               </div>
 
-              {/* Enhanced button */}
               <button
                 onClick={() => setShowAlreadyClaimedPopup(false)}
-                className={`relative w-full h-16 rounded-3xl overflow-hidden group shadow-xl ${
-                  isFullyRedeemed ? 'shadow-emerald-500/30' : 'shadow-amber-500/30'
+                className={`w-full h-12 rounded-xl text-sm font-medium active:scale-[0.98] transition-all ${
+                  isFullyRedeemed ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
                 }`}
               >
-                <div className={`absolute inset-0 animate-pulse ${
-                  isFullyRedeemed
-                    ? 'bg-gradient-to-r from-emerald-600 via-green-600 to-emerald-600'
-                    : 'bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600'
-                }`}></div>
-                <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity ${
-                  isFullyRedeemed
-                    ? 'bg-gradient-to-r from-emerald-500 to-green-500'
-                    : 'bg-gradient-to-r from-amber-500 to-orange-500'
-                }`}></div>
-                <span className="relative text-sm font-black uppercase tracking-[0.3em] text-white">Understood</span>
+                Understood
               </button>
            </div>
          </div>

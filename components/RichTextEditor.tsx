@@ -7,6 +7,7 @@ interface RichTextEditorProps {
   placeholder?: string;
   maxLength?: number;
   className?: string;
+  theme?: 'light' | 'dark';
 }
 
 const COMMON_EMOJIS = ['😊', '🎉', '🔥', '✨', '💯', '👍', '❤️', '🎁', '💰', '⭐', '🛍️', '🎈', '🏆', '💎', '🌟', '🎊'];
@@ -16,13 +17,14 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   onChange,
   placeholder = 'Enter text...',
   maxLength = 400,
-  className = ''
+  className = '',
+  theme = 'dark'
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [charCount, setCharCount] = useState(0);
+  const isDark = theme === 'dark';
 
-  // Initialize editor content
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value;
@@ -44,7 +46,6 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         onChange(html);
         updateCharCount(html);
       } else {
-        // Revert to previous value if exceeds max length
         editorRef.current.innerHTML = value;
       }
     }
@@ -72,30 +73,30 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   return (
     <div className={`space-y-2 ${className}`}>
       {/* Toolbar */}
-      <div className="flex items-center gap-2 p-2 bg-white/5 rounded-xl border border-white/10">
+      <div className={`flex items-center gap-2 p-2 rounded-lg border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
         <button
           type="button"
           onClick={() => execCommand('bold')}
-          className="p-2 hover:bg-white/10 rounded-lg transition-colors active:scale-95"
+          className={`p-2 rounded-lg transition-colors active:scale-[0.98] ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
           title="Bold (Ctrl+B)"
         >
-          <Bold className="w-4 h-4 text-slate-400" />
+          <Bold className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
         </button>
         <button
           type="button"
           onClick={() => execCommand('italic')}
-          className="p-2 hover:bg-white/10 rounded-lg transition-colors active:scale-95"
+          className={`p-2 rounded-lg transition-colors active:scale-[0.98] ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
           title="Italic (Ctrl+I)"
         >
-          <Italic className="w-4 h-4 text-slate-400" />
+          <Italic className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
         </button>
         <button
           type="button"
           onClick={() => execCommand('insertUnorderedList')}
-          className="p-2 hover:bg-white/10 rounded-lg transition-colors active:scale-95"
+          className={`p-2 rounded-lg transition-colors active:scale-[0.98] ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
           title="Bullet List"
         >
-          <List className="w-4 h-4 text-slate-400" />
+          <List className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
         </button>
 
         {/* Emoji Picker Toggle */}
@@ -103,38 +104,35 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           <button
             type="button"
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors active:scale-95"
+            className={`p-2 rounded-lg transition-colors active:scale-[0.98] ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
             title="Insert Emoji"
           >
-            <Smile className="w-4 h-4 text-slate-400" />
+            <Smile className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
           </button>
 
-          {/* Emoji Picker Dropdown */}
           {showEmojiPicker && (
             <>
-              {/* Backdrop */}
               <div
                 className="fixed inset-0 z-40"
                 onClick={() => setShowEmojiPicker(false)}
               ></div>
 
-              {/* Emoji Grid */}
-              <div className="absolute top-12 right-0 z-50 w-64 p-3 bg-slate-900 rounded-xl border border-white/20 shadow-2xl">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quick Emojis</p>
+              <div className={`absolute top-12 right-0 z-50 w-64 p-3 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200 shadow-lg'}`}>
+                <p className={`text-[10px] font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Quick Emojis</p>
                 <div className="grid grid-cols-8 gap-1">
                   {COMMON_EMOJIS.map((emoji, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => insertEmoji(emoji)}
-                      className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-lg transition-colors text-xl"
+                      className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors text-xl ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
                     >
                       {emoji}
                     </button>
                   ))}
                 </div>
-                <div className="mt-2 pt-2 border-t border-white/10">
-                  <p className="text-[8px] text-slate-500 text-center">
+                <div className={`mt-2 pt-2 border-t ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+                  <p className={`text-[8px] text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                     Or type emojis directly using your keyboard
                   </p>
                 </div>
@@ -144,7 +142,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         </div>
 
         {/* Character Counter */}
-        <span className={`text-[9px] font-bold ${charCount > maxLength ? 'text-rose-400' : 'text-slate-500'}`}>
+        <span className={`text-[9px] font-medium ${charCount > maxLength ? 'text-red-400' : isDark ? 'text-slate-500' : 'text-slate-400'}`}>
           {charCount}/{maxLength}
         </span>
       </div>
@@ -156,7 +154,11 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         onInput={handleInput}
         onPaste={handlePaste}
         data-placeholder={placeholder}
-        className="input-premium pt-4 resize-none leading-relaxed min-h-[16rem] max-h-[16rem] overflow-y-auto focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400/50"
+        className={`w-full px-4 py-3 rounded-lg text-sm font-normal outline-none transition-all min-h-[16rem] max-h-[16rem] overflow-y-auto focus:ring-2 focus:ring-blue-500/20 ${
+          isDark
+            ? 'bg-slate-800 text-white placeholder-slate-500 border border-slate-700 focus:border-slate-500'
+            : 'bg-slate-50 text-slate-900 placeholder-slate-400 border border-slate-200 focus:border-slate-400'
+        }`}
         style={{
           whiteSpace: 'pre-wrap',
           wordWrap: 'break-word'

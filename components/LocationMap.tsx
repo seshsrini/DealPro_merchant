@@ -9,7 +9,7 @@ interface LocationMapProps {
   theme: 'light' | 'dark';
   userCoords?: { latitude: number, longitude: number };
   targetCoords?: { latitude: number, longitude: number };
-  targetAddress?: string; // New prop for deep linking
+  targetAddress?: string;
   onRefreshLocation?: () => void;
 }
 
@@ -31,10 +31,9 @@ export const LocationMap: React.FC<LocationMapProps> = ({
   const checkIntervalRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
 
-  // Wait for Google Maps to load with timeout and retry
   useEffect(() => {
     let checkCount = 0;
-    const MAX_CHECKS = 50; // Check for 10 seconds (50 * 200ms)
+    const MAX_CHECKS = 50;
 
     const checkGoogleMaps = () => {
       checkCount++;
@@ -44,7 +43,6 @@ export const LocationMap: React.FC<LocationMapProps> = ({
         setIsGoogleMapsReady(true);
         setMapLoadError(null);
 
-        // Clear interval and timeout
         if (checkIntervalRef.current) {
           clearInterval(checkIntervalRef.current);
           checkIntervalRef.current = null;
@@ -72,15 +70,12 @@ export const LocationMap: React.FC<LocationMapProps> = ({
       return false;
     };
 
-    // Check immediately
     if (!checkGoogleMaps()) {
-      // Start periodic checking
       console.log('[LocationMap] Starting Google Maps availability checks');
       checkIntervalRef.current = window.setInterval(() => {
         checkGoogleMaps();
       }, 200) as unknown as number;
 
-      // Set timeout for error
       timeoutRef.current = window.setTimeout(() => {
         if (!isGoogleMapsReady) {
           console.error('[LocationMap] Google Maps timeout');
@@ -90,10 +85,9 @@ export const LocationMap: React.FC<LocationMapProps> = ({
             checkIntervalRef.current = null;
           }
         }
-      }, 10000) as unknown as number; // 10 second timeout
+      }, 10000) as unknown as number;
     }
 
-    // Listen for the custom event as backup
     const handleGoogleMapsLoaded = () => {
       console.log('[LocationMap] Google Maps loaded event received');
       checkGoogleMaps();
@@ -116,21 +110,17 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     if (!targetAddress) return;
     const encodedAddress = encodeURIComponent(targetAddress);
     const platform = (window as any).Capacitor?.getPlatform() || 'web';
-    
+
     let url = '';
     if (platform === 'android') {
-      // Android Intent for turn-by-turn navigation
       url = `google.navigation:q=${encodedAddress}`;
     } else if (platform === 'ios') {
-      // Apple Maps deep link
       url = `maps://?daddr=${encodedAddress}`;
     } else {
-      // Web Fallback
       url = `https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`;
     }
 
     try {
-      // In Capacitor/APK, window.location.href triggers the external protocol handler
       window.location.href = url;
     } catch (e) {
       window.open(url, '_system');
@@ -167,11 +157,9 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     return div;
   };
 
-  // Initialize map once (don't depend on coords changes)
   useEffect(() => {
     if (!isGoogleMapsReady || !mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Start with default Bangalore coordinates
     const initialLat = 12.9716;
     const initialLng = 77.5946;
 
@@ -200,12 +188,10 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     }
   }, [isGoogleMapsReady]);
 
-  // Separate effect to handle centering when coords change
   useEffect(() => {
     if (!mapInstanceRef.current) return;
 
     const coords = userCoords || targetCoords;
-    // Check that coords exist AND have valid lat/lng values
     if (coords && coords.latitude != null && coords.longitude != null &&
         !isNaN(coords.latitude) && !isNaN(coords.longitude)) {
       const pos = { lat: coords.latitude, lng: coords.longitude };
@@ -217,7 +203,6 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     }
   }, [userCoords, targetCoords]);
 
-  // Handle user marker creation/update with retry logic
   useEffect(() => {
     const g = (window as any).google;
 
@@ -228,7 +213,6 @@ export const LocationMap: React.FC<LocationMapProps> = ({
 
     if (!userCoords) {
       console.log('[LocationMap] No user coordinates available for marker');
-      // Clean up existing marker if coords are removed
       if (userMarkerRef.current) {
         userMarkerRef.current.map = null;
         userMarkerRef.current = null;
@@ -238,7 +222,6 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     }
 
     const createOrUpdateMarker = () => {
-      // Wait for markers library to be ready
       if (!g?.maps?.marker?.AdvancedMarkerElement) {
         console.warn('[LocationMap] AdvancedMarkerElement not yet available');
         return false;
@@ -267,9 +250,7 @@ export const LocationMap: React.FC<LocationMapProps> = ({
       }
     };
 
-    // Try to create marker immediately
     if (!createOrUpdateMarker()) {
-      // If failed, retry with intervals
       let retryCount = 0;
       const maxRetries = 10;
 
@@ -294,14 +275,12 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     const g = (window as any).google;
     if (!mapInstanceRef.current || !targetCoords) return;
 
-    // Validate target coordinates before using them
     if (targetCoords.latitude == null || targetCoords.longitude == null ||
         isNaN(targetCoords.latitude) || isNaN(targetCoords.longitude)) {
       console.warn('[LocationMap] Invalid target coordinates, skipping marker:', targetCoords);
       return;
     }
 
-    // Wait for markers library to be ready
     if (!g?.maps?.marker?.AdvancedMarkerElement) {
       console.warn('[LocationMap] AdvancedMarkerElement not yet available for target marker');
       return;
@@ -323,7 +302,6 @@ export const LocationMap: React.FC<LocationMapProps> = ({
         });
       }
 
-      // Center map on target location
       mapInstanceRef.current.panTo(pos);
     } catch (e) {
       console.error('[LocationMap] Error creating/updating target marker:', e);
@@ -335,7 +313,6 @@ export const LocationMap: React.FC<LocationMapProps> = ({
   const handleRecenter = () => {
     if (onRefreshLocation) onRefreshLocation();
     const coords = targetCoords || userCoords;
-    // Validate coordinates before panning
     if (coords && coords.latitude != null && coords.longitude != null &&
         !isNaN(coords.latitude) && !isNaN(coords.longitude) && mapInstanceRef.current) {
       mapInstanceRef.current.panTo({ lat: coords.latitude, lng: coords.longitude });
@@ -343,7 +320,7 @@ export const LocationMap: React.FC<LocationMapProps> = ({
   };
 
   return (
-    <div className={`relative w-full h-full rounded-3xl border-2 overflow-hidden shadow-2xl transition-all duration-500 ${isDark ? 'border-slate-800' : 'border-blue-100'}`}>
+    <div className={`relative w-full h-full rounded-xl border overflow-hidden transition-all duration-300 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
       <div ref={mapContainerRef} className="w-full h-full z-0"></div>
 
       {/* Loading/Error Indicator */}
@@ -352,15 +329,15 @@ export const LocationMap: React.FC<LocationMapProps> = ({
           <div className="text-center px-6">
             {mapLoadError ? (
               <>
-                <div className="w-12 h-12 rounded-full bg-red-500/20 border-2 border-red-500 flex items-center justify-center mx-auto mb-3">
+                <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-3">
                   <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                 </div>
-                <p className="text-red-400 text-xs font-bold mb-2">{mapLoadError}</p>
+                <p className="text-red-400 text-xs font-medium mb-2">{mapLoadError}</p>
                 <button
                   onClick={() => window.location.reload()}
-                  className="px-4 py-2 bg-blue-600 text-white text-xs font-black uppercase tracking-wider rounded-xl active:scale-95 transition-transform"
+                  className="px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-xl active:scale-[0.98] transition-all"
                 >
                   Refresh Page
                 </button>
@@ -368,64 +345,57 @@ export const LocationMap: React.FC<LocationMapProps> = ({
             ) : (
               <>
                 <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                <p className="text-white text-[10px] font-black uppercase tracking-widest">Loading Map...</p>
-                <p className="text-slate-500 text-[8px] font-medium mt-2">This may take a few seconds</p>
+                <p className="text-white text-sm font-medium">Loading Map...</p>
+                <p className="text-slate-500 text-xs mt-2">This may take a few seconds</p>
               </>
             )}
           </div>
         </div>
       )}
-      
+
       {/* Zoom Controls Overlay */}
       <div className="absolute top-4 left-4 flex flex-col gap-2 z-[20]">
-        <button onClick={handleZoomIn} className="w-10 h-10 rounded-xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90">
+        <button onClick={handleZoomIn} className={`w-10 h-10 rounded-lg flex items-center justify-center active:scale-[0.98] transition-all ${isDark ? 'bg-slate-800/80 border border-slate-700 text-white' : 'bg-white/90 border border-slate-200 text-slate-800 shadow-sm'}`}>
           <ZoomIn className="w-4 h-4" />
         </button>
-        <button onClick={handleZoomOut} className="w-10 h-10 rounded-xl shadow-xl backdrop-blur-md bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90">
+        <button onClick={handleZoomOut} className={`w-10 h-10 rounded-lg flex items-center justify-center active:scale-[0.98] transition-all ${isDark ? 'bg-slate-800/80 border border-slate-700 text-white' : 'bg-white/90 border border-slate-200 text-slate-800 shadow-sm'}`}>
           <ZoomOut className="w-4 h-4" />
         </button>
       </div>
 
       {/* Recenter & Status Indicator Overlay */}
       <div className="absolute top-4 right-4 flex flex-col items-end gap-2 z-[20]">
-        <button onClick={handleRecenter} className="w-10 h-10 rounded-xl shadow-xl bg-blue-600 text-white border border-blue-500 flex items-center justify-center active:scale-90">
+        <button onClick={handleRecenter} className="w-10 h-10 rounded-lg bg-blue-600 text-white border border-blue-500 flex items-center justify-center active:scale-[0.98] transition-all">
           <LocateFixed className="w-4 h-4" />
         </button>
-        <div className="px-3 py-1.5 glass rounded-full flex items-center gap-2 border-white/10 shadow-lg">
-           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-           <span className="text-[7px] font-black uppercase text-white tracking-widest">Grid Locked</span>
+        <div className={`px-3 py-1.5 rounded-lg flex items-center gap-2 ${isDark ? 'bg-slate-800/80 border border-slate-700' : 'bg-white/90 border border-slate-200 shadow-sm'}`}>
+           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+           <span className={`text-[9px] font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>Live</span>
         </div>
       </div>
 
-      {/* CUSTOM NATIVE NAVIGATION FAB - High Visibility */}
+      {/* Navigation FAB */}
       {targetAddress && (
         <div className="absolute bottom-6 right-6 z-[30]">
-          <div className="relative group">
-            {/* Pulsing ring behind the button */}
-            <div className="absolute inset-0 rounded-full bg-blue-500/40 animate-ping scale-150"></div>
-            <button 
-              onClick={handleOpenNativeMap}
-              className="w-16 h-16 bg-blue-600 rounded-full shadow-[0_12px_30px_rgba(37,99,235,0.5)] flex items-center justify-center border-4 border-slate-900 active:scale-95 active:bg-blue-700 transition-all"
-              aria-label="Open GPS Directions"
-            >
-              <Navigation className="w-7 h-7 text-white" />
-            </button>
-            <div className="absolute -top-12 right-0 px-3 py-1.5 glass rounded-xl border-blue-500/30 whitespace-nowrap shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              <span className="text-[8px] font-black uppercase text-blue-400 tracking-widest">Start GPS Nav</span>
-            </div>
-          </div>
+          <button
+            onClick={handleOpenNativeMap}
+            className="w-14 h-14 bg-blue-600 rounded-xl shadow-lg flex items-center justify-center border-2 border-blue-500 active:scale-[0.98] transition-all"
+            aria-label="Open GPS Directions"
+          >
+            <Navigation className="w-6 h-6 text-white" />
+          </button>
         </div>
       )}
 
       {/* Bottom Info Bar */}
-      <div className={`absolute bottom-4 left-4 right-20 backdrop-blur-xl p-3 rounded-2xl flex items-center justify-between shadow-2xl border z-[20] ${isDark ? 'bg-slate-950/90 border-white/10' : 'bg-white/95 border-blue-50'}`}>
+      <div className={`absolute bottom-4 left-4 right-20 p-3 rounded-xl flex items-center justify-between z-[20] border ${isDark ? 'bg-slate-900/90 border-slate-700' : 'bg-white/95 border-slate-200 shadow-sm'}`}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
              <Compass className="w-4 h-4 text-blue-500" />
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">Retail Node</span>
-            <span className={`text-[10px] font-black uppercase truncate max-w-[120px] ${isDark ? 'text-white' : 'text-slate-900'}`}>{selectedLocation || 'Syncing...'}</span>
+            <span className={`text-[9px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Store Location</span>
+            <span className={`text-[10px] font-semibold truncate max-w-[120px] ${isDark ? 'text-white' : 'text-slate-900'}`}>{selectedLocation || 'Loading...'}</span>
           </div>
         </div>
       </div>

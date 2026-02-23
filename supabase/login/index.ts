@@ -57,7 +57,7 @@ Deno.serve(async (req: Request) => {
     const supabaseAuth = createClient(supabaseUrl, anonKey);
 
     const body = await req.json();
-    const { identifier, password } = body;
+    const { identifier, password, userType } = body;
 
     if (!identifier || !password) {
       return new Response(JSON.stringify({ error: 'Identifier and password required' }), {
@@ -66,7 +66,12 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    console.log('[Login] Login attempt for:', identifier);
+    // userType determines which profile table to query:
+    // 'merchant' → merchant_profiles (merchants + dealAdmins)
+    // 'consumer' (default) → user_profiles
+    const profileTable = (userType === 'merchant') ? 'merchant_profiles' : 'user_profiles';
+
+    console.log('[Login] Login attempt for:', identifier, '| table:', profileTable);
 
     const normalizedIdentifier = identifier.trim().toLowerCase();
 
@@ -79,9 +84,9 @@ Deno.serve(async (req: Request) => {
       phoneIdentifier = `+${cleanPhone}`;
     }
 
-    // Find user in user_profiles (must have email for auth)
+    // Find user in the appropriate profile table
     const { data: userProfile, error: profileLookupError } = await adminClient
-      .from('user_profiles')
+      .from(profileTable)
       .select('id, email, phone, role')
       .or(`username.ilike.${normalizedIdentifier},email.ilike.${normalizedIdentifier},phone.eq.${phoneIdentifier}`)
       .maybeSingle();
@@ -134,9 +139,9 @@ Deno.serve(async (req: Request) => {
 
     console.log('[Login] Auth successful for:', userProfile.id);
 
-    // Fetch full profile
+    // Fetch full profile from the same table used for lookup
     const { data: fullProfile, error: profileError } = await adminClient
-      .from('user_profiles')
+      .from(profileTable)
       .select('*')
       .eq('id', authData.user.id)
       .single();
@@ -152,7 +157,7 @@ Deno.serve(async (req: Request) => {
     // Update first_login_at if needed
     if (!fullProfile.first_login_at) {
       await adminClient
-        .from('user_profiles')
+        .from(profileTable)
         .update({ first_login_at: new Date().toISOString() })
         .eq('id', authData.user.id);
 

@@ -1,7 +1,7 @@
 :root {
-    --accent: #eab308;
-    --accent-indigo: #ca8a04;
-    --accent-glow: rgba(234, 179, 8, 0.4);
+    --accent: #22c55e;
+    --accent-indigo: #16a34a;
+    --accent-glow: rgba(34, 197, 94, 0.4);
     --bg-dark: #030712;
     --glass-bg: rgba(17, 24, 39, 0.65);
     --glass-border: rgba(255, 255, 255, 0.08);
@@ -109,6 +109,14 @@ textarea.input-premium {
 
 .light-mode .input-premium::placeholder {
     color: #475569; /* Darker placeholder for light mode */
+}
+
+.input-premium.input-error {
+    border: 2px solid #ef4444 !important;
+}
+
+.input-premium.input-success {
+    border: 2px solid #10b981 !important;
 }
 
 .input-premium:focus {

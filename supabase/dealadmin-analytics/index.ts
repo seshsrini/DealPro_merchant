@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
 
     // 2. Verify user is a dealadmin
     const { data: userProfile, error: profileError } = await supabaseAdmin
-      .from('user_profiles')
+      .from('merchant_profiles')
       .select('role')
       .eq('id', user.id)
       .single();
@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
 
     // 5. Get total merchants count
     const { count: totalMerchants, error: merchantsError } = await supabaseAdmin
-      .from('user_profiles')
+      .from('merchant_profiles')
       .select('*', { count: 'exact', head: true })
       .eq('role', 'merchant');
 
@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
     // Get merchant categories
     const merchantIds = [...new Set(campaignsData?.map(c => c.merchant_id) || [])];
     const { data: merchantsData, error: merchantsCategoryError } = await supabaseAdmin
-      .from('user_profiles')
+      .from('merchant_profiles')
       .select('id, category')
       .in('id', merchantIds)
       .not('category', 'is', null);

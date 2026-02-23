@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Ticket, Languages, ChevronDown, Search, CheckSquare, TrendingUp, Image, Bell } from 'lucide-react'; // Added CheckSquare, TrendingUp, Image, Bell
+import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Ticket, Languages, ChevronDown, Search, CheckSquare, TrendingUp, Image, Bell, LayoutGrid } from 'lucide-react';
 import { AppView, Locale, User as UserType } from '../types';
 import { useTranslation } from '../contexts/LanguageContext';
 
@@ -42,18 +42,18 @@ export const Header: React.FC<NavProps> = ({ currentView, setView, onBack, showB
             <ChevronLeft className="w-5 h-5" />
           </button>
         ) : (
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
               <img
-                src="/assets/logo.svg"
-                alt="Logo"
+                src="/assets/merchantlogo.svg"
+                alt="DealPro"
                 className="w-full h-full object-contain"
-                onError={(e) => {
-                  e.currentTarget.src = "https://api.iconify.design/lucide:shopping-bag.svg?color=%23eab308";
-                }}
               />
             </div>
-            <span className={`font-black text-xl tracking-tighter uppercase leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>Deal<span className="text-yellow-500">Pro</span></span>
+            <div className="flex flex-col leading-none">
+              <span className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>DealPro</span>
+              <span className={`text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Merchant <span className="text-green-500">Hub</span></span>
+            </div>
           </div>
         )}
       </div>
@@ -67,7 +67,7 @@ export const Header: React.FC<NavProps> = ({ currentView, setView, onBack, showB
           >
             <Bell className={`w-5 h-5 ${isDark ? 'text-white' : 'text-slate-900'}`} />
             {unreadNotifications > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-yellow-500 text-black text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-green-500 text-black text-[9px] font-black rounded-full flex items-center justify-center px-1 leading-none">
                 {unreadNotifications > 99 ? '99+' : unreadNotifications}
               </span>
             )}
@@ -136,7 +136,7 @@ export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView
                   isDisabled
                     ? 'text-slate-600 opacity-40 cursor-not-allowed'
                     : isActive
-                    ? 'text-white btn-premium h-16 shadow-2xl shadow-yellow-600/50 scale-110'
+                    ? 'text-white btn-premium h-16 shadow-2xl shadow-green-600/50 scale-110'
                     : (isDark ? 'text-slate-200 hover:text-white' : 'text-slate-700 hover:text-slate-900')
                 }`}
               >
@@ -154,15 +154,20 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
   const isDark = theme === 'dark';
   const tabs = [
     { id: 'merchant_dashboard', label: 'Console', icon: LayoutDashboard },
-    { id: 'merchant_deals', label: 'My Campaigns', icon: List },
+    { id: 'merchant_deals', label: 'Campaigns', icon: List },
+    { id: 'merchant_catalogue', label: 'Catalogue', icon: LayoutGrid },
     { id: 'merchant_deal_of_day', label: 'Deal of Day', icon: Zap },
     { id: 'merchant_analytics', label: 'Intel', icon: BarChart3 },
     { id: 'profile', label: 'Hub', icon: User },
   ];
 
   return (
-    <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 w-full max-w-[90%] pointer-events-none">
-       <nav className="pointer-events-auto h-22 glass rounded-[3rem] px-5 flex justify-between items-center shadow-[0_20px_50px_rgba(0,0,0,0.6)] border-white/10">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md pointer-events-none">
+       <nav className={`pointer-events-auto rounded-2xl px-1.5 py-1.5 flex items-center border ${
+         isDark
+           ? 'bg-slate-900 border-slate-800 shadow-lg shadow-black/30'
+           : 'bg-white border-slate-200 shadow-lg shadow-slate-200/60'
+       }`}>
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = currentView === tab.id;
@@ -171,14 +176,18 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
               <button
                 key={tab.id}
                 onClick={() => setView(tab.id as AppView)}
-                className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-400 min-w-[72px] rounded-3xl h-16 ${
+                className={`flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl py-2 flex-1 ${
                   isActive
-                    ? 'text-white btn-premium h-16 shadow-2xl shadow-yellow-600/50'
-                    : (isDark ? 'text-slate-200 hover:text-white' : 'text-slate-700 hover:text-slate-900')
+                    ? isDark
+                      ? 'text-white bg-slate-800'
+                      : 'text-slate-900 bg-slate-100'
+                    : isDark
+                      ? 'text-slate-500'
+                      : 'text-slate-400'
                 }`}
               >
-                <Icon className={`w-6 h-6 ${isActive ? 'fill-white/20' : ''}`} />
-                <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${isActive ? 'opacity-100' : 'opacity-90'}`}>{tab.label}</span>
+                <Icon className="w-[18px] h-[18px]" />
+                <span className={`text-[8px] leading-tight ${isActive ? 'font-semibold' : 'font-medium'}`}>{tab.label}</span>
               </button>
             );
           })}
@@ -198,8 +207,12 @@ export const DealAdminBottomNav: React.FC<{ currentView: AppView; setView: (view
   ];
 
   return (
-    <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 w-full max-w-[90%] pointer-events-none">
-       <nav className="pointer-events-auto h-22 glass rounded-[3rem] px-5 flex justify-between items-center shadow-[0_20px_50px_rgba(0,0,0,0.6)] border-white/10">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md pointer-events-none">
+       <nav className={`pointer-events-auto rounded-2xl px-1.5 py-1.5 flex items-center border ${
+         isDark
+           ? 'bg-slate-900 border-slate-800 shadow-lg shadow-black/30'
+           : 'bg-white border-slate-200 shadow-lg shadow-slate-200/60'
+       }`}>
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = currentView === tab.id;
@@ -208,14 +221,18 @@ export const DealAdminBottomNav: React.FC<{ currentView: AppView; setView: (view
               <button
                 key={tab.id}
                 onClick={() => setView(tab.id as AppView)}
-                className={`flex flex-col items-center justify-center gap-1.5 transition-all duration-400 min-w-[72px] rounded-3xl h-16 ${
+                className={`flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl py-2 flex-1 ${
                   isActive
-                    ? 'text-white btn-premium h-16 shadow-2xl shadow-yellow-600/50'
-                    : (isDark ? 'text-slate-200 hover:text-white' : 'text-slate-700 hover:text-slate-900')
+                    ? isDark
+                      ? 'text-white bg-slate-800'
+                      : 'text-slate-900 bg-slate-100'
+                    : isDark
+                      ? 'text-slate-500'
+                      : 'text-slate-400'
                 }`}
               >
-                <Icon className={`w-6 h-6 ${isActive ? 'fill-white/20' : ''}`} />
-                <span className={`text-[9px] font-black uppercase tracking-[0.2em] ${isActive ? 'opacity-100' : 'opacity-90'}`}>{tab.label}</span>
+                <Icon className="w-[18px] h-[18px]" />
+                <span className={`text-[8px] leading-tight ${isActive ? 'font-semibold' : 'font-medium'}`}>{tab.label}</span>
               </button>
             );
           })}

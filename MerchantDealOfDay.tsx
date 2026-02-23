@@ -14,7 +14,8 @@ import {
   AlertCircle,
   Calendar,
   Tag,
-  FileText
+  FileText,
+  ArrowLeft
 } from 'lucide-react';
 import { ImageUpload } from './components/ImageUpload';
 import { RichTextEditor } from './components/RichTextEditor';
@@ -22,12 +23,14 @@ import { RichTextEditor } from './components/RichTextEditor';
 interface MerchantDealOfDayProps {
   user: any;
   setView: (view: AppView) => void;
+  theme?: 'light' | 'dark';
 }
 
 const DEFAULT_DEAL_IMAGE = 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?auto=format&fit=crop&w=600&q=80';
 
-export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setView }) => {
+export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setView, theme = 'light' }) => {
   const { t } = useTranslation();
+  const isDark = theme === 'dark';
   // Deal should be selectable from 2 days after today
   const minDealDate = new Date(Date.now() + 172800000).toISOString().split('T')[0]; // +2 days
 
@@ -46,6 +49,12 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
 
   // Get the selected store details
   const selectedStore = merchantStores.find(store => store.id === selectedStoreId);
+
+  const inputClass = `w-full h-11 px-4 rounded-lg text-sm font-medium border outline-none transition-all ${
+    isDark
+      ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-slate-500'
+      : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-slate-400'
+  }`;
 
   // Load merchant stores
   useEffect(() => {
@@ -156,27 +165,32 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
   };
 
   return (
-    <div className="min-h-screen px-6 pb-32 pt-28">
+    <div className={`min-h-screen px-5 pb-32 pt-6 ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-500 to-amber-600 flex items-center justify-center shadow-lg shadow-yellow-500/30">
-            <Zap className="w-6 h-6 text-white fill-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black uppercase tracking-tight text-white">
-              Create Deal of the Day
-            </h1>
-            <p className="text-xs text-slate-400 uppercase tracking-wider">Feature your best offer</p>
+          <button onClick={() => setView('merchant_dashboard')} className={`w-9 h-9 rounded-lg flex items-center justify-center active:scale-[0.95] transition-all ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+            <ArrowLeft className={`w-5 h-5 ${isDark ? 'text-white' : 'text-slate-700'}`} />
+          </button>
+          <div className="flex items-center gap-2.5 flex-1">
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-yellow-500/10' : 'bg-yellow-50'}`}>
+              <Zap className="w-5 h-5 text-yellow-500" />
+            </div>
+            <div>
+              <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                Deal of the Day
+              </h1>
+              <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Feature your best offer</p>
+            </div>
           </div>
         </div>
 
-        <div className="p-4 bg-gradient-to-r from-yellow-500/10 to-amber-500/10 rounded-2xl border border-yellow-500/20">
+        <div className={`p-4 rounded-xl border ${isDark ? 'bg-yellow-500/5 border-yellow-500/10' : 'bg-yellow-50 border-yellow-100'}`}>
           <div className="flex items-start gap-3">
-            <Sparkles className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
+            <Sparkles className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-yellow-300">Deal of the Day Benefits</p>
-              <p className="text-xs text-slate-300 mt-1">
+              <p className={`text-sm font-semibold ${isDark ? 'text-yellow-400' : 'text-yellow-700'}`}>Deal of the Day Benefits</p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                 Your campaign will be prominently featured to consumers searching for today's best deals!
               </p>
             </div>
@@ -185,14 +199,14 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-5">
         {/* Store Selection */}
-        <div className="space-y-2">
-          <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-1">Select Store Location</label>
+        <div className="space-y-1.5">
+          <label className={`text-xs font-medium px-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Select Store Location</label>
           <select
             value={selectedStoreId}
             onChange={(e) => setSelectedStoreId(e.target.value)}
-            className="input-premium"
+            className={inputClass}
             required
           >
             {merchantStores.length === 0 ? (
@@ -208,9 +222,9 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
 
           {/* Display selected store address */}
           {selectedStore && (
-            <div className="mt-3 p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl">
-              <p className="text-[8px] font-bold uppercase tracking-wider text-slate-500 mb-2">Store Address</p>
-              <p className="text-sm text-slate-300 leading-relaxed">
+            <div className={`mt-2 p-3 rounded-lg border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+              <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Store Address</p>
+              <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                 {selectedStore.address}
                 {selectedStore.landmark && `, ${selectedStore.landmark}`}
                 {selectedStore.city && `, ${selectedStore.city}`}
@@ -221,8 +235,8 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
         </div>
 
         {/* Image Upload */}
-        <div className="space-y-2">
-          <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-2">
+        <div className="space-y-1.5">
+          <label className={`text-xs font-medium px-1 flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             <Tag className="w-3 h-3" />
             Campaign Image
           </label>
@@ -233,15 +247,15 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
         </div>
 
         {/* Campaign Title */}
-        <div className="space-y-2">
-          <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-2">
+        <div className="space-y-1.5">
+          <label className={`text-xs font-medium px-1 flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             <FileText className="w-3 h-3" />
             Campaign Title
           </label>
           <input
             type="text"
             placeholder="e.g., Flash Sale: 50% Off Everything!"
-            className="input-premium"
+            className={inputClass}
             value={dealTitle}
             onChange={(e) => setDealTitle(e.target.value.slice(0, 100))}
             maxLength={100}
@@ -250,15 +264,15 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
         </div>
 
         {/* Offer Value */}
-        <div className="space-y-2">
-          <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-2">
+        <div className="space-y-1.5">
+          <label className={`text-xs font-medium px-1 flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             <Tag className="w-3 h-3" />
             Offer Details
           </label>
           <input
             type="text"
             placeholder="e.g., Buy 1 Get 1 Free, 30% Off, ₹500 Cashback"
-            className="input-premium"
+            className={inputClass}
             value={dealOffer}
             onChange={(e) => setDealOffer(e.target.value.slice(0, 50))}
             maxLength={50}
@@ -267,8 +281,8 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
         </div>
 
         {/* Description */}
-        <div className="space-y-2">
-          <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-1">Campaign Description</label>
+        <div className="space-y-1.5">
+          <label className={`text-xs font-medium px-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Campaign Description</label>
           <RichTextEditor
             value={dealDescription}
             onChange={setDealDescription}
@@ -278,31 +292,31 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
         </div>
 
         {/* Single Date Picker - Deal Live On */}
-        <div className="space-y-2">
-          <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-2">
+        <div className="space-y-1.5">
+          <label className={`text-xs font-medium px-1 flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             <Calendar className="w-3 h-3" />
             Deal Live On
           </label>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <input
               type="date"
-              className="input-premium"
+              className={inputClass}
               value={dealLiveDate}
               onChange={(e) => setDealLiveDate(e.target.value)}
               min={minDealDate}
               required
             />
-            <p className="text-[10px] text-slate-500 px-1">
-              ℹ️ Deal can be scheduled from {new Date(minDealDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} onwards (minimum 2 days advance notice)
+            <p className={`text-xs px-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              Deal can be scheduled from {new Date(minDealDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} onwards (minimum 2 days advance notice)
             </p>
           </div>
         </div>
 
         {/* Error Message */}
         {errorMessage && (
-          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-            <p className="text-sm text-rose-300">{errorMessage}</p>
+          <div className={`p-3 rounded-lg border flex items-start gap-3 ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
+            <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <p className={`text-sm ${isDark ? 'text-red-300' : 'text-red-600'}`}>{errorMessage}</p>
           </div>
         )}
 
@@ -310,7 +324,7 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
         <button
           type="submit"
           disabled={isSubmitting || merchantStores.length === 0}
-          className="w-full h-16 rounded-2xl bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-white font-black uppercase tracking-wider text-sm shadow-xl shadow-yellow-500/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+          className="w-full h-12 rounded-xl bg-slate-900 text-white font-medium text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? (
             <>
@@ -319,7 +333,7 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
             </>
           ) : (
             <>
-              <Zap className="w-5 h-5 fill-white" />
+              <Zap className="w-5 h-5" />
               Create Deal of the Day
             </>
           )}
@@ -328,21 +342,17 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
 
       {/* Success Modal */}
       {showSuccessModal && (
-        <div className="fixed inset-0 z-[500] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-6 animate-reveal">
-          <div className="w-full max-w-sm glass p-10 rounded-[4rem] border-2 border-emerald-500/40 relative text-center shadow-2xl shadow-emerald-500/20">
-            <div className="absolute inset-0 rounded-[4rem] border-2 border-emerald-500/20 animate-ping"></div>
-
-            <div className="relative mb-6">
-              <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-br from-emerald-500/30 to-green-500/30 flex items-center justify-center border-2 border-emerald-500/50 shadow-2xl mb-4">
-                <CheckCircle2 className="w-10 h-10 text-emerald-400" />
-              </div>
-              <h3 className="text-xl font-black uppercase text-white leading-none mb-3 tracking-wide">
-                Deal of the Day Created!
-              </h3>
-              <p className="text-sm text-slate-300">
-                Your campaign will be featured once approved by admin.
-              </p>
+        <div className="fixed inset-0 z-[500] bg-black/50 flex items-center justify-center p-6">
+          <div className={`w-full max-w-sm p-8 rounded-xl border text-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <div className={`w-16 h-16 mx-auto rounded-xl flex items-center justify-center mb-4 ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
+              <CheckCircle2 className="w-8 h-8 text-emerald-500" />
             </div>
+            <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              Deal of the Day Created!
+            </h3>
+            <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-500'}`}>
+              Your campaign will be featured once approved by admin.
+            </p>
           </div>
         </div>
       )}

@@ -40,6 +40,12 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
   const { t, setLocale } = useTranslation();
   const isDark = theme === 'dark';
 
+  const inputClass = `w-full h-12 px-4 rounded-lg text-sm font-medium border outline-none transition-all ${
+    isDark
+      ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-slate-500'
+      : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-slate-400'
+  }`;
+
   const handlePostLoginNavigation = async (userProfile: any, session: any) => {
     const userRole = userProfile.role || 'consumer';
 
@@ -127,7 +133,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     const formData = new FormData(e.currentTarget as HTMLFormElement);
     const identifier = formData.get('identifier') as string;
     const password = formData.get('password') as string;
-    
+
     try {
       const { user: authProfile, session } = await userService.loginUser(identifier, password);
 
@@ -151,70 +157,88 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     }
   };
 
-  if (view === 'forgot_password') return <ForgotPwd setView={setView} loading={loading} setLoading={setLoading} />;
+  if (view === 'forgot_password') return <ForgotPwd setView={setView} loading={loading} setLoading={setLoading} theme={theme} />;
 
   if (view === 'login') {
     return (
-      <div className="px-8 pt-8 animate-reveal flex flex-col">
+      <div className={`px-6 pt-8 flex flex-col ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
         <div className="w-full text-left mb-8">
-          <h2 className={`text-5xl font-black tracking-tighter uppercase leading-none mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Smart<br/><span className="text-yellow-500">Discovery</span>
+          <h2 className={`text-2xl font-semibold leading-tight mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            Partner Success
           </h2>
-          <p className={`text-slate-400 font-medium leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>{t('login_sub')}</p>
+          <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Create, manage, and track your exclusive deals in real-time.</p>
         </div>
 
         {successMessage && (
-          <div className="mb-6 p-4 glass border-emerald-500/20 bg-emerald-500/5 text-emerald-500 text-[10px] font-black uppercase rounded-2xl animate-reveal flex items-center gap-2 relative">
-            <CheckCircle2 className="w-4 h-4" />
+          <div className={`mb-5 p-3 rounded-lg text-sm font-medium flex items-center gap-2 ${isDark ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-emerald-50 border border-emerald-200 text-emerald-600'}`}>
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
             <span>{successMessage}</span>
           </div>
         )}
+        {/* Sign-in Error Modal */}
         {authError && (
-          <div className="mb-6 p-4 glass border-rose-500/20 text-rose-500 text-[10px] font-black uppercase rounded-2xl animate-shake flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4" />
-            <span>{authError}</span>
+          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 px-8">
+            <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                  <ShieldAlert className="w-5 h-5 text-red-500" />
+                </div>
+                <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Signin Error</h3>
+              </div>
+              <p className={`text-sm mb-5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                Email or Password is incorrect. Please try again.
+              </p>
+              <button
+                onClick={() => { setAuthError(null); setView('forgot_password'); }}
+                className={`text-sm font-medium mb-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}
+              >
+                Forgot Password?
+              </button>
+              <button
+                onClick={() => setAuthError(null)}
+                className="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+              >
+                OK
+              </button>
+            </div>
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-6 flex-1">
-          <div className="relative group">
-            <input name="identifier" placeholder="Phone Number / Username" className="input-premium" required />
+        <form onSubmit={handleLogin} className="space-y-4 flex-1">
+          <div className="relative">
+            <input name="identifier" placeholder="Phone Number / Username" className={inputClass} required />
           </div>
-          <div className="relative group">
-            <input name="password" type={showPassword ? "text" : "password"} placeholder={t('login_placeholder_pass')} className="input-premium pr-14" required />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className={`absolute right-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-700'}`}>
+          <div className="relative">
+            <input name="password" type={showPassword ? "text" : "password"} placeholder={t('login_placeholder_pass')} className={`${inputClass} pr-12`} required />
+            <button type="button" onClick={() => setShowPassword(!showPassword)} className={`absolute right-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
           </div>
 
-          <label className={`flex items-center gap-4 glass p-5 rounded-[1.5rem] border-white/5 cursor-pointer ${isDark ? '' : 'light-mode-glass'}`}>
-            {/* Modern Toggle Switch Design */}
-            <div className={`relative w-12 h-6 rounded-full transition-all duration-300 biometric-toggle-switch 
-                ${enableBiometrics 
-                  ? (isDark ? 'bg-blue-600' : 'bg-blue-600 active') 
-                  : (isDark ? 'bg-slate-700/50' : 'bg-slate-300 inactive')
+          <label className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <div className={`relative w-11 h-6 rounded-full transition-all duration-300
+                ${enableBiometrics
+                  ? 'bg-blue-600'
+                  : isDark ? 'bg-slate-700' : 'bg-slate-300'
                 }`}>
-              <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white flex items-center justify-center transition-all duration-300 shadow-md toggle-circle 
-                ${enableBiometrics ? 'translate-x-[calc(100%-2px)] active' : 'translate-x-[2px] inactive'}`}>
-                <Fingerprint className={`w-3 h-3 transition-colors duration-300 
-                    ${enableBiometrics 
-                      ? (isDark ? 'text-blue-600' : 'text-blue-600') 
-                      : (isDark ? 'text-slate-400' : 'text-slate-700')
-                    }`} />
+              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white flex items-center justify-center transition-all duration-300 shadow-sm
+                ${enableBiometrics ? 'left-[22px]' : 'left-0.5'}`}>
+                <Fingerprint className={`w-3 h-3 transition-colors duration-300
+                    ${enableBiometrics ? 'text-blue-600' : isDark ? 'text-slate-400' : 'text-slate-500'}`} />
               </div>
             </div>
             <input type="checkbox" className="hidden" checked={enableBiometrics} onChange={(e) => setEnableBiometrics(e.target.checked)} />
-            <span className={`text-xs font-black uppercase tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-800'}`}>Biometric Auth</span>
+            <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Biometric Auth</span>
           </label>
 
-          <button type="submit" disabled={loading} className="w-full btn-premium shadow-2xl shadow-yellow-500/20">
-            {loading ? <Loader2 className="animate-spin w-6 h-6" /> : t('login_btn')}
+          <button type="submit" disabled={loading} className="w-full h-12 rounded-xl bg-slate-900 text-white font-medium text-sm flex items-center justify-center active:scale-[0.98] transition-all disabled:opacity-50">
+            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : t('login_btn')}
           </button>
         </form>
 
         {/* Terms of Service and Privacy Policy Notice */}
         <div className="mt-6 text-center px-4">
-          <p className={`text-[9px] leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-700'}`}>
+          <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
             By continuing, you agree to our{' '}
             <button
               onClick={() => setView('terms_of_service')}
@@ -234,9 +258,9 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
         </div>
 
         <div className="mt-8 text-center space-y-4 pb-20">
-          <button onClick={() => setView('forgot_password')} className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-white' : 'text-slate-800'}`}>{t('login_forgot') || 'Forgot Password?'}</button>
-          <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${isDark ? 'text-white' : 'text-slate-800'}`}>
-            {t('login_register_hint') || 'New to DealPro?'} <button onClick={() => setView('register')} className={`ml-1 border-b ${isDark ? 'text-white border-white/20' : 'text-yellow-600 border-yellow-600/30'}`}>{t('login_register_action') || 'Signup'}</button>
+          <button onClick={() => setView('forgot_password')} className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t('login_forgot') || 'Forgot Password?'}</button>
+          <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+            {t('login_register_hint') || 'New to DealPro?'} <button onClick={() => setView('register')} className={`ml-1 font-semibold ${isDark ? 'text-white' : 'text-green-600'}`}>{t('login_register_action') || 'Signup'}</button>
           </p>
         </div>
       </div>
