@@ -50,7 +50,7 @@ export const QRscan: React.FC<QRscanProps> = ({ isOpen, onClose, user, theme }) 
     console.log('[QRscan] Starting hardware scan, platform:', platform);
 
     if (platform === 'web') {
-      alert("Camera scanning is only available on the mobile app. Use manual entry in the browser.");
+      alert("Camera scanning is available on the mobile app. Please use manual entry here.");
       return;
     }
 
@@ -98,7 +98,7 @@ export const QRscan: React.FC<QRscanProps> = ({ isOpen, onClose, user, theme }) 
         }
       } else {
         console.error('[QRscan] Unexpected camera status:', cameraStatus);
-        alert('Unable to access camera. Please check app permissions in your device settings.');
+        alert('Camera access not available. Please check your app permissions in device settings.');
       }
     } catch (e: any) {
       console.error('[QRscan] Hardware Scan Failed:', e?.message, e?.code);
@@ -110,7 +110,7 @@ export const QRscan: React.FC<QRscanProps> = ({ isOpen, onClose, user, theme }) 
         return;
       }
 
-      alert(`Camera scan failed: ${e?.message || 'Unknown error'}. Make sure Google Play Services is up to date.`);
+      alert('Unable to scan. Please make sure Google Play Services is up to date and try again.');
     }
   };
 

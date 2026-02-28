@@ -8,6 +8,109 @@ import { Deal } from "../types";
 const ai = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY });
 
 export const addCampaignService = {
+  // AI-powered image moderation using Gemini multimodal — checks for inappropriate visual content
+  moderateImage: async (imageFile: File): Promise<{ flagged: boolean; reason: string }> => {
+    try {
+      // Convert file to base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Strip the data:image/...;base64, prefix
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(imageFile);
+      });
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                inlineData: {
+                  mimeType: imageFile.type || 'image/jpeg',
+                  data: base64,
+                },
+              },
+              {
+                text: `You are a strict image content moderator for a family-friendly commercial deals and coupons platform in India.
+Analyze this image and determine if it contains ANY inappropriate content including:
+- Pornography, nudity, or sexually explicit/suggestive content
+- Hate symbols, Nazi imagery, or extremist iconography
+- Graphic violence, gore, or disturbing imagery
+- Drug use or illegal substance promotion
+- Offensive gestures or slurs in any language
+- Content clearly not suitable for a commercial retail platform
+
+If the image is a normal product photo, store image, food photo, promotional graphic, or any standard commercial content, do NOT flag it.
+Be strict about inappropriate content but reasonable about normal commercial imagery.`,
+              },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              flagged: { type: Type.BOOLEAN },
+              reason: { type: Type.STRING },
+            },
+            required: ['flagged', 'reason'],
+          },
+        },
+      });
+      return JSON.parse(response.text || '{"flagged":false,"reason":""}');
+    } catch (e) {
+      console.error('[moderateImage] AI image moderation failed:', e);
+      // Don't block on AI failure
+      return { flagged: false, reason: '' };
+    }
+  },
+
+  // AI-powered content moderation using Gemini — catches context-based inappropriate content
+  moderateContent: async (title: string, offer: string, description: string): Promise<{ flagged: boolean; reason: string }> => {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `You are a strict content moderator for a commercial deals and coupons platform in India.
+Analyze ONLY the provided non-empty fields below for inappropriate content including:
+- Profanity or vulgar language (in any language including Hindi, Kannada, Tamil, Telugu)
+- Sexual content, innuendo, or suggestive language (e.g. "sleep with you", "come to bed", etc.)
+- Hate speech, discrimination, or casteist slurs
+- Harassment, threats, or violent language
+- Personal messages disguised as deals
+
+${title ? `Deal Title: "${title}"` : ''}
+${offer ? `Offer Value: "${offer}"` : ''}
+${description ? `Deal Description: "${description}"` : ''}
+
+IMPORTANT: Only check the fields that have content above. Empty or missing fields are being filled in separately and should NOT be flagged.
+Be strict about inappropriate language. If the provided content is a normal commercial deal/offer text, do NOT flag it.
+Only flag if the actual text content is inappropriate for a family-friendly commercial platform.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              flagged: { type: Type.BOOLEAN },
+              reason: { type: Type.STRING },
+            },
+            required: ["flagged", "reason"]
+          }
+        }
+      });
+      return JSON.parse(response.text || '{"flagged":false,"reason":""}');
+    } catch (e) {
+      console.error("[moderateContent] AI moderation check failed:", e);
+      // Don't block on AI failure — let the server-side keyword check handle it
+      return { flagged: false, reason: '' };
+    }
+  },
+
   // This remains client-side as it directly calls the Gemini API, not Supabase DB.
   translateCampaignData: async (title: string, offer: string, desc: string, shopName: string): Promise<{ heading: any, offer: any, description: any, shop_name: any }> => {
     try {
@@ -106,38 +209,68 @@ export const addCampaignService = {
     return data as string[];
   },
 
-  // Calls Edge Function (Storage via Edge Function)
+  // Direct client-to-Cloudinary upload (fast — no Edge Function proxy for the file)
   uploadDealImage: async (mId: string, file: File): Promise<{ publicUrl: string, imageName: string }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('merchantId', mId as string); // Pass merchantId for authorization in Edge Function
-
-    const { data, error } = await supabase.functions.invoke('upload-deal-image', { // Changed to 'upload-deal-image'
-      body: formData,
-      // CRUCIAL: Do NOT manually set 'Content-Type': 'multipart/form-data'. 
-      // The browser automatically sets this with the correct boundary when the body is a FormData object.
+    // Step 1 — get signature from edge function (lightweight JSON call)
+    const { data: signData, error: signErr } = await supabase.functions.invoke('cloudinary-sign', {
+      body: { folder: 'dealpro-campaigns' },
     });
-    if (error) throw error;
-    return data as { publicUrl: string, imageName: string };
+    if (signErr) throw new Error(signErr.message ?? 'Cloudinary signing failed');
+
+    const { signature, timestamp, api_key, cloud_name, folder } = signData;
+
+    // Step 2 — upload directly to Cloudinary (no EF proxy)
+    const form = new FormData();
+    form.append('file', file);
+    form.append('signature', signature);
+    form.append('timestamp', String(timestamp));
+    form.append('api_key', api_key);
+    form.append('folder', folder);
+
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
+      { method: 'POST', body: form, signal: AbortSignal.timeout(30000) }
+    );
+    if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
+
+    const json = await res.json();
+    const imageName = `${mId}/${Date.now()}_${file.name}`;
+    return { publicUrl: json.secure_url as string, imageName };
   },
 
   // Calls Edge Function
   createCampaign: async (d: any) => {
-    const { data, error } = await supabase.functions.invoke('create-campaign', { // This was the line that needed correction
+    const { data, error } = await supabase.functions.invoke('create-campaign', {
       body: d,
     });
-    if (error) throw error;
+    if (error) {
+      // Extract actual error message from edge function response
+      try {
+        const errorBody = await error.context?.json?.();
+        if (errorBody?.error) throw new Error(errorBody.error);
+      } catch (parseErr: any) {
+        if (parseErr.message && parseErr.message !== error.message) throw parseErr;
+      }
+      throw error;
+    }
     return data;
   },
 
   // Calls Edge Function for Merchant's OWN campaign updates
   updateCampaign: async (id: string, d: any) => {
-    // Merge ID into the body for the Edge Function
     const payload = { campaign_id: id as string, ...d };
-    const { data, error } = await supabase.functions.invoke('campaign-update', { // Changed to match deployed function name
+    const { data, error } = await supabase.functions.invoke('campaign-update', {
       body: payload,
     });
-    if (error) throw error;
+    if (error) {
+      try {
+        const errorBody = await error.context?.json?.();
+        if (errorBody?.error) throw new Error(errorBody.error);
+      } catch (parseErr: any) {
+        if (parseErr.message && parseErr.message !== error.message) throw parseErr;
+      }
+      throw error;
+    }
     return data;
   },
 

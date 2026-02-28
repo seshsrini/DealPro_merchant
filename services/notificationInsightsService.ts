@@ -40,8 +40,9 @@ export const notificationInsightsService = {
       }));
 
       return notifications;
-    } catch (error) {
-      console.error('[notificationInsightsService] Error fetching smart notifications:', error);
+    } catch (error: any) {
+      // Silently handle — EF may fail if products table doesn't exist yet
+      console.warn('[notificationInsightsService] Smart notifications unavailable:', error?.message || 'unknown error');
       return [];
     }
   },

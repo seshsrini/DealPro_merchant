@@ -2,7 +2,7 @@
 
 
 import { MerchantMyCampaigns } from './MerchantMyCampaigns.tsx';
-import { MerchantDealOfDay } from './MerchantDealOfDay';
+
 import React, { useState, useCallback } from 'react';
 import { AppView, Deal, User } from './types';
 import { MerchantProfile } from './merchantProfile';
@@ -16,9 +16,16 @@ import { MerchantAnalytics } from './MerchantAnalytics'; // Import MerchantAnaly
 import { MerchantCatalogue } from './MerchantCatalogue';
 import { SmartNotifications } from './SmartNotifications'; // Import SmartNotifications
 import { MerchantAIInsights } from './MerchantAIInsights'; // Import AI Insights Dashboard
+import { MerchantStores } from './MerchantStores';
 import { AIAssistantChat } from './AIAssistantChat'; // Import AI Assistant Chat
+import { FeatureTour } from './components/FeatureTour'; // Import Feature Tour
+import { CampaignTour } from './components/CampaignTour'; // Import Campaign Tour
+import { CampaignWizard } from './CampaignWizard';
+import { DotdWizard } from './DotdWizard';
+import { ProductWizard } from './ProductWizard';
+import { CatalogueItem } from './MerchantCatalogue';
 
-type CampaignTab = 'review' | 'active' | 'expired' | 'needs review';
+type CampaignTab = 'active' | 'expired';
 
 interface MerchantStackProps {
   view: AppView;
@@ -45,24 +52,11 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
   isScanning, setIsScanning,
   preSelectedTab, setPreSelectedTab
 }) => {
+  // Product wizard edit state (local to MerchantStack)
+  const [editProduct, setEditProduct] = useState<CatalogueItem | null>(null);
 
   if (user.role !== 'merchant') {
     return null;
-  }
-
-  // Subscription Gate: Require active subscription for all merchant pages
-  // Allow access to subscriptions page, profile pages, and edit profile
-  const allowedWithoutSubscription = ['merchant_subscriptions', 'profile', 'edit_profile'];
-
-  if (!user.hasActiveSubscription && !allowedWithoutSubscription.includes(view)) {
-    console.log('[MerchantStack] No active subscription, showing subscriptions page');
-    // Show subscriptions page if trying to access restricted pages
-    return (
-      <>
-        <MerchantSubscriptions user={user} setView={setView} setUser={setUser} />
-        <AIAssistantChat user={user} theme={theme} setView={setView} />
-      </>
-    );
   }
 
   // Render current view
@@ -93,11 +87,24 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
         onClearPreSelected={onClearDealIdToEdit}
         preSelectedTab={tabToSelect}
         theme={theme}
+        setDealIdToEdit={setDealIdToEdit}
       />
     );
   }
-  else if (view === 'merchant_deal_of_day') currentView = (
-    <MerchantDealOfDay
+  else if (view === 'campaign_wizard') {
+    currentView = (
+      <CampaignWizard
+        user={user}
+        deals={deals}
+        editDealId={dealIdToEdit}
+        setView={setView}
+        refreshDeals={refreshDeals}
+        theme={theme}
+      />
+    );
+  }
+  else if (view === 'merchant_deal_of_day' || view === 'dotd_wizard') currentView = (
+    <DotdWizard
       user={user}
       setView={setView}
       theme={theme}
@@ -121,8 +128,19 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
       setPreSelectedTab={setPreSelectedTab}
     />
   );
+  else if (view === 'merchant_stores') currentView = <MerchantStores user={user} setView={setView} theme={theme} />;
   else if (view === 'merchant_analytics') currentView = <MerchantAnalytics user={user} theme={theme} setView={setView} />;
-  else if (view === 'merchant_catalogue') currentView = <MerchantCatalogue user={user} theme={theme} setView={setView} />;
+  else if (view === 'merchant_catalogue') currentView = (
+    <MerchantCatalogue user={user} theme={theme} setView={setView} setEditProduct={setEditProduct} />
+  );
+  else if (view === 'product_wizard') currentView = (
+    <ProductWizard
+      user={user}
+      setView={setView}
+      theme={theme}
+      editProduct={editProduct}
+    />
+  );
   else if (view === 'merchant_notifications') currentView = (
     <SmartNotifications
       user={user}
@@ -146,10 +164,16 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
     currentView = null;
   }
 
-  // Render current view with global AI Assistant
+  // Render current view with global AI Assistant and Feature Tour
   return (
     <>
       {currentView}
+      {view === 'merchant_dashboard' && (
+        <FeatureTour userId={user.id} theme={theme} />
+      )}
+      {view === 'merchant_deals' && (
+        <CampaignTour userId={user.id} theme={theme} />
+      )}
       <AIAssistantChat user={user} theme={theme} setView={setView} />
     </>
   );

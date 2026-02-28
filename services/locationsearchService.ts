@@ -8,6 +8,12 @@ import { DBState, DBCity, DBLocality, Locale, LocalizedNames } from "../types";
 const cityCache: Record<string, string[]> = {};
 const areaCache: Record<string, string[]> = {};
 
+// Nominatim headers kept as fallback only — primary geocoding now routes through Edge Functions
+const NOMINATIM_HEADERS = {
+  'Accept': 'application/json',
+  'User-Agent': 'DealProMerchant/1.0'
+};
+
 // Fallback cities, might be removed if dbService.getStates/getCities are robust
 const FALLBACK_CITIES: Record<string, string[]> = {
   "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Nashik", "Thane"],
@@ -87,8 +93,8 @@ export const locationsearchService = {
    * This is used for populating dropdowns and map coordinates.
    */
   lookupPincode: async (pincode: string): Promise<PincodeLookupResponse | null> => {
-    // This calls the Edge Function at supabase/functions/location/lookup-pincode/index.ts
-    const { data, error } = await supabase.functions.invoke('location/lookup-pincode', {
+    // This calls the Edge Function at supabase/functions/lookup-pincode/index.ts
+    const { data, error } = await supabase.functions.invoke('lookup-pincode', {
       body: { pincode },
     });
     if (error) {
@@ -99,129 +105,90 @@ export const locationsearchService = {
   },
 
   /**
-   * Performs reverse geocoding using Google Maps API to get locality, city and state from a pincode.
-   * This runs entirely client-side.
-   * @param pincode The 6-digit Indian pincode.
-   * @returns An object containing `locality`, `city` and `state` names, or `null` if not found/error.
+   * Reverse geocodes a pincode to get locality, city and state.
+   * Routes through server-side Edge Function with DB cache + Nominatim fallback.
+   * Client-side Nominatim used only as emergency fallback.
    */
   reverseGeocodePincode: async (pincode: string): Promise<{ locality: string; city: string; state: string } | null> => {
-    const gWindow = window as any;
-    if (!gWindow.google || !gWindow.google.maps || !gWindow.google.maps.Geocoder) {
-      console.error("Google Maps SDK or Geocoder not loaded.");
-      return null;
+    // Primary: use reverse-geocode Edge Function via pincode geocoding
+    // The lookup-pincode EF already returns structured city/state data
+    try {
+      const { data, error } = await supabase.functions.invoke('lookup-pincode', {
+        body: { pincode },
+      });
+      if (!error && data?.locality && data?.city) {
+        const locality = data.locality.names?.en || '';
+        const city = data.city.names?.en || '';
+        // Resolve state name from stateId
+        const stateMap: Record<number, string> = {
+          1: 'Andhra Pradesh', 2: 'Arunachal Pradesh', 3: 'Assam', 4: 'Bihar',
+          5: 'Chhattisgarh', 6: 'Goa', 7: 'Gujarat', 8: 'Haryana',
+          9: 'Himachal Pradesh', 10: 'Jharkhand', 11: 'Karnataka', 12: 'Kerala',
+          13: 'Madhya Pradesh', 14: 'Maharashtra', 15: 'Manipur', 16: 'Meghalaya',
+          17: 'Mizoram', 18: 'Nagaland', 19: 'Odisha', 20: 'Punjab',
+          21: 'Rajasthan', 22: 'Sikkim', 23: 'Tamil Nadu', 24: 'Telangana',
+          25: 'Tripura', 26: 'Uttar Pradesh', 27: 'Uttarakhand', 28: 'West Bengal',
+          29: 'Delhi',
+        };
+        const state = stateMap[data.stateId] || '';
+        if (city && locality) return { locality, city, state };
+      }
+    } catch (e) {
+      console.warn('[reverseGeocodePincode] Edge Function failed, trying Nominatim fallback:', e);
     }
 
-    return new Promise((resolve) => {
-      const geocoder = new gWindow.google.maps.Geocoder();
-      // Appending ', India' helps restrict results to India, improving accuracy.
-      geocoder.geocode({ address: pincode + ', India' }, (results: any, status: any) => {
-        if (status === 'OK' && results && results[0]) {
-          let locality = '';
-          let city = '';
-          let state = '';
-
-          // Log all address components for debugging
-          console.log(`[Pincode ${pincode}] Address components:`, results[0].address_components);
-
-          for (const component of results[0].address_components) {
-            // Log each component's types for debugging
-            console.log(`[Pincode ${pincode}] Component "${component.long_name}" has types:`, component.types);
-
-            // Extract locality/area - try multiple fields in priority order
-            // For Indian cities, sublocality_level_1, sublocality_level_2, or neighborhood usually has the area name
-            if (!locality) {
-              if (component.types.includes('sublocality_level_1')) {
-                locality = component.long_name;
-                console.log(`[Pincode ${pincode}] ✅ Found locality in sublocality_level_1:`, locality);
-              } else if (component.types.includes('sublocality_level_2')) {
-                locality = component.long_name;
-                console.log(`[Pincode ${pincode}] ✅ Found locality in sublocality_level_2:`, locality);
-              } else if (component.types.includes('sublocality')) {
-                locality = component.long_name;
-                console.log(`[Pincode ${pincode}] ✅ Found locality in sublocality:`, locality);
-              } else if (component.types.includes('neighborhood')) {
-                locality = component.long_name;
-                console.log(`[Pincode ${pincode}] ✅ Found locality in neighborhood:`, locality);
-              } else if (component.types.includes('sublocality_level_3')) {
-                locality = component.long_name;
-                console.log(`[Pincode ${pincode}] ✅ Found locality in sublocality_level_3:`, locality);
-              }
-            }
-
-            // Extract city
-            if (component.types.includes('locality')) {
-              city = component.long_name;
-              console.log(`[Pincode ${pincode}] Found city:`, city);
-            }
-
-            // Extract state
-            if (component.types.includes('administrative_area_level_1')) {
-              state = component.long_name;
-              console.log(`[Pincode ${pincode}] Found state:`, state);
-            }
-          }
-
-          console.log(`[Pincode ${pincode}] Final result - Locality: ${locality}, City: ${city}, State: ${state}`);
-
-          if (city && state) {
-            resolve({ locality, city, state });
-          } else {
-            console.warn(`Pincode ${pincode} found, but city/state components missing in Google Maps response.`, results[0]);
-            resolve(null);
-          }
-        } else {
-          console.error(`Google Geocoding failed for pincode ${pincode} with status:`, status);
-          resolve(null);
-        }
-      });
-    });
+    // Fallback: direct Nominatim call
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?postalcode=${pincode}&country=India&format=json&addressdetails=1&limit=1&accept-language=en`;
+      const res = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(5000) });
+      const results = await res.json();
+      if (results?.[0]?.address) {
+        const addr = results[0].address;
+        const locality = addr.suburb || addr.neighbourhood || addr.village || addr.hamlet || '';
+        const city = addr.city || addr.town || addr.county || '';
+        const state = addr.state || '';
+        if (city && state) return { locality, city, state };
+      }
+    } catch (e) {
+      console.error(`[reverseGeocodePincode] Nominatim fallback also failed for ${pincode}:`, e);
+    }
+    return null;
   },
 
   /**
-   * Performs reverse geocoding using Google Maps API to get city and state from coordinates.
-   * This runs entirely client-side.
-   * @param latitude The latitude.
-   * @param longitude The longitude.
-   * @returns An object containing `city` and `state` names, or `null` if not found/error.
+   * Reverse geocodes coordinates to get locality, city and state.
+   * Routes through server-side Edge Function with DB cache + Nominatim fallback.
    */
-  reverseGeocodeCoordinates: async (latitude: number, longitude: number): Promise<{ city: string; state: string } | null> => {
-    const gWindow = window as any;
-    if (!gWindow.google || !gWindow.google.maps || !gWindow.google.maps.Geocoder) {
-      console.error("Google Maps SDK or Geocoder not loaded for reverseGeocodeCoordinates.");
-      return null;
+  reverseGeocodeCoordinates: async (latitude: number, longitude: number): Promise<{ locality: string; city: string; state: string } | null> => {
+    // Primary: use reverse-geocode Edge Function
+    try {
+      const { data, error } = await supabase.functions.invoke('reverse-geocode', {
+        body: { latitude, longitude },
+      });
+      if (!error && data?.city) {
+        return { locality: data.locality || '', city: data.city, state: data.state || '' };
+      }
+    } catch (e) {
+      console.warn('[reverseGeocodeCoordinates] Edge Function failed, trying Nominatim fallback:', e);
     }
 
-    return new Promise((resolve) => {
-      const geocoder = new gWindow.google.maps.Geocoder();
-      const latLng = new gWindow.google.maps.LatLng(latitude, longitude);
-      
-      geocoder.geocode({ 'location': latLng }, (results: any, status: any) => {
-        if (status === 'OK' && results && results[0]) {
-          let city = '';
-          let state = '';
-
-          for (const component of results[0].address_components) {
-            if (component.types.includes('locality')) {
-              city = component.long_name;
-            }
-            if (component.types.includes('administrative_area_level_1')) {
-              state = component.long_name;
-            }
-          }
-          if (city && state) {
-            resolve({ city, state });
-          } else {
-            console.warn(`Coords [${latitude}, ${longitude}] found, but city/state components missing in Google Maps response.`, results[0]);
-            resolve(null);
-          }
-        } else {
-          console.error(`Google Geocoding failed for coords [${latitude}, ${longitude}] with status:`, status);
-          resolve(null); 
-        }
-      });
-    });
+    // Fallback: direct Nominatim call
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1&accept-language=en`;
+      const res = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
+      if (data?.address) {
+        const locality = data.address.suburb || data.address.neighbourhood || data.address.village || data.address.hamlet || '';
+        const city = data.address.city || data.address.town || data.address.county || '';
+        const state = data.address.state || '';
+        if (city && state) return { locality, city, state };
+      }
+    } catch (e) {
+      console.error(`[reverseGeocodeCoordinates] Nominatim fallback also failed:`, e);
+    }
+    return null;
   },
-  
+
   // Remains client-side (Capacitor Geolocation)
   getCurrentLocation: async (): Promise<{ latitude: number, longitude: number } | null> => {
     try {
@@ -244,51 +211,67 @@ export const locationsearchService = {
     }
   },
 
-  // Remains client-side (Google Maps API)
-  geocodeAddressWithAI: async (address: string): Promise<{ latitude: number, longitude: number } | null> => {
-    const gWindow = window as any;
-
-    // Wait for Google Maps to load (max 10 seconds)
-    const waitForGoogleMaps = async (): Promise<boolean> => {
-      for (let i = 0; i < 20; i++) { // 20 attempts * 500ms = 10 seconds
-        if (gWindow.google && gWindow.google.maps && gWindow.google.maps.Geocoder) {
-          console.log('[LocationSearch] Google Maps is ready for geocoding');
-          return true;
-        }
-        await new Promise(resolve => setTimeout(resolve, 500));
+  /**
+   * Geocode a pincode to coordinates.
+   * Routes through server-side Edge Function with DB cache + Nominatim fallback.
+   */
+  geocodePincode: async (pincode: string): Promise<{ latitude: number, longitude: number } | null> => {
+    // Primary: use geocode-pincode Edge Function (checks DB first, then Nominatim, caches result)
+    try {
+      const { data, error } = await supabase.functions.invoke('geocode-pincode', {
+        body: { pincode },
+      });
+      if (!error && data?.latitude && data?.longitude) {
+        console.log(`[geocodePincode] EF resolved ${pincode} → ${data.latitude}, ${data.longitude} (source: ${data.source})`);
+        return { latitude: data.latitude, longitude: data.longitude };
       }
-      return false;
-    };
-
-    const isReady = await waitForGoogleMaps();
-    if (!isReady) {
-      console.error("Google Maps SDK not loaded after waiting");
-      return null;
+    } catch (e) {
+      console.warn('[geocodePincode] Edge Function failed, trying Nominatim fallback:', e);
     }
 
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        console.error("Geocoding timed out for address:", address);
-        resolve(null);
-      }, 5000); // 5 seconds timeout
-
-      try {
-        const geocoder = new gWindow.google.maps.Geocoder();
-        geocoder.geocode({ address }, (results: any, status: any) => {
-          clearTimeout(timer);
-          if (status === 'OK' && results && results[0]) {
-            const { lat, lng } = results[0].geometry.location;
-            resolve({ latitude: lat(), longitude: lng() });
-          } else {
-            console.error("Google Geocoding failed with status:", status);
-            resolve(null);
-          }
-        });
-      } catch (e) {
-        clearTimeout(timer);
-        console.error("Geocoding exception:", e);
-        resolve(null);
+    // Fallback: direct Nominatim call
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?postalcode=${pincode}&country=India&format=json&limit=1&accept-language=en`;
+      const res = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(5000) });
+      const results = await res.json();
+      if (results?.[0]) {
+        return { latitude: parseFloat(results[0].lat), longitude: parseFloat(results[0].lon) };
       }
-    });
+    } catch (e) {
+      console.error(`[geocodePincode] Nominatim fallback also failed for ${pincode}:`, e);
+    }
+    return null;
+  },
+
+  /**
+   * Forward geocode an address string to coordinates.
+   * Routes through server-side Edge Function with cache + Nominatim fallback.
+   */
+  geocodeAddressWithAI: async (address: string): Promise<{ latitude: number, longitude: number } | null> => {
+    // Primary: use geocode-address Edge Function (checks cache first, then Nominatim, caches result)
+    try {
+      const { data, error } = await supabase.functions.invoke('geocode-address', {
+        body: { address },
+      });
+      if (!error && data?.latitude && data?.longitude) {
+        console.log(`[geocodeAddress] EF resolved "${address}" → ${data.latitude}, ${data.longitude} (source: ${data.source})`);
+        return { latitude: data.latitude, longitude: data.longitude };
+      }
+    } catch (e) {
+      console.warn('[geocodeAddress] Edge Function failed, trying Nominatim fallback:', e);
+    }
+
+    // Fallback: direct Nominatim call
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&accept-language=en`;
+      const res = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(5000) });
+      const results = await res.json();
+      if (results?.[0]) {
+        return { latitude: parseFloat(results[0].lat), longitude: parseFloat(results[0].lon) };
+      }
+    } catch (e) {
+      console.error(`[geocodeAddress] Nominatim fallback also failed for "${address}":`, e);
+    }
+    return null;
   },
 };

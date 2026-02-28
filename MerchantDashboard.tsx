@@ -2,7 +2,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { AppView, Deal } from './types';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
+import { merchantService } from './services/merchantService';
+import { mDashboardService } from './services/mDashboardService';
 import { NotificationBadge } from './components/NotificationBadge';
+import { getUpcomingFestivals, getDaysUntilDate, FestivalEvent } from './components/festivalCalendar';
 import {
   Store,
   Plus,
@@ -10,11 +13,17 @@ import {
   Zap,
   Megaphone,
   AlertCircle,
-  Gift,
-  ChevronRight
+  ChevronRight,
+  Package,
+  BarChart3,
+  Sparkles,
+  ArrowUpRight,
+  Clock,
+  MousePointer2,
+  TicketCheck,
 } from 'lucide-react';
 
-type CampaignTab = 'review' | 'active' | 'expired' | 'needs review';
+type CampaignTab = 'active' | 'expired';
 
 interface MerchantDashboardProps {
   view: AppView;
@@ -33,54 +42,6 @@ interface MerchantDashboardProps {
   setPreSelectedTab?: (tab: CampaignTab | null) => void;
 }
 
-interface Festival {
-  name: string;
-  month: number;
-  day: number;
-  themeKey: string;
-}
-
-const UPCOMING_FESTIVALS: Festival[] = [
-  { name: 'New Year', month: 1, day: 1, themeKey: 'defaultBlue' },
-  { name: 'Makar Sankranti', month: 1, day: 14, themeKey: 'defaultBlue' },
-  { name: 'Republic Day', month: 1, day: 26, themeKey: 'indianFlag' },
-  { name: 'Holi', month: 3, day: 8, themeKey: 'holiColors' },
-  { name: 'Ugadi / Gudi Padwa', month: 3, day: 22, themeKey: 'defaultBlue' },
-  { name: 'Eid al-Fitr', month: 4, day: 21, themeKey: 'defaultBlue' },
-  { name: 'Independence Day', month: 8, day: 15, themeKey: 'indianFlag' },
-  { name: 'Ganesh Chaturthi', month: 9, day: 19, themeKey: 'defaultBlue' },
-  { name: 'Gandhi Jayanti', month: 10, day: 2, themeKey: 'defaultBlue' },
-  { name: 'Dussehra', month: 10, day: 24, themeKey: 'diwaliColors' },
-  { name: 'Diwali', month: 11, day: 12, themeKey: 'diwaliColors' },
-  { name: 'Christmas', month: 12, day: 25, themeKey: 'christmasColors' },
-];
-
-const getNearestFestival = (): Festival => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  let nearestFestival: Festival = UPCOMING_FESTIVALS[0];
-  let minDaysUntil = Infinity;
-
-  for (const festival of UPCOMING_FESTIVALS) {
-    let festivalDateThisYear = new Date(today.getFullYear(), festival.month - 1, festival.day);
-    festivalDateThisYear.setHours(0, 0, 0, 0);
-
-    let daysUntil = (festivalDateThisYear.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-
-    if (daysUntil < 0) {
-      let festivalDateNextYear = new Date(today.getFullYear() + 1, festival.month - 1, festival.day);
-      festivalDateNextYear.setHours(0, 0, 0, 0);
-      daysUntil = (festivalDateNextYear.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-    }
-
-    if (daysUntil >= 0 && daysUntil < minDaysUntil) {
-      minDaysUntil = daysUntil;
-      nearestFestival = festival;
-    }
-  }
-  return nearestFestival;
-};
 
 const getBannerThemeClasses = (themeKey: string, isDark: boolean) => {
   switch (themeKey) {
@@ -97,12 +58,61 @@ const getBannerThemeClasses = (themeKey: string, isDark: boolean) => {
   }
 };
 
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
+
+// --- Circular progress ring ---
+const UsageRing: React.FC<{
+  used: number;
+  limit: number;
+  color: string;
+  bgColor: string;
+  size?: number;
+}> = ({ used, limit, color, bgColor, size = 52 }) => {
+  const strokeWidth = 5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = limit > 0 ? Math.min(used / limit, 1) : 0;
+  const offset = circumference * (1 - pct);
+
+  return (
+    <svg width={size} height={size} className="transform -rotate-90">
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={bgColor}
+        strokeWidth={strokeWidth}
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        className="transition-all duration-1000 ease-out"
+      />
+    </svg>
+  );
+};
+
 export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   view, setView, user, setUser, deals, loading, setLoading, theme, refreshDeals,
   setDealIdToEdit, onClearDealIdToEdit, isScanning, setIsScanning,
   setPreSelectedTab
 }) => {
   const isDark = theme === 'dark';
+  const [visible, setVisible] = useState(false);
 
   const [campaignUsage, setCampaignUsage] = useState({
     campaigns_used: 0,
@@ -112,23 +122,30 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     has_subscription: false,
   });
 
-  const [nearestFestival, setNearestFestival] = useState<Festival>({ name: 'Special Event', month: 1, day: 1, themeKey: 'defaultBlue' });
+  const [upcomingEvents, setUpcomingEvents] = useState<FestivalEvent[]>([]);
 
-  const allMerchantDeals = useMemo(() => {
-    const statusWeight: Record<string, number> = { 'review': 0, 'active': 1, 'expired': 2 };
-    return [...deals]
-      .sort((a, b) => {
-        const weightA = statusWeight[a.status || 'active'] ?? 1;
-        const weightB = statusWeight[b.status || 'active'] ?? 1;
-        if (weightA !== weightB) return weightA - weightB;
-        return (b.campaign_id || '').localeCompare(a.campaign_id || '');
-      });
+  // Per-deal click & redemption counts
+  const [clickCounts, setClickCounts] = useState<Record<string, number>>({});
+  const [redeemCounts, setRedeemCounts] = useState<Record<string, number>>({});
+
+  const activeDeals = useMemo(() => {
+    return deals
+      .filter(d => d.status === 'active' || d.status === 'approved')
+      .sort((a, b) => (b.campaign_id || '').localeCompare(a.campaign_id || ''))
+      .slice(0, 5);
   }, [deals]);
+
+  const totalActiveDeals = useMemo(() => deals.filter(d => d.status === 'active' || d.status === 'approved').length, [deals]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 50);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const fetchCampaignUsage = async () => {
       try {
-        const usage = await merchantSubscriptionService.getCampaignUsage();
+        const usage = await merchantSubscriptionService.getCampaignUsage(user.id);
         setCampaignUsage(usage);
       } catch (err) {
         console.error("[MerchantDashboard] Error fetching campaign usage:", err);
@@ -140,204 +157,402 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     }
   }, [user?.id, deals]);
 
+  // Fetch per-deal clicks & redemptions for active deals
   useEffect(() => {
-    setNearestFestival(getNearestFestival());
-  }, []);
+    if (!activeDeals.length || !user?.id) return;
+    const ids = activeDeals.map(d => d.campaign_id);
+    Promise.all([
+      mDashboardService.getCampaignSpecificClicks(ids),
+      mDashboardService.getCampaignSpecificRedemptions(user.id, ids),
+    ]).then(([clicks, redemptions]) => {
+      setClickCounts(clicks);
+      setRedeemCounts(redemptions);
+    }).catch(() => {});
+  }, [activeDeals, user?.id]);
 
-  const reviewCampaignsCount = useMemo(() => {
-    return deals.filter(deal => {
-      const dealMerchantId = deal.merchantId || (deal as any).merchant_id;
-      return deal.status === 'needs review' && dealMerchantId === user.id;
-    }).length;
-  }, [deals, user.id]);
+  // Fetch merchant stores → extract states → compute upcoming festivals
+  useEffect(() => {
+    if (!user?.id) return;
+    merchantService.getMerchantStores(user.id).then(stores => {
+      const states = [...new Set((stores || []).map(s => s.state).filter(Boolean))];
+      setUpcomingEvents(getUpcomingFestivals(states.length > 0 ? states : ['all']));
+    }).catch(() => {
+      // Fallback: show national festivals only
+      setUpcomingEvents(getUpcomingFestivals(['all']));
+    });
+  }, [user?.id]);
+
+  const greeting = getGreeting();
+
+  // Float-in helper
+  const fi = (delay: number): React.CSSProperties => ({
+    opacity: visible ? 1 : 0,
+    transform: visible ? 'translateY(0)' : 'translateY(16px)',
+    transition: `opacity 0.5s cubic-bezier(0.22,1,0.36,1) ${delay}ms, transform 0.5s cubic-bezier(0.22,1,0.36,1) ${delay}ms`,
+  });
 
   return (
-    <div className={`px-6 pt-6 pb-32 space-y-6 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
+    <div className={`min-h-screen pb-32 ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Dashboard
-          </h1>
-          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Welcome back, {user.full_name || user.store_name || 'Merchant'}
-          </p>
-        </div>
-        <NotificationBadge
-          merchantId={user.id}
-          onClick={() => setView('merchant_notifications')}
-          theme={theme}
-        />
-      </div>
-
-      {/* Needs Review Alert */}
-      {reviewCampaignsCount > 0 && (
-        <button
-          onClick={() => {
-            if (setPreSelectedTab) {
-              setPreSelectedTab('needs review');
-            }
-            setView('merchant_deals');
-          }}
-          className={`w-full p-4 rounded-xl flex items-center gap-3 text-left active:scale-[0.98] transition-all border ${
-            isDark
-              ? 'bg-red-500/10 border-red-500/20'
-              : 'bg-red-50 border-red-200'
-          }`}
-        >
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-            isDark ? 'bg-red-500/20' : 'bg-red-100'
-          }`}>
-            <AlertCircle className="w-5 h-5 text-red-500" />
-          </div>
-          <div className="flex-1">
-            <p className={`text-xs font-medium ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-              Action Required
-            </p>
-            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-red-900'}`}>
-              {reviewCampaignsCount} Campaign{reviewCampaignsCount > 1 ? 's' : ''} Need{reviewCampaignsCount === 1 ? 's' : ''} Review
-            </p>
-          </div>
-          <ChevronRight className={`w-5 h-5 shrink-0 ${isDark ? 'text-red-400' : 'text-red-500'}`} />
-        </button>
-      )}
-
-      {/* Store Info */}
-      <div className={`p-4 rounded-xl border ${
-        isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'
-      }`}>
-        <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{user.store_name}</p>
-        <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Merchant Dashboard</p>
-      </div>
-
-      {/* Campaign Usage */}
-      {campaignUsage.has_subscription && (
-        <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                isDark ? 'bg-blue-500/10' : 'bg-blue-50'
-              }`}>
-                <Megaphone className="w-5 h-5 text-blue-500" />
-              </div>
-              <div>
-                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Campaigns</p>
-                <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  <span className={campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? 'text-rose-500' : 'text-emerald-500'}>
-                    {campaignUsage.campaigns_used}
-                  </span>
-                  <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>/{campaignUsage.campaigns_limit}</span>
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                isDark ? 'bg-amber-500/10' : 'bg-amber-50'
-              }`}>
-                <Zap className="w-5 h-5 text-amber-500" />
-              </div>
-              <div>
-                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Deal of the Day</p>
-                <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  <span className={campaignUsage.dotd_used >= campaignUsage.dotd_limit ? 'text-rose-500' : 'text-emerald-500'}>
-                    {campaignUsage.dotd_used}
-                  </span>
-                  <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>/{campaignUsage.dotd_limit}</span>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Warning Messages */}
-          {(campaignUsage.campaigns_used >= campaignUsage.campaigns_limit || campaignUsage.dotd_used >= campaignUsage.dotd_limit) && (
-            <div className="mt-4 space-y-2">
-              {campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
-                <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-200'}`}>
-                  <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
-                  <p className={`text-xs ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>
-                    {campaignUsage.campaigns_used > campaignUsage.campaigns_limit
-                      ? <>You have exceeded your monthly campaign limit ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.</>
-                      : <>You have reached your monthly campaign limit ({campaignUsage.campaigns_limit}/{campaignUsage.campaigns_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.</>
-                    }
-                  </p>
-                </div>
-              )}
-              {campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
-                <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
-                  <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                  <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                    {campaignUsage.dotd_used > campaignUsage.dotd_limit
-                      ? <>You have exceeded your monthly Deal of the Day limit ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.</>
-                      : <>You have reached your monthly Deal of the Day limit ({campaignUsage.dotd_limit}/{campaignUsage.dotd_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.</>
-                    }
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={() => setView('merchant_deals')}
-          className={`p-4 rounded-xl flex flex-col gap-3 text-left active:scale-[0.98] transition-all border ${
-            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-          }`}
-        >
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-            isDark ? 'bg-blue-500/10' : 'bg-blue-50'
-          }`}>
-            <Plus className="w-5 h-5 text-blue-500" />
-          </div>
-          <div>
-            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>New Deal</p>
-            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Launch Campaign</p>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setIsScanning(true)}
-          className={`p-4 rounded-xl flex flex-col gap-3 text-left active:scale-[0.98] transition-all border ${
-            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-          }`}
-        >
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-            isDark ? 'bg-slate-800' : 'bg-slate-100'
-          }`}>
-            <QrCode className="w-5 h-5 text-slate-500" />
-          </div>
-          <div>
-            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Scan & Verify</p>
-            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Redeem Voucher</p>
-          </div>
-        </button>
-      </div>
-
-      {/* Festival Banner */}
-      <button
-        onClick={() => setView('merchant_deals')}
-        className={`w-full p-4 rounded-xl flex items-center gap-3 text-left active:scale-[0.98] transition-all border relative overflow-hidden ${
-          getBannerThemeClasses(nearestFestival.themeKey, isDark)
-        } ${isDark ? 'border-slate-800' : 'border-slate-200'}`}
+      {/* ─── Hero section with greeting ─── */}
+      <div
+        style={fi(0)}
+        className={`relative overflow-hidden px-6 pt-6 pb-5 ${
+          isDark
+            ? 'bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900'
+            : 'bg-gradient-to-br from-white via-slate-50 to-white'
+        }`}
       >
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-          isDark ? 'bg-blue-500/10' : 'bg-blue-50'
-        }`}>
-          <Gift className="w-5 h-5 text-blue-500" />
+        {/* Subtle decorative circles */}
+        <div className={`absolute -top-12 -right-12 w-40 h-40 rounded-full ${isDark ? 'bg-amber-500/5' : 'bg-amber-500/5'}`} />
+        <div className={`absolute -bottom-8 -left-8 w-28 h-28 rounded-full ${isDark ? 'bg-blue-500/5' : 'bg-blue-500/5'}`} />
+
+        <div className="flex items-start justify-between relative">
+          <div className="flex-1">
+            <p className={`text-xs font-medium tracking-wide uppercase ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              {greeting}
+            </p>
+            <h1 className={`text-2xl font-bold mt-0.5 leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              {user.full_name || user.store_name || 'Merchant'}
+            </h1>
+            <div className="flex items-center gap-2 mt-2">
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${
+                isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
+              }`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                {totalActiveDeals} live {totalActiveDeals === 1 ? 'deal' : 'deals'}
+              </div>
+              {user.store_name && (
+                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {user.store_name}
+                </span>
+              )}
+            </div>
+          </div>
+          <NotificationBadge
+            merchantId={user.id}
+            onClick={() => setView('merchant_notifications')}
+            theme={theme}
+          />
         </div>
-        <div className="flex-1">
-          <p className={`text-xs font-medium mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Upcoming: {nearestFestival.name}
-          </p>
-          <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Create a special deal for {nearestFestival.name}!
-          </p>
+      </div>
+
+      <div className="px-5 space-y-4 mt-4">
+
+        {/* ─── Campaign Usage (glass cards with rings) ─── */}
+        {campaignUsage.has_subscription && (
+          <div style={fi(80)} id="tour-campaign-usage">
+            <div className="grid grid-cols-2 gap-3">
+              {/* Campaign ring card */}
+              <div className={`relative rounded-2xl p-4 border overflow-hidden ${
+                isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <UsageRing
+                      used={campaignUsage.campaigns_used}
+                      limit={campaignUsage.campaigns_limit}
+                      color={campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? '#f43f5e' : '#3b82f6'}
+                      bgColor={isDark ? '#1e293b' : '#f1f5f9'}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Megaphone className="w-4 h-4 text-blue-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Campaigns</p>
+                    <p className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {campaignUsage.campaigns_used}
+                      <span className={`text-sm font-normal ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>
+                        /{campaignUsage.campaigns_limit}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                {campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
+                  <div className={`mt-2 flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>
+                    <AlertCircle className="w-3 h-3" />
+                    Limit reached
+                  </div>
+                )}
+              </div>
+
+              {/* DOTD ring card */}
+              <div className={`relative rounded-2xl p-4 border overflow-hidden ${
+                isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <UsageRing
+                      used={campaignUsage.dotd_used}
+                      limit={campaignUsage.dotd_limit}
+                      color={campaignUsage.dotd_used >= campaignUsage.dotd_limit ? '#f43f5e' : '#f59e0b'}
+                      bgColor={isDark ? '#1e293b' : '#f1f5f9'}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Zap className="w-4 h-4 text-amber-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Deal of Day</p>
+                    <p className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {campaignUsage.dotd_used}
+                      <span className={`text-sm font-normal ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>
+                        /{campaignUsage.dotd_limit}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                {campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
+                  <div className={`mt-2 flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>
+                    <AlertCircle className="w-3 h-3" />
+                    Limit reached
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Upgrade nudge */}
+            {(campaignUsage.campaigns_used >= campaignUsage.campaigns_limit || campaignUsage.dotd_used >= campaignUsage.dotd_limit) && (
+              <button
+                onClick={() => setView('merchant_subscriptions')}
+                className={`w-full mt-2 flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] ${
+                  isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                }`}
+              >
+                <span>Upgrade plan for more campaigns</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ─── Quick Actions Grid ─── */}
+        <div style={fi(160)} className="grid grid-cols-2 gap-3">
+          <button
+            id="tour-new-deal"
+            onClick={() => setView('merchant_deals')}
+            className="group relative rounded-2xl p-4 flex flex-col gap-3 text-left active:scale-[0.96] active:shadow-md transition-all overflow-hidden bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/25"
+          >
+            <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10 transition-transform group-active:scale-110" />
+            <div className="absolute bottom-0 right-0 w-16 h-16 rounded-full bg-blue-400/20 translate-x-4 translate-y-4" />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/20">
+              <Plus className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">New Deal</p>
+              <p className="text-[10px] mt-0.5 text-blue-100">Launch campaign</p>
+            </div>
+          </button>
+
+          <button
+            id="tour-scan-verify"
+            onClick={() => setIsScanning(true)}
+            className={`group relative rounded-2xl p-4 flex flex-col gap-3 text-left active:scale-[0.96] active:shadow-md transition-all overflow-hidden shadow-lg ${
+              isDark
+                ? 'bg-gradient-to-br from-slate-700 to-slate-800 shadow-black/30'
+                : 'bg-gradient-to-br from-slate-800 to-slate-900 shadow-slate-900/25'
+            }`}
+          >
+            <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/5 transition-transform group-active:scale-110" />
+            <div className="absolute bottom-0 right-0 w-16 h-16 rounded-full bg-white/5 translate-x-4 translate-y-4" />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/10">
+              <QrCode className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">Scan & Verify</p>
+              <p className="text-[10px] mt-0.5 text-slate-300">Redeem voucher</p>
+            </div>
+          </button>
         </div>
-        <ChevronRight className={`w-5 h-5 shrink-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
-      </button>
+
+        {/* ─── Active Deals Carousel ─── */}
+        {activeDeals.length > 0 && (
+          <div style={fi(240)}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                Live Deals
+              </h2>
+              <button
+                onClick={() => setView('merchant_deals')}
+                className={`flex items-center gap-1 text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
+              >
+                View all
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-1 -mx-5 px-5 no-scrollbar">
+              {activeDeals.map((deal) => (
+                <button
+                  key={deal.campaign_id}
+                  onClick={() => {
+                    setDealIdToEdit(deal.campaign_id);
+                    setView('merchant_deals');
+                  }}
+                  className={`shrink-0 w-56 rounded-2xl overflow-hidden border text-left active:scale-[0.97] transition-all ${
+                    isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+                  }`}
+                >
+                  {/* Deal thumbnail */}
+                  <div className={`relative w-full h-28 ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                    {deal.thumbnail ? (
+                      <img
+                        src={deal.thumbnail}
+                        alt={deal.deal_heading}
+                        className="w-full h-full object-cover"
+                        onError={e => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Megaphone className={`w-8 h-8 ${isDark ? 'text-slate-700' : 'text-slate-300'}`} />
+                      </div>
+                    )}
+                    {deal.is_deal_of_the_day && (
+                      <span className="absolute top-2 left-2 flex items-center gap-1 bg-amber-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
+                        <Zap className="w-2.5 h-2.5" />
+                        DOTD
+                      </span>
+                    )}
+                    {deal.daysLeft !== undefined && deal.daysLeft >= 0 && (
+                      <span className={`absolute bottom-2 right-2 flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full ${
+                        isDark ? 'bg-black/60 text-white' : 'bg-white/80 text-slate-700'
+                      }`}>
+                        <Clock className="w-2.5 h-2.5" />
+                        {deal.daysLeft === 0 ? 'Last day' : `${deal.daysLeft}d left`}
+                      </span>
+                    )}
+                  </div>
+                  {/* Deal info */}
+                  <div className="p-3">
+                    <p className={`text-xs font-bold leading-snug line-clamp-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {deal.deal_heading}
+                    </p>
+                    <p className={`text-[10px] font-semibold mt-0.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                      {deal.offerValue}
+                    </p>
+                    {/* Clicks & Claims */}
+                    <div className={`flex items-center gap-3 mt-1.5 pt-1.5 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+                      <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        <MousePointer2 className="w-3 h-3" />
+                        {clickCounts[deal.campaign_id] || 0}
+                      </span>
+                      <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                        <TicketCheck className="w-3 h-3" />
+                        {redeemCounts[deal.campaign_id] || 0}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ─── Shortcut Row ─── */}
+        <div style={fi(320)} className="grid grid-cols-4 gap-2">
+          {[
+            { icon: BarChart3, label: 'Intel', view: 'merchant_analytics' as AppView, color: 'text-violet-500', bg: isDark ? 'bg-violet-500/10' : 'bg-violet-50' },
+            { icon: Package, label: 'Catalogue', view: 'merchant_catalogue' as AppView, color: 'text-emerald-500', bg: isDark ? 'bg-emerald-500/10' : 'bg-emerald-50' },
+            { icon: Store, label: 'Stores', view: 'merchant_stores' as AppView, color: 'text-sky-500', bg: isDark ? 'bg-sky-500/10' : 'bg-sky-50' },
+            { icon: Sparkles, label: 'AI Hub', view: 'merchant_ai_insights' as AppView, color: 'text-amber-500', bg: isDark ? 'bg-amber-500/10' : 'bg-amber-50' },
+          ].map(({ icon: Icon, label, view: targetView, color, bg }) => (
+            <button
+              key={label}
+              onClick={() => setView(targetView)}
+              className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl active:scale-[0.95] transition-all border ${
+                isDark ? 'bg-slate-900/60 border-slate-800/60 hover:border-slate-700' : 'bg-white border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${bg}`}>
+                <Icon className={`w-4 h-4 ${color}`} />
+              </div>
+              <span className={`text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* ─── Upcoming Events ─── */}
+        {upcomingEvents.length > 0 && (
+          <div style={fi(400)} id="tour-festival-banner">
+            <div className="flex items-center justify-between mb-2.5">
+              <h2 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                Upcoming Events
+              </h2>
+            </div>
+            <div className="space-y-2.5">
+              {upcomingEvents.map((event, idx) => {
+                const daysAway = getDaysUntilDate(event.date);
+                const isFirst = idx === 0;
+                return (
+                  <button
+                    key={event.name + event.date}
+                    onClick={() => setView('merchant_deals')}
+                    className={`w-full p-3.5 rounded-2xl flex items-center gap-3 text-left active:scale-[0.98] transition-all border relative overflow-hidden ${
+                      isFirst
+                        ? `${getBannerThemeClasses(event.themeKey, isDark)} ${isDark ? 'border-slate-800' : 'border-slate-200'}`
+                        : isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg ${
+                      isFirst
+                        ? isDark ? 'bg-white/10' : 'bg-white/60'
+                        : isDark ? 'bg-slate-800' : 'bg-slate-50'
+                    }`}>
+                      {event.emoji}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                          {event.name}
+                        </p>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                          daysAway <= 7
+                            ? 'bg-rose-500/20 text-rose-400'
+                            : daysAway === 0
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : isDark ? 'bg-white/10 text-slate-400' : 'bg-slate-900/10 text-slate-500'
+                        }`}>
+                          {daysAway === 0 ? 'Today!' : `${daysAway}d away`}
+                        </span>
+                      </div>
+                      <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {event.dealHint}
+                      </p>
+                    </div>
+                    <ChevronRight className={`w-4 h-4 shrink-0 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ─── Empty state: no deals ─── */}
+        {activeDeals.length === 0 && !loading && (
+          <div style={fi(240)} className={`rounded-2xl p-6 text-center border ${
+            isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'
+          }`}>
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 ${
+              isDark ? 'bg-blue-500/10' : 'bg-blue-50'
+            }`}>
+              <Megaphone className={`w-7 h-7 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
+            </div>
+            <h3 className={`text-sm font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              No active deals yet
+            </h3>
+            <p className={`text-xs mb-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              Create your first campaign to start attracting customers.
+            </p>
+            <button
+              onClick={() => setView('merchant_deals')}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-500 text-white text-xs font-bold active:scale-[0.97] transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Create First Deal
+            </button>
+          </div>
+        )}
+      </div>
 
     </div>
   );

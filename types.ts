@@ -1,7 +1,7 @@
 
 export type Locale = 'en' | 'kn' | 'hi' | 'ta' | 'te' | 'ml' | 'bn' | 'mr' | 'gu';
 
-export type AppView = 'splash' | 'welcome' | 'language_selection' | 'login' | 'onboarding' | 'preferences' | 'home' | 'detail' | 'deals_of_day' | 'favorites' | 'profile' | 'merchant_dashboard' | 'merchant_analytics' | 'merchant_deals' | 'merchant_deal_of_day' | 'forgot_password' | 'register' | 'edit_profile' | 'deals' | 'help_feedback' | 'merchant_subscriptions' | 'redemption_survey' | 'campaign_survey' | 'my_redemptions' | 'verify_email' | 'verify_phone' | 'payment_plans' | 'bank_verification' | 'store_search' | 'dealadmin_dashboard' | 'dealadmin_review_deals' | 'dealadmin_edit_deal' | 'dealadmin_analytics' | 'dealadmin_banners' | 'privacy_policy' | 'terms_of_service' | 'privacy_policy_signup' | 'terms_of_service_signup' | 'notifications' | 'merchant_catalogue' | 'merchant_notifications' | 'merchant_ai_insights';
+export type AppView = 'splash' | 'welcome' | 'language_selection' | 'login' | 'onboarding' | 'preferences' | 'home' | 'detail' | 'deals_of_day' | 'favorites' | 'profile' | 'merchant_dashboard' | 'merchant_analytics' | 'merchant_deals' | 'merchant_deal_of_day' | 'forgot_password' | 'register' | 'edit_profile' | 'deals' | 'help_feedback' | 'merchant_subscriptions' | 'redemption_survey' | 'campaign_survey' | 'my_redemptions' | 'verify_email' | 'verify_phone' | 'payment_plans' | 'bank_verification' | 'store_search' | 'dealadmin_dashboard' | 'dealadmin_review_deals' | 'dealadmin_edit_deal' | 'dealadmin_analytics' | 'dealadmin_banners' | 'privacy_policy' | 'terms_of_service' | 'privacy_policy_signup' | 'terms_of_service_signup' | 'notifications' | 'merchant_catalogue' | 'merchant_notifications' | 'merchant_ai_insights' | 'merchant_onboarding' | 'merchant_stores' | 'location_permission' | 'campaign_wizard' | 'dotd_wizard' | 'product_wizard';
 
 export interface LocalizedNames {
   en: string;
@@ -33,6 +33,8 @@ export interface DBLocality {
   city_id: number;
   pincode: string;
   names: LocalizedNames;
+  latitude?: number | null;
+  longitude?: number | null;
   display_name?: string; // Computed for UI
 }
 
@@ -44,15 +46,17 @@ export interface StructuredLocality {
 export interface MerchantStore {
   id?: string;
   merchant_id: string;
-  store_name: string; // Added here
+  store_name: string;
   address: string;
   city: string;
   state: string;
   landmark?: string;
+  locality?: string;
+  pincode?: string;
   latitude: number;
   longitude: number;
   store_hrs?: string;
-  localized_shop_name?: Record<string, string>; // Added localized_shop_name here
+  localized_shop_name?: Record<string, string>;
 }
 
 export interface MerchantSearchStore {
@@ -116,6 +120,7 @@ export interface Deal {
   
   store_id?: string;
   image_name?: string;
+  created_at?: string;
 
   // Added to reflect the joined structure from get-by-status Edge Function
   merchant_stores?: {
@@ -151,9 +156,23 @@ export interface User {
   // Merchant-specific fields, now optional for all users
   store_name?: string;
   category?: string;
-  gstin?: string; // Existing
-  pan?: string; // Existing
-  my_referral_code?: string; // New field from user_profiles table
+  gstin?: string;
+  pan?: string;
+  business_type?: string;
+  udyam_no?: string;
+  fssai_no?: string;
+  trade_license_no?: string;
+  my_referral_code?: string;
+  country_code?: string;
+  lang_preference?: string;
+  active_status?: boolean;
+  push_notification?: boolean;
+  email_notification?: boolean;
+  text_notification?: boolean;
+  terms_accepted?: boolean;
+  privacy_accepted?: boolean;
+  first_login_at?: string;
+  created_at?: string;
   access_token?: string; // Add these to align with App.tsx state
   refresh_token?: string; // Add these to align with App.tsx state
   onboarding_complete?: boolean; // New flag for onboarding status

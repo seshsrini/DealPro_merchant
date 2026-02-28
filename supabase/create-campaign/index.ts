@@ -23,6 +23,121 @@ export function isDateString(value: string): boolean {
 }
 // End of inlined validation.ts
 
+// ─── Content Moderation ──────────────────────────────────────────────
+// Multi-category moderation for merchant deal content.
+// Categories: profanity, sexual, hate_speech, harassment
+// Covers English + Hindi/Hinglish + regional Indian languages.
+
+interface ModerationResult {
+  flagged: boolean;
+  categories: string[];
+  flaggedField: string;
+  flaggedTerm: string;
+}
+
+const MODERATION_LISTS: Record<string, string[]> = {
+  profanity: [
+    // English
+    'fuck', 'fucking', 'fucker', 'fck', 'f u c k', 'shit', 'shitty', 'bullshit',
+    'bitch', 'bitchy', 'damn', 'damned', 'crap', 'crappy', 'piss', 'pissed',
+    'bastard', 'ass', 'asshole', 'arsehole', 'arse', 'dumbass', 'jackass',
+    'wtf', 'stfu', 'lmfao',
+    // Hindi / Hinglish
+    'chutiya', 'chutiye', 'madarchod', 'mc', 'bhenchod', 'bc', 'bhosdike',
+    'bhosdiwale', 'gaand', 'gandu', 'lund', 'lauda', 'laude', 'randi',
+    'harami', 'haramkhor', 'kutiya', 'kutte', 'sala', 'saala', 'saale',
+    'ullu', 'gadha', 'bewakoof', 'kamina', 'kamine', 'kameena', 'kameene',
+    'tatti', 'hagne', 'jhant', 'jhatu', 'chut', 'bhadwa', 'bhadwe',
+    // Kannada
+    'sule', 'magne', 'mundaige', 'bolimaga',
+    // Tamil
+    'thevdiya', 'sunni', 'punda', 'oombu',
+    // Telugu
+    'dengey', 'pooku', 'modda', 'lanja', 'lanjakodaka',
+  ],
+  sexual: [
+    // English
+    'porn', 'porno', 'pornography', 'xxx', 'nude', 'nudes', 'naked', 'sex',
+    'sexy', 'sexual', 'orgasm', 'erotic', 'erotica', 'dildo', 'vibrator',
+    'masturbat', 'penis', 'vagina', 'boobs', 'tits', 'nipple', 'blowjob',
+    'handjob', 'anal', 'cumshot', 'hentai', 'milf', 'stripper', 'escort',
+    'prostitut', 'brothel', 'hookup', 'onlyfans',
+    // Hindi
+    'chod', 'chodna', 'chudai', 'muth', 'muthhal', 'nanga', 'nangi',
+  ],
+  hate_speech: [
+    // English slurs
+    'nigger', 'nigga', 'faggot', 'fag', 'dyke', 'tranny', 'retard', 'retarded',
+    'spastic', 'cripple',
+    // Communal / casteist (India-specific)
+    'chamaar', 'chamar', 'bhangi', 'chuhra', 'mlechha', 'kaffir', 'kafir',
+    // Hate phrases (checked as substrings)
+    'kill all', 'death to', 'go back to', 'gas the', 'hang all',
+  ],
+  harassment: [
+    // Threats and intimidation
+    'i will kill', 'i\'ll kill', 'gonna kill', 'want to kill',
+    'i will hurt', 'gonna hurt', 'beat you', 'beat the',
+    'threaten', 'threat', 'stalk', 'stalking',
+    'rape', 'rapist', 'molest',
+    'bomb', 'bombing', 'attack', 'shoot', 'shooting',
+    // Abusive targeting
+    'kys', 'kill yourself', 'go die',
+  ],
+};
+
+function normalizeForModeration(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[@]/g, 'a')
+    .replace(/[1!|]/g, 'i')
+    .replace(/[3]/g, 'e')
+    .replace(/[0]/g, 'o')
+    .replace(/[5\$]/g, 's')
+    .replace(/[7]/g, 't')
+    .replace(/[^a-z\s']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function moderateText(text: string, fieldName: string): ModerationResult | null {
+  if (!text || typeof text !== 'string' || text.trim().length === 0) return null;
+  const normalized = normalizeForModeration(text);
+  for (const [category, terms] of Object.entries(MODERATION_LISTS)) {
+    for (const term of terms) {
+      const termNorm = normalizeForModeration(term);
+      if (termNorm.includes(' ')) {
+        if (normalized.includes(termNorm)) {
+          return { flagged: true, categories: [category], flaggedField: fieldName, flaggedTerm: term };
+        }
+      } else {
+        const regex = new RegExp(`\\b${termNorm}\\b`);
+        if (regex.test(normalized)) {
+          return { flagged: true, categories: [category], flaggedField: fieldName, flaggedTerm: term };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function moderateCampaignContent(fields: Record<string, string | undefined>): ModerationResult | null {
+  for (const [fieldName, value] of Object.entries(fields)) {
+    if (!value) continue;
+    const result = moderateText(value, fieldName);
+    if (result) return result;
+  }
+  return null;
+}
+
+const MODERATION_CATEGORY_MESSAGES: Record<string, string> = {
+  profanity: 'Your deal contains inappropriate language. Please remove profanity and resubmit.',
+  sexual: 'Your deal contains sexual content which is not allowed. Please revise and resubmit.',
+  hate_speech: 'Your deal contains hateful or discriminatory language. Please revise and resubmit.',
+  harassment: 'Your deal contains threatening or harassing language. Please revise and resubmit.',
+};
+// ─── End Content Moderation ──────────────────────────────────────────
+
 // Inlined content of authenticateRequest
 export async function authenticateRequest(req: Request, corsHeaders: HeadersInit): Promise<Response | any> { // Using 'any' for User type in EF context for simplicity
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -162,6 +277,35 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Image name is required.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
     }
 
+    // ─── Content Moderation Check ───
+    const moderationResult = moderateCampaignContent({
+      deal_heading,
+      long_description,
+      shop_name,
+      offer_value,
+      localized_heading,
+      localized_offer,
+      localized_description,
+      localized_shop_name,
+    });
+
+    if (moderationResult) {
+      const moderationCategory = moderationResult.categories[0];
+      const userMessage = MODERATION_CATEGORY_MESSAGES[moderationCategory] || 'Your deal contains content that violates our guidelines. Please revise and resubmit.';
+      console.warn(`[create-campaign] Content moderation BLOCKED: field="${moderationResult.flaggedField}" category="${moderationCategory}" term="${moderationResult.flaggedTerm}" merchant=${user.id}`);
+      return new Response(JSON.stringify({
+        error: userMessage,
+        moderation: {
+          flagged: true,
+          category: moderationCategory,
+          field: moderationResult.flaggedField,
+        },
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
+    // ─── End Content Moderation Check ───
 
     const campaignPayload = {
       merchant_id,
@@ -180,7 +324,7 @@ Deno.serve(async (req) => {
       localized_offer,
       localized_description,
       localized_shop_name,
-      status: 'review', // Changed default status to 'review'
+      status: 'active', // AI moderation handles review — campaigns go live immediately
       // rating: 4.5, // Removed as per request
       is_deal_of_the_day: is_deal_of_the_day === true, // Use value from request, default to false
     };

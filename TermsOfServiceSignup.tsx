@@ -36,8 +36,8 @@ export const TermsOfServiceSignup: React.FC<TermsOfServiceSignupProps> = ({ setV
           <div className={`shrink-0 px-5 py-4 border-b ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
-                  <FileText className="w-5 h-5 text-amber-500" />
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-slate-500/10' : 'bg-slate-50'}`}>
+                  <FileText className="w-5 h-5 text-slate-600" />
                 </div>
                 <div>
                   <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
@@ -57,9 +57,9 @@ export const TermsOfServiceSignup: React.FC<TermsOfServiceSignupProps> = ({ setV
 
           {/* Scroll Indicator */}
           {!hasScrolledToBottom && (
-            <div className={`shrink-0 px-5 py-2 flex items-center justify-center gap-2 border-b ${isDark ? 'bg-amber-500/5 border-amber-500/10' : 'bg-amber-50 border-amber-100'}`}>
-              <ChevronDown className={`w-3.5 h-3.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
-              <p className={`text-xs font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+            <div className={`shrink-0 px-5 py-2 flex items-center justify-center gap-2 border-b ${isDark ? 'bg-slate-500/5 border-slate-500/10' : 'bg-slate-50 border-slate-200'}`}>
+              <ChevronDown className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
+              <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Please scroll down to read all terms before accepting
               </p>
             </div>
@@ -220,7 +220,7 @@ export const TermsOfServiceSignup: React.FC<TermsOfServiceSignupProps> = ({ setV
                   </h3>
                 </div>
                 <div className="text-sm leading-relaxed space-y-2">
-                  <p>If you believe that any content on DealPro infringes upon your copyright, please notify our Copyright Agent at <span className="font-semibold text-amber-500">legal@vedicjaalam.com</span>. We will respond to valid "Takedown Notices" by removing the infringing material immediately.</p>
+                  <p>If you believe that any content on DealPro infringes upon your copyright, please notify our Copyright Agent at <span className="font-semibold text-slate-600">legal@vedicjaalam.com</span>. We will respond to valid "Takedown Notices" by removing the infringing material immediately.</p>
                 </div>
               </section>
 
@@ -253,8 +253,8 @@ export const TermsOfServiceSignup: React.FC<TermsOfServiceSignupProps> = ({ setV
               </section>
 
               {/* Acceptance */}
-              <section className={`p-4 rounded-xl border ${isDark ? 'bg-amber-500/5 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
-                <p className={`text-sm font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+              <section className={`p-4 rounded-xl border ${isDark ? 'bg-slate-500/5 border-slate-500/20' : 'bg-slate-50 border-slate-200'}`}>
+                <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                   By using DealPro, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.
                 </p>
               </section>

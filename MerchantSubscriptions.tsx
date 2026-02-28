@@ -38,6 +38,10 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);
   const [currentTierId, setCurrentTierId] = useState<number | null>(null);
+  const [currentSubscription, setCurrentSubscription] = useState<any>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -47,8 +51,9 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         const fetchedTiers = await subscriptionService.getSubscriptionTiers();
         setTiers(fetchedTiers);
 
-        const { tier_id } = await merchantSubscriptionService.fetchCurrentSubscription();
+        const { tier_id, subscription } = await merchantSubscriptionService.fetchCurrentSubscription(user.id);
         setCurrentTierId(tier_id);
+        setCurrentSubscription(subscription);
       } catch (err: any) {
         console.error("Failed to fetch subscription tiers:", err);
         setError(err.message || "Failed to load subscription plans. Please try again.");
@@ -102,6 +107,9 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         console.log("[MerchantSubscriptions] Subscription created successfully");
 
         setCurrentTierId(tier.id);
+        setCurrentSubscription(null);
+        setSelecting(false);
+        setSelectedTierId(null);
 
         setUser({
           ...user,
@@ -109,8 +117,6 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           subscription_status: 'active',
           current_tier_id: tier.id,
         });
-
-        setView('merchant_dashboard');
       } else {
         setError(result.error || "Failed to activate subscription. Please try again.");
         setSelecting(false);
@@ -157,29 +163,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           <p className={`text-sm px-10 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Please check back later or contact support.</p>
         </div>
       ) : (
-        <div className={`rounded-xl border overflow-visible ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+        <div className={`rounded-xl border overflow-visible ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           {/* Table Header */}
-          <div className={`grid grid-cols-12 gap-3 px-4 py-3 border-b ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+          <div className={`grid grid-cols-12 gap-3 px-4 py-3 border-b ${isDark ? 'bg-slate-800/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
             <div className="col-span-3">
-              <div className="flex items-center gap-1">
-                <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Plan</p>
-                <div className="cursor-help group relative">
-                  <HelpCircle className={`w-3 h-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                  <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-[9999]">
-                    <div className={`rounded-xl px-3 py-2 w-[260px] border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200 shadow-lg'}`}>
-                      <p className={`text-xs font-semibold leading-relaxed ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                        Subscription Plans
-                      </p>
-                      <p className={`text-[11px] mt-1 leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                        Choose a plan based on your monthly
-                        needs. Deals: regular promotions. DOTD:
-                        premium single-day featured deals with
-                        maximum visibility and user engagement.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Plan</p>
             </div>
             <div className="col-span-2">
               <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Price</p>
@@ -188,23 +176,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Deals</p>
             </div>
             <div className="col-span-2">
-              <div className="flex items-center gap-1">
-                <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>DOTD</p>
-                <div className="cursor-help group relative">
-                  <HelpCircle className={`w-3 h-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-[9999]">
-                    <div className={`rounded-xl px-3 py-2 w-[240px] border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200 shadow-lg'}`}>
-                      <p className={`text-xs font-semibold leading-relaxed ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                        Deal of the Day
-                      </p>
-                      <p className={`text-[11px] mt-1 leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                        A promotional deal that runs for a
-                        single day giving maximum visibility.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>DOTD</p>
             </div>
             <div className="col-span-3"></div>
           </div>
@@ -214,13 +186,13 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
             <div
               key={tier.id}
               className={`grid grid-cols-12 gap-3 px-4 py-4 items-center transition-colors ${
-                index !== tiers.length - 1 ? (isDark ? 'border-b border-slate-700/50' : 'border-b border-slate-100') : ''
+                index !== tiers.length - 1 ? (isDark ? 'border-b border-slate-800/50' : 'border-b border-slate-100') : ''
               }`}
             >
               {/* Plan Name */}
               <div className="col-span-3">
                 <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{tier.tier_name}</p>
-                <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{tier.billing_frequency}</p>
+                <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{tier.billing_frequency}</p>
               </div>
 
               {/* Price */}
@@ -251,17 +223,14 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               {/* Action Button */}
               <div className="col-span-3 flex justify-end">
                 {currentTierId === tier.id ? (
-                  <button
-                    disabled
-                    className="px-4 h-8 rounded-lg bg-emerald-600 text-white font-medium text-[11px] cursor-default"
-                  >
-                    Selected
-                  </button>
+                  <span className="px-3 h-8 rounded-lg bg-blue-500 text-white font-semibold text-[11px] flex items-center">
+                    Active
+                  </span>
                 ) : (
                   <button
                     onClick={() => handleShowConfirmation(tier)}
                     disabled={selecting && selectedTierId === tier.id}
-                    className="px-4 h-8 rounded-lg bg-slate-900 text-white font-medium text-[11px] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 h-8 rounded-lg font-semibold text-[11px] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-slate-900 text-white"
                   >
                     {selecting && selectedTierId === tier.id ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -273,6 +242,105 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Cancel Subscription Link */}
+      {currentTierId && (
+        <div className="text-center pt-2 pb-4">
+          {currentSubscription?.cancel_at_period_end ? (
+            <p className={`text-xs ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+              Your subscription will end on {new Date(currentSubscription.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
+          ) : (
+            <button
+              onClick={() => { setCancelReason(''); setShowCancelModal(true); }}
+              className="text-blue-500 text-xs underline underline-offset-2"
+            >
+              Cancel my subscription
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Cancel Subscription Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
+          <div className={`max-w-sm w-full rounded-2xl p-6 space-y-4 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+            <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Cancel Subscription</h3>
+
+            <div className={`rounded-xl p-4 border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+              <p className={`text-xs leading-relaxed ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                If you cancel now, your active deals will remain live until{' '}
+                <span className="font-semibold">
+                  {currentSubscription?.current_period_end
+                    ? new Date(currentSubscription.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                  }
+                </span>
+                , but you won't be able to post new promotions or update your product catalogue.
+              </p>
+            </div>
+
+            <div>
+              <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Reason for cancellation
+              </label>
+              <select
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                className={`w-full h-11 px-3 rounded-lg text-sm border outline-none ${
+                  isDark
+                    ? 'bg-slate-900 border-slate-700 text-white'
+                    : 'bg-slate-50 border-slate-200 text-slate-900'
+                }`}
+              >
+                <option value="">Select a reason</option>
+                <option value="too_expensive">Too expensive</option>
+                <option value="not_enough_features">Not enough features</option>
+                <option value="business_closed">Business closed / seasonal</option>
+                <option value="switching_platform">Switching to another platform</option>
+                <option value="not_seeing_results">Not seeing results</option>
+                <option value="technical_issues">Technical issues</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className={`flex-1 h-11 rounded-xl text-sm font-medium border active:scale-[0.98] transition-all ${
+                  isDark ? 'border-slate-700 text-white' : 'border-slate-200 text-slate-900'
+                }`}
+              >
+                Keep Plan
+              </button>
+              <button
+                disabled={!cancelReason || cancelling}
+                onClick={async () => {
+                  setCancelling(true);
+                  try {
+                    const result = await merchantSubscriptionService.cancelSubscription(user.id, cancelReason);
+                    if (result.success) {
+                      setShowCancelModal(false);
+                      setCurrentSubscription((prev: any) => prev ? { ...prev, cancel_at_period_end: true } : prev);
+                    } else {
+                      setError(result.error || 'Failed to cancel subscription.');
+                      setShowCancelModal(false);
+                    }
+                  } catch (err: any) {
+                    setError(err.message || 'Cancellation failed.');
+                    setShowCancelModal(false);
+                  } finally {
+                    setCancelling(false);
+                  }
+                }}
+                className="flex-1 h-11 rounded-xl bg-rose-600 text-white text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40"
+              >
+                {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Cancel Subscription'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

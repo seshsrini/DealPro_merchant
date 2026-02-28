@@ -4,21 +4,34 @@ import {
   User as UserIcon,
   Mail,
   Phone,
-  Lock,
   Store,
   LogOut,
   Loader2,
   CheckCircle2,
-  Eye,
-  EyeOff,
   ShieldAlert,
-  ArrowLeft
+  ArrowLeft,
+  Briefcase,
+  Bell,
+  Globe,
 } from 'lucide-react';
 import { biometricService } from './services/biometricService';
 import { fcmService } from './services/fcmService';
 import { AppView } from './types';
 import { addCampaignService } from './services/addCampaignService';
 import { editProfileService } from './services/editProfileService';
+
+const BUSINESS_TYPES = ['GSTIN + PAN', 'Udyam', 'FSSAI', 'Trade License'];
+const LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'kn', label: 'Kannada' },
+  { code: 'ta', label: 'Tamil' },
+  { code: 'te', label: 'Telugu' },
+  { code: 'ml', label: 'Malayalam' },
+  { code: 'bn', label: 'Bengali' },
+  { code: 'mr', label: 'Marathi' },
+  { code: 'gu', label: 'Gujarati' },
+];
 
 interface EditProfileProps {
   user: any;
@@ -33,19 +46,31 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Profile States
+  // Personal
   const [fullName, setFullName] = useState(user.full_name || '');
   const [email, setEmail] = useState(user.email || '');
-  const [phone, setPhone] = useState(user.phone || '');
+  const [phone] = useState(user.phone || '');
+  const [countryCode] = useState(user.country_code || '');
+
+  // Store
   const [storeName, setStoreName] = useState(user.store_name || '');
   const [category, setCategory] = useState(user.category || '');
   const [dbCategories, setDbCategories] = useState<string[]>([]);
   const [isCatsLoading, setIsCatsLoading] = useState(false);
 
-  // Password Reset States
-  const [showPwd, setShowPwd] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  // Business Verification (read-only display)
+  const [businessType] = useState(user.business_type || '');
+  const [gstin] = useState(user.gstin || '');
+  const [pan] = useState(user.pan || '');
+  const [udyamNo] = useState(user.udyam_no || '');
+  const [fssaiNo] = useState(user.fssai_no || '');
+  const [tradeLicenseNo] = useState(user.trade_license_no || '');
+
+  // Preferences
+  const [langPreference, setLangPreference] = useState(user.lang_preference || 'en');
+  const [pushNotification, setPushNotification] = useState(user.push_notification ?? true);
+  const [emailNotification, setEmailNotification] = useState(user.email_notification ?? false);
+  const [textNotification, setTextNotification] = useState(user.text_notification ?? false);
 
   const isMerchant = user.role?.startsWith('merchant');
 
@@ -68,40 +93,22 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
       const updateData: any = {
         full_name: fullName,
         email: email,
-        phone: phone,
       };
 
       if (isMerchant) {
-        updateData.store_name = storeName;
         updateData.category = category;
       }
 
-      if (newPassword) {
-        if (newPassword.length < 8) {
-          throw new Error("Password must be at least 8 characters with one uppercase letter and one number.");
-        }
-        if (newPassword !== confirmPassword) {
-          throw new Error("Passwords do not match. Please try again.");
-        }
-        updateData.password = newPassword;
-      }
+      // Preferences
+      updateData.lang_preference = langPreference;
+      updateData.push_notification = pushNotification;
+      updateData.email_notification = emailNotification;
+      updateData.text_notification = textNotification;
 
       await editProfileService.updateUserProfile(user.id, user.role, updateData);
 
-      const updatedUser = { ...user, ...updateData };
-      if (newPassword) {
-        setUser({ ...updatedUser, isLoggedIn: false, access_token: null, refresh_token: null });
-        setView('login');
-        alert("Password updated successfully. Please log in again.");
-        await biometricService.clearSession();
-        return;
-      }
-
-      setUser(updatedUser);
+      setUser({ ...user, ...updateData });
       setSuccess(true);
-      setNewPassword('');
-      setConfirmPassword('');
-
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
       setError(err.message || "Failed to update profile.");
@@ -131,6 +138,38 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
       : 'bg-slate-50 text-slate-900 placeholder-slate-400 border border-slate-200 focus:border-slate-400'
   }`;
 
+  const readOnlyClass = `w-full h-12 px-4 rounded-lg text-sm font-normal outline-none ${
+    isDark
+      ? 'bg-slate-800/50 text-slate-400 border border-slate-700/50'
+      : 'bg-slate-100 text-slate-500 border border-slate-200'
+  }`;
+
+  const sectionHeader = (icon: React.ReactNode, label: string) => (
+    <div className="flex items-center gap-2 px-1">
+      {icon}
+      <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</span>
+    </div>
+  );
+
+  const toggleSwitch = (value: boolean, onChange: (v: boolean) => void, label: string) => (
+    <div className="flex items-center justify-between">
+      <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{label}</span>
+      <button
+        type="button"
+        onClick={() => onChange(!value)}
+        className={`w-11 h-6 rounded-full transition-all ${value ? 'bg-emerald-500' : isDark ? 'bg-slate-600' : 'bg-slate-300'}`}
+      >
+        <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
+      </button>
+    </div>
+  );
+
+  // Mask sensitive fields - show last 4 chars only
+  const maskField = (val: string) => {
+    if (!val || val.length <= 4) return val;
+    return '*'.repeat(val.length - 4) + val.slice(-4);
+  };
+
   return (
     <div className={`px-6 pt-6 pb-32 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
       {/* Header */}
@@ -146,7 +185,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
             <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
               Edit Profile
             </h2>
-            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Update your store details</p>
+            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Manage your account details</p>
           </div>
         </div>
         <button
@@ -176,10 +215,10 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
       <form onSubmit={handleUpdate} className="space-y-6">
         {/* Personal Information */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2 px-1">
-            <UserIcon className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
-            <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Personal Information</span>
-          </div>
+          {sectionHeader(
+            <UserIcon className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+            'Personal Information'
+          )}
 
           <input
             value={fullName}
@@ -197,18 +236,15 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
               onChange={e => setEmail(e.target.value)}
               placeholder="Email Address"
               className={`${inputClass} pl-11`}
-              required
             />
           </div>
 
           <div className="relative">
             <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
             <input
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="Phone Number"
-              className={`${inputClass} pl-11`}
-              required
+              value={`${countryCode ? countryCode + ' ' : ''}${phone}`}
+              className={`${readOnlyClass} pl-11`}
+              readOnly
             />
           </div>
         </div>
@@ -216,17 +252,15 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         {/* Store Information */}
         {isMerchant && (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 px-1">
-              <Store className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
-              <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Store Information</span>
-            </div>
+            {sectionHeader(
+              <Store className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+              'Store Information'
+            )}
 
             <input
               value={storeName}
-              onChange={e => setStoreName(e.target.value)}
-              placeholder="Store Name"
-              className={inputClass}
-              required
+              className={readOnlyClass}
+              readOnly
             />
 
             <div className="relative">
@@ -247,42 +281,128 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
           </div>
         )}
 
-        {/* Change Password */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 px-1">
-            <Lock className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
-            <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Change Password</span>
-          </div>
+        {/* Business Verification (Read-only) */}
+        {isMerchant && businessType && (
+          <div className="space-y-3">
+            {sectionHeader(
+              <Briefcase className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+              'Business Verification'
+            )}
 
-          <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-            <div className="relative">
-              <input
-                type={showPwd ? "text" : "password"}
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="New Password"
-                className={inputClass}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPwd(!showPwd)}
-                className={`absolute right-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}
-              >
-                {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+            <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Business Type</span>
+                <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{businessType}</span>
+              </div>
+
+              {gstin && (
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>GSTIN</span>
+                  <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(gstin)}</span>
+                </div>
+              )}
+
+              {pan && (
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>PAN</span>
+                  <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(pan)}</span>
+                </div>
+              )}
+
+              {udyamNo && (
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Udyam No</span>
+                  <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(udyamNo)}</span>
+                </div>
+              )}
+
+              {fssaiNo && (
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>FSSAI No</span>
+                  <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(fssaiNo)}</span>
+                </div>
+              )}
+
+              {tradeLicenseNo && (
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Trade License</span>
+                  <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(tradeLicenseNo)}</span>
+                </div>
+              )}
+
+              <p className={`text-[10px] text-center pt-1 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                Contact support to update business verification details
+              </p>
             </div>
+          </div>
+        )}
 
-            <input
-              type={showPwd ? "text" : "password"}
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              placeholder="Confirm New Password"
-              className={inputClass}
-            />
+        {/* Preferences */}
+        <div className="space-y-3">
+          {sectionHeader(
+            <Globe className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+            'Language'
+          )}
+          <select
+            value={langPreference}
+            onChange={e => setLangPreference(e.target.value)}
+            className={inputClass}
+          >
+            {LANGUAGES.map(l => (
+              <option key={l.code} value={l.code}>{l.label}</option>
+            ))}
+          </select>
+        </div>
 
-            <p className={`text-[10px] text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              Leave blank to keep your current password
-            </p>
+        {/* Notification Preferences */}
+        <div className="space-y-3">
+          {sectionHeader(
+            <Bell className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+            'Notifications'
+          )}
+
+          <div className={`p-4 rounded-xl border space-y-4 ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+            {toggleSwitch(pushNotification, setPushNotification, 'Push Notifications')}
+            {toggleSwitch(emailNotification, setEmailNotification, 'Email Notifications')}
+            {toggleSwitch(textNotification, setTextNotification, 'SMS Notifications')}
+          </div>
+        </div>
+
+        {/* Account Info (Read-only) */}
+        <div className="space-y-3">
+          {sectionHeader(
+            <ShieldAlert className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+            'Account'
+          )}
+          <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Role</span>
+              <span className={`text-sm font-medium capitalize ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{user.role}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Referral Code</span>
+              <span className={`text-sm font-mono font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{user.my_referral_code || '—'}</span>
+            </div>
+            {user.terms_accepted && (
+              <div className="flex items-center justify-between">
+                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Terms Accepted</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              </div>
+            )}
+            {user.privacy_accepted && (
+              <div className="flex items-center justify-between">
+                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Privacy Accepted</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              </div>
+            )}
+            {user.created_at && (
+              <div className="flex items-center justify-between">
+                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Member Since</span>
+                <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                  {new Date(user.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

@@ -14,7 +14,7 @@ export const merchantSubscriptionService = {
 
     try {
       const { data, error } = await supabase.functions.invoke('merchant-subscription', {
-        body: { action: 'check' },
+        body: { action: 'check', merchantId },
       });
 
       if (error) {
@@ -36,7 +36,7 @@ export const merchantSubscriptionService = {
   /**
    * Fetch current active subscription for a merchant
    */
-  fetchCurrentSubscription: async (): Promise<{
+  fetchCurrentSubscription: async (merchantId: string): Promise<{
     tier_id: number | null;
     subscription: any | null;
   }> => {
@@ -44,7 +44,7 @@ export const merchantSubscriptionService = {
 
     try {
       const { data, error } = await supabase.functions.invoke('merchant-subscription', {
-        body: { action: 'fetch' },
+        body: { action: 'fetch', merchantId },
       });
 
       if (error) {
@@ -78,6 +78,7 @@ export const merchantSubscriptionService = {
       const { data, error } = await supabase.functions.invoke('merchant-subscription', {
         body: {
           action: 'create',
+          merchantId,
           tier_key: tierKey,
           tier_name: tierName,
         },
@@ -104,7 +105,7 @@ export const merchantSubscriptionService = {
   /**
    * Get campaign usage for the current calendar month
    */
-  getCampaignUsage: async (): Promise<{
+  getCampaignUsage: async (merchantId: string): Promise<{
     campaigns_used: number;
     campaigns_limit: number;
     dotd_used: number;
@@ -114,11 +115,11 @@ export const merchantSubscriptionService = {
     console.log("[merchantSubscriptionService] Fetching campaign usage");
 
     try {
-      // Pass current year and month from client to Edge Function
       const now = new Date();
       const { data, error } = await supabase.functions.invoke('merchant-subscription', {
         body: {
           action: 'campaign_usage',
+          merchantId,
           year: now.getFullYear(),
           month: now.getMonth()
         },
@@ -152,6 +153,36 @@ export const merchantSubscriptionService = {
         dotd_limit: 0,
         has_subscription: false,
       };
+    }
+  },
+
+  /**
+   * Cancel the merchant's active subscription (at end of billing period)
+   */
+  cancelSubscription: async (merchantId: string, reason: string): Promise<{
+    success: boolean;
+    current_period_end?: string;
+    error?: string;
+  }> => {
+    console.log("[merchantSubscriptionService] Cancelling subscription, reason:", reason);
+    try {
+      const { data, error } = await supabase.functions.invoke('merchant-subscription', {
+        body: { action: 'cancel', merchantId, reason },
+      });
+
+      if (error) {
+        console.error("[merchantSubscriptionService] Cancel error:", error);
+        return { success: false, error: error.message };
+      }
+
+      if (data?.success) {
+        console.log("[merchantSubscriptionService] Subscription cancelled:", data);
+        return { success: true, current_period_end: data.current_period_end };
+      }
+      return { success: false, error: data?.error || 'Cancellation failed' };
+    } catch (err: any) {
+      console.error("[merchantSubscriptionService] Cancel exception:", err.message);
+      return { success: false, error: err.message };
     }
   },
 };

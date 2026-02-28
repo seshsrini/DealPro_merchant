@@ -15,6 +15,7 @@
 import React, { useRef, useState } from 'react';
 import { Upload, X, ImageIcon, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
+import { addCampaignService } from '../../services/addCampaignService';
 
 // Category-specific placeholder emojis (keyed on first word of category label, lowercase)
 const CATEGORY_ICONS: Record<string, string> = {
@@ -74,6 +75,14 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     setUploadError(null);
 
     try {
+      // Step 0 — AI image moderation check
+      const modResult = await addCampaignService.moderateImage(file);
+      if (modResult.flagged) {
+        setUploadError(modResult.reason || 'This image contains inappropriate content. Please choose a different image.');
+        setUploading(false);
+        return;
+      }
+
       // Step 1 — get signature from edge function
       const { data: signData, error: signErr } = await supabase.functions.invoke('cloudinary-sign', {
         body: { folder: 'dealpro-products' },

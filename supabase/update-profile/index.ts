@@ -196,6 +196,20 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Preference fields (applicable to all roles)
+    if (data.lang_preference && isString(data.lang_preference)) {
+      profileUpdatePayload.lang_preference = data.lang_preference;
+    }
+    if (typeof data.push_notification === 'boolean') {
+      profileUpdatePayload.push_notification = data.push_notification;
+    }
+    if (typeof data.email_notification === 'boolean') {
+      profileUpdatePayload.email_notification = data.email_notification;
+    }
+    if (typeof data.text_notification === 'boolean') {
+      profileUpdatePayload.text_notification = data.text_notification;
+    }
+
     // Perform update on auth.users table if there's anything to update
     if (Object.keys(authUpdatePayload).length > 0) {
       const { error: authError } = await serviceRoleSupabase.auth.admin.updateUserById(id, authUpdatePayload);

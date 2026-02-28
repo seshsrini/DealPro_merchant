@@ -226,7 +226,7 @@ Deno.serve(async (req) => {
       .from('campaigns')
       .select('campaign_id, status, end_date')
       .eq('merchant_id', merchantId)
-      .eq('is_active', true);
+      .eq('status', 'active');
 
     if (campaignsError) throw campaignsError;
 

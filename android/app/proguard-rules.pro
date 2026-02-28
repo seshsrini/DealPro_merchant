@@ -24,6 +24,11 @@
 -keep class com.capacitorjs.plugins.** { *; }
 -keepclassmembers class com.capacitorjs.plugins.** { *; }
 
+# Keep capawesome Capacitor plugins (Firebase Auth, etc.)
+-keep class io.capawesome.** { *; }
+-keepclassmembers class io.capawesome.** { *; }
+-dontwarn io.capawesome.**
+
 # Keep Capacitor bridge
 -keepclassmembers class * extends com.getcapacitor.Plugin {
     @com.getcapacitor.annotation.CapacitorPlugin public *;
@@ -45,9 +50,11 @@
 -keep interface androidx.** { *; }
 -dontwarn androidx.**
 
-# ===== GOOGLE PLAY SERVICES =====
+# ===== GOOGLE PLAY SERVICES & FIREBASE =====
 -keep class com.google.android.gms.** { *; }
 -dontwarn com.google.android.gms.**
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
 
 # ===== BARCODE SCANNING (ML Kit) =====
 -keep class com.google.mlkit.** { *; }

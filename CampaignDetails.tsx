@@ -380,8 +380,8 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
 
                 <div className="flex justify-end px-4 py-2">
                   <span className={`text-[8px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
-                    Powered by{' '}
-                    <span className="font-semibold text-blue-500">Google Maps</span>
+                    Map data &copy;{' '}
+                    <span className="font-semibold text-blue-500">OpenStreetMap</span>
                   </span>
                 </div>
              </div>

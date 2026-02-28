@@ -1,14 +1,44 @@
-
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Navigation, ZoomIn, ZoomOut, LocateFixed, Compass } from 'lucide-react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+const LIGHT_TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+
+const userIcon = L.divIcon({
+  className: '',
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+  html: `
+    <div style="position: relative; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">
+      <div style="position: absolute; width: 100%; height: 100%; background: #3b82f6; opacity: 0.4; border-radius: 50%; animation: map-pulse 2s infinite;"></div>
+      <div style="width: 12px; height: 12px; background: #3b82f6; border: 2px solid white; border-radius: 50%; position: relative; z-index: 1; box-shadow: 0 0 5px rgba(0,0,0,0.3);"></div>
+    </div>
+  `
+});
+
+const targetIcon = L.divIcon({
+  className: '',
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  html: `
+    <div style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="#f43f5e" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+        <circle cx="12" cy="10" r="3" fill="white"></circle>
+      </svg>
+    </div>
+  `
+});
 
 interface LocationMapProps {
   onSelect?: (location: string) => void;
   selectedLocation: string;
   theme: 'light' | 'dark';
-  userCoords?: { latitude: number, longitude: number };
-  targetCoords?: { latitude: number, longitude: number };
+  userCoords?: { latitude: number; longitude: number };
+  targetCoords?: { latitude: number; longitude: number };
   targetAddress?: string;
   onRefreshLocation?: () => void;
 }
@@ -22,89 +52,116 @@ export const LocationMap: React.FC<LocationMapProps> = ({
   onRefreshLocation
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any | null>(null);
-  const userMarkerRef = useRef<any | null>(null);
-  const targetMarkerRef = useRef<any | null>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const userMarkerRef = useRef<L.Marker | null>(null);
+  const targetMarkerRef = useRef<L.Marker | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
   const isDark = theme === 'dark';
-  const [isGoogleMapsReady, setIsGoogleMapsReady] = useState(false);
+  const [isMapReady, setIsMapReady] = useState(false);
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
-  const checkIntervalRef = useRef<number | null>(null);
-  const timeoutRef = useRef<number | null>(null);
 
+  // Initialize map
   useEffect(() => {
-    let checkCount = 0;
-    const MAX_CHECKS = 50;
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    const checkGoogleMaps = () => {
-      checkCount++;
+    const initialLat = 12.9716;
+    const initialLng = 77.5946;
 
-      if ((window as any).google && (window as any).google.maps) {
-        console.log('[LocationMap] Google Maps is ready');
-        setIsGoogleMapsReady(true);
-        setMapLoadError(null);
+    try {
+      const map = L.map(mapContainerRef.current, {
+        center: [initialLat, initialLng],
+        zoom: 12,
+        zoomControl: false,
+        attributionControl: false
+      });
 
-        if (checkIntervalRef.current) {
-          clearInterval(checkIntervalRef.current);
-          checkIntervalRef.current = null;
-        }
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
+      tileLayerRef.current = L.tileLayer(isDark ? DARK_TILES : LIGHT_TILES, {
+        attribution: TILE_ATTRIBUTION,
+        maxZoom: 19
+      }).addTo(map);
 
-        return true;
-      }
-
-      if (checkCount >= MAX_CHECKS) {
-        console.error('[LocationMap] Google Maps failed to load after timeout');
-        setMapLoadError('Map service unavailable. Please refresh the page.');
-
-        if (checkIntervalRef.current) {
-          clearInterval(checkIntervalRef.current);
-          checkIntervalRef.current = null;
-        }
-
-        return false;
-      }
-
-      return false;
-    };
-
-    if (!checkGoogleMaps()) {
-      console.log('[LocationMap] Starting Google Maps availability checks');
-      checkIntervalRef.current = window.setInterval(() => {
-        checkGoogleMaps();
-      }, 200) as unknown as number;
-
-      timeoutRef.current = window.setTimeout(() => {
-        if (!isGoogleMapsReady) {
-          console.error('[LocationMap] Google Maps timeout');
-          setMapLoadError('Map loading timeout. Please refresh the page.');
-          if (checkIntervalRef.current) {
-            clearInterval(checkIntervalRef.current);
-            checkIntervalRef.current = null;
-          }
-        }
-      }, 10000) as unknown as number;
+      mapInstanceRef.current = map;
+      setIsMapReady(true);
+      console.log('[LocationMap] Leaflet map initialized successfully');
+    } catch (e) {
+      console.error('[LocationMap] Map initialization failed:', e);
+      setMapLoadError('Failed to initialize map.');
     }
 
-    const handleGoogleMapsLoaded = () => {
-      console.log('[LocationMap] Google Maps loaded event received');
-      checkGoogleMaps();
-    };
-
-    window.addEventListener('google-maps-loaded', handleGoogleMapsLoaded);
-
     return () => {
-      window.removeEventListener('google-maps-loaded', handleGoogleMapsLoaded);
-      if (checkIntervalRef.current) {
-        clearInterval(checkIntervalRef.current);
-      }
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
       }
     };
-  }, [isGoogleMapsReady]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Switch tiles on theme change
+  useEffect(() => {
+    if (!tileLayerRef.current) return;
+    tileLayerRef.current.setUrl(isDark ? DARK_TILES : LIGHT_TILES);
+  }, [isDark]);
+
+  // Center map when coords change
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const coords = userCoords || targetCoords;
+    if (coords && coords.latitude != null && coords.longitude != null &&
+        !isNaN(coords.latitude) && !isNaN(coords.longitude)) {
+      mapInstanceRef.current.setView([coords.latitude, coords.longitude], 15);
+    }
+  }, [userCoords, targetCoords]);
+
+  // User marker
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    if (!userCoords) {
+      if (userMarkerRef.current) {
+        userMarkerRef.current.remove();
+        userMarkerRef.current = null;
+      }
+      return;
+    }
+
+    const pos: L.LatLngExpression = [userCoords.latitude, userCoords.longitude];
+
+    if (userMarkerRef.current) {
+      userMarkerRef.current.setLatLng(pos);
+    } else {
+      userMarkerRef.current = L.marker(pos, { icon: userIcon, title: 'Your Location' })
+        .addTo(mapInstanceRef.current);
+    }
+  }, [userCoords]);
+
+  // Target marker
+  useEffect(() => {
+    if (!mapInstanceRef.current || !targetCoords) return;
+    if (targetCoords.latitude == null || targetCoords.longitude == null ||
+        isNaN(targetCoords.latitude) || isNaN(targetCoords.longitude)) return;
+
+    const pos: L.LatLngExpression = [targetCoords.latitude, targetCoords.longitude];
+
+    if (targetMarkerRef.current) {
+      targetMarkerRef.current.setLatLng(pos);
+    } else {
+      targetMarkerRef.current = L.marker(pos, { icon: targetIcon, title: selectedLocation })
+        .addTo(mapInstanceRef.current);
+    }
+
+    mapInstanceRef.current.panTo(pos);
+  }, [targetCoords, selectedLocation]);
+
+  const handleZoomIn = () => mapInstanceRef.current?.zoomIn();
+  const handleZoomOut = () => mapInstanceRef.current?.zoomOut();
+  const handleRecenter = () => {
+    if (onRefreshLocation) onRefreshLocation();
+    const coords = targetCoords || userCoords;
+    if (coords && coords.latitude != null && coords.longitude != null &&
+        !isNaN(coords.latitude) && !isNaN(coords.longitude) && mapInstanceRef.current) {
+      mapInstanceRef.current.panTo([coords.latitude, coords.longitude]);
+    }
+  };
 
   const handleOpenNativeMap = () => {
     if (!targetAddress) return;
@@ -127,204 +184,12 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     }
   };
 
-  const createUserMarkerContent = () => {
-    const div = document.createElement('div');
-    div.innerHTML = `
-      <div style="position: relative; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">
-        <div style="position: absolute; width: 100%; height: 100%; background: #3b82f6; opacity: 0.4; border-radius: 50%; animation: map-pulse 2s infinite;"></div>
-        <div style="width: 12px; height: 12px; background: #3b82f6; border: 2px solid white; border-radius: 50%; position: relative; z-index: 1; box-shadow: 0 0 5px rgba(0,0,0,0.3);"></div>
-      </div>
-      <style>
-        @keyframes map-pulse {
-          0% { transform: scale(0.8); opacity: 0.6; }
-          100% { transform: scale(2); opacity: 0; }
-        }
-      </style>
-    `;
-    return div;
-  };
-
-  const createTargetMarkerContent = () => {
-    const div = document.createElement('div');
-    div.innerHTML = `
-      <div style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="#f43f5e" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-          <circle cx="12" cy="10" r="3" fill="white"></circle>
-        </svg>
-      </div>
-    `;
-    return div;
-  };
-
-  useEffect(() => {
-    if (!isGoogleMapsReady || !mapContainerRef.current || mapInstanceRef.current) return;
-
-    const initialLat = 12.9716;
-    const initialLng = 77.5946;
-
-    try {
-      console.log('[LocationMap] Initializing map at default location');
-
-      const map = new (window as any).google.maps.Map(mapContainerRef.current, {
-        center: { lat: initialLat, lng: initialLng },
-        zoom: 12,
-        disableDefaultUI: true,
-        mapId: 'DEMO_MAP_ID',
-        gestureHandling: 'greedy',
-        zoomControl: false,
-        mapTypeControl: false,
-        scaleControl: false,
-        streetViewControl: false,
-        rotateControl: false,
-        fullscreenControl: false
-      });
-
-      mapInstanceRef.current = map;
-      console.log('[LocationMap] Map initialized successfully');
-    } catch (e) {
-      console.error('[LocationMap] Map initialization failed:', e);
-      setMapLoadError('Failed to initialize map. Please refresh the page.');
-    }
-  }, [isGoogleMapsReady]);
-
-  useEffect(() => {
-    if (!mapInstanceRef.current) return;
-
-    const coords = userCoords || targetCoords;
-    if (coords && coords.latitude != null && coords.longitude != null &&
-        !isNaN(coords.latitude) && !isNaN(coords.longitude)) {
-      const pos = { lat: coords.latitude, lng: coords.longitude };
-      console.log('[LocationMap] Centering map on new coordinates:', pos);
-      mapInstanceRef.current.panTo(pos);
-      mapInstanceRef.current.setZoom(15);
-    } else if (coords) {
-      console.warn('[LocationMap] Invalid coordinates received:', coords);
-    }
-  }, [userCoords, targetCoords]);
-
-  useEffect(() => {
-    const g = (window as any).google;
-
-    if (!mapInstanceRef.current) {
-      console.log('[LocationMap] Map instance not ready for user marker');
-      return;
-    }
-
-    if (!userCoords) {
-      console.log('[LocationMap] No user coordinates available for marker');
-      if (userMarkerRef.current) {
-        userMarkerRef.current.map = null;
-        userMarkerRef.current = null;
-        console.log('[LocationMap] User marker removed');
-      }
-      return;
-    }
-
-    const createOrUpdateMarker = () => {
-      if (!g?.maps?.marker?.AdvancedMarkerElement) {
-        console.warn('[LocationMap] AdvancedMarkerElement not yet available');
-        return false;
-      }
-
-      const pos = { lat: userCoords.latitude, lng: userCoords.longitude };
-
-      try {
-        if (userMarkerRef.current) {
-          console.log('[LocationMap] Updating user marker position:', pos);
-          userMarkerRef.current.position = pos;
-        } else {
-          console.log('[LocationMap] Creating NEW user marker at:', pos);
-          userMarkerRef.current = new g.maps.marker.AdvancedMarkerElement({
-            position: pos,
-            map: mapInstanceRef.current,
-            content: createUserMarkerContent(),
-            title: "Your Location",
-          });
-          console.log('[LocationMap] User marker created successfully!');
-        }
-        return true;
-      } catch (e) {
-        console.error('[LocationMap] Error creating/updating user marker:', e);
-        return false;
-      }
-    };
-
-    if (!createOrUpdateMarker()) {
-      let retryCount = 0;
-      const maxRetries = 10;
-
-      const retryTimer = setInterval(() => {
-        retryCount++;
-        console.log(`[LocationMap] Retry ${retryCount}/${maxRetries} for user marker`);
-
-        if (createOrUpdateMarker()) {
-          clearInterval(retryTimer);
-          console.log('[LocationMap] User marker created after retry!');
-        } else if (retryCount >= maxRetries) {
-          clearInterval(retryTimer);
-          console.error('[LocationMap] Failed to create user marker after all retries');
-        }
-      }, 300);
-
-      return () => clearInterval(retryTimer);
-    }
-  }, [userCoords]);
-
-  useEffect(() => {
-    const g = (window as any).google;
-    if (!mapInstanceRef.current || !targetCoords) return;
-
-    if (targetCoords.latitude == null || targetCoords.longitude == null ||
-        isNaN(targetCoords.latitude) || isNaN(targetCoords.longitude)) {
-      console.warn('[LocationMap] Invalid target coordinates, skipping marker:', targetCoords);
-      return;
-    }
-
-    if (!g?.maps?.marker?.AdvancedMarkerElement) {
-      console.warn('[LocationMap] AdvancedMarkerElement not yet available for target marker');
-      return;
-    }
-
-    const pos = { lat: targetCoords.latitude, lng: targetCoords.longitude };
-
-    try {
-      if (targetMarkerRef.current) {
-        console.log('[LocationMap] Updating target marker position:', pos);
-        targetMarkerRef.current.position = pos;
-      } else {
-        console.log('[LocationMap] Creating target marker at:', pos);
-        targetMarkerRef.current = new g.maps.marker.AdvancedMarkerElement({
-          position: pos,
-          map: mapInstanceRef.current,
-          content: createTargetMarkerContent(),
-          title: selectedLocation,
-        });
-      }
-
-      mapInstanceRef.current.panTo(pos);
-    } catch (e) {
-      console.error('[LocationMap] Error creating/updating target marker:', e);
-    }
-  }, [targetCoords, selectedLocation]);
-
-  const handleZoomIn = () => mapInstanceRef.current?.setZoom(mapInstanceRef.current.getZoom() + 1);
-  const handleZoomOut = () => mapInstanceRef.current?.setZoom(mapInstanceRef.current.getZoom() - 1);
-  const handleRecenter = () => {
-    if (onRefreshLocation) onRefreshLocation();
-    const coords = targetCoords || userCoords;
-    if (coords && coords.latitude != null && coords.longitude != null &&
-        !isNaN(coords.latitude) && !isNaN(coords.longitude) && mapInstanceRef.current) {
-      mapInstanceRef.current.panTo({ lat: coords.latitude, lng: coords.longitude });
-    }
-  };
-
   return (
     <div className={`relative w-full h-full rounded-xl border overflow-hidden transition-all duration-300 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
       <div ref={mapContainerRef} className="w-full h-full z-0"></div>
 
       {/* Loading/Error Indicator */}
-      {!isGoogleMapsReady && (
+      {!isMapReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90 z-[100]">
           <div className="text-center px-6">
             {mapLoadError ? (

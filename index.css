@@ -8,6 +8,10 @@
     --card-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
 }
 
+/* Leaflet map container */
+.leaflet-container { width: 100%; height: 100%; }
+@keyframes map-pulse { 0% { transform: scale(0.8); opacity: 0.6; } 100% { transform: scale(2); opacity: 0; } }
+
 /* BARCODE SCANNER TRANSPARENCY PROTOCOL */
 body.barcode-scanner-active {
     background-color: transparent !important;
@@ -175,6 +179,25 @@ textarea.input-premium {
     animation: reveal 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
+/* Float-in animation for welcome page */
+@keyframes float-in {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-float-in {
+    opacity: 0;
+    animation: float-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.float-in-delay-1 { animation-delay: 0.1s; }
+.float-in-delay-2 { animation-delay: 0.25s; }
+.float-in-delay-3 { animation-delay: 0.4s; }
+.float-in-delay-4 { animation-delay: 0.55s; }
+.float-in-delay-5 { animation-delay: 0.7s; }
+.float-in-delay-6 { animation-delay: 0.85s; }
+.float-in-delay-7 { animation-delay: 1.0s; }
+
 @keyframes pulse-ring {
     0% { transform: scale(0.8); opacity: 0.5; }
     100% { transform: scale(1.3); opacity: 0; }
@@ -243,6 +266,11 @@ input[type=range]::-webkit-slider-runnable-track {
     cursor: pointer;
     background: rgba(59, 130, 246, 0.15);
     border-radius: 10px;
+}
+
+@keyframes fadeScaleIn {
+  0% { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 @keyframes flag-shine {
@@ -409,4 +437,115 @@ input[type=range]::-webkit-slider-runnable-track {
 }
 .light-mode .biometric-toggle-switch .toggle-circle.inactive svg {
     color: #475569; /* Darker icon when inactive in light mode */
+}
+
+/* ===== Feature Tour (driver.js) Styles ===== */
+
+/* Light theme popover */
+.dealpro-tour-light .driver-popover {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  box-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.2);
+  padding: 1.25rem;
+  max-width: 300px;
+}
+.dealpro-tour-light .driver-popover-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+}
+.dealpro-tour-light .driver-popover-description {
+  font-size: 0.8125rem;
+  color: #475569;
+  line-height: 1.5;
+}
+.dealpro-tour-light .driver-popover-progress-text {
+  font-size: 0.6875rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.dealpro-tour-light .driver-popover-navigation-btns {
+  gap: 0.5rem;
+}
+.dealpro-tour-light .driver-popover-next-btn,
+.dealpro-tour-light .driver-popover-prev-btn {
+  border-radius: 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border: none;
+  cursor: pointer;
+  text-shadow: none;
+}
+.dealpro-tour-light .driver-popover-next-btn {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+}
+.dealpro-tour-light .driver-popover-prev-btn {
+  background: #f1f5f9;
+  color: #334155;
+}
+.dealpro-tour-light .driver-popover-close-btn {
+  color: #94a3b8;
+}
+.dealpro-tour-light .driver-popover-arrow-side-top .driver-popover-arrow {
+  border-bottom-color: #ffffff;
+}
+.dealpro-tour-light .driver-popover-arrow-side-bottom .driver-popover-arrow {
+  border-top-color: #ffffff;
+}
+
+/* Dark theme popover */
+.dealpro-tour-dark .driver-popover {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 1rem;
+  box-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.6);
+  padding: 1.25rem;
+  max-width: 300px;
+}
+.dealpro-tour-dark .driver-popover-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 0.25rem;
+}
+.dealpro-tour-dark .driver-popover-description {
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+.dealpro-tour-dark .driver-popover-progress-text {
+  font-size: 0.6875rem;
+  color: #64748b;
+  font-weight: 600;
+}
+.dealpro-tour-dark .driver-popover-next-btn,
+.dealpro-tour-dark .driver-popover-prev-btn {
+  border-radius: 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border: none;
+  cursor: pointer;
+  text-shadow: none;
+}
+.dealpro-tour-dark .driver-popover-next-btn {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+}
+.dealpro-tour-dark .driver-popover-prev-btn {
+  background: #334155;
+  color: #e2e8f0;
+}
+.dealpro-tour-dark .driver-popover-close-btn {
+  color: #64748b;
+}
+.dealpro-tour-dark .driver-popover-arrow-side-top .driver-popover-arrow {
+  border-bottom-color: #1e293b;
+}
+.dealpro-tour-dark .driver-popover-arrow-side-bottom .driver-popover-arrow {
+  border-top-color: #1e293b;
 }

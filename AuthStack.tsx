@@ -5,21 +5,24 @@ import { userService } from './services/userService';
 import { biometricService } from './services/biometricService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { fcmService } from './services/fcmService';
-import { ForgotPwd } from './forgotpwd';
 import { useTranslation } from './contexts/LanguageContext';
+import { OtpVerificationModal } from './OtpVerificationModal';
 import {
-  User as UserIcon,
-  Lock,
   Loader2,
-  Eye,
-  EyeOff,
-  Check,
   CheckCircle2,
   ShieldAlert,
-  X,
-  Fingerprint // Import Fingerprint icon
+  ChevronDown,
+  Fingerprint,
+  ShieldCheck,
 } from 'lucide-react';
 import { supabase, updateSupabaseSession } from './services/supabaseClient';
+
+const COUNTRY_CODES = [
+  { code: "+91", country: "India", flag: "\u{1F1EE}\u{1F1F3}" },
+  { code: "+1", country: "USA", flag: "\u{1F1FA}\u{1F1F8}" },
+  { code: "+44", country: "UK", flag: "\u{1F1EC}\u{1F1E7}" },
+  { code: "+971", country: "UAE", flag: "\u{1F1E6}\u{1F1EA}" },
+];
 
 interface AuthStackProps {
   view: AppView;
@@ -29,48 +32,56 @@ interface AuthStackProps {
   setLoading: (loading: boolean) => void;
   registrationMessage: string | null;
   setRegistrationMessage: (msg: string | null) => void;
-  theme: 'light' | 'dark'; // Add theme prop
+  theme: 'light' | 'dark';
 }
 
 export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, loading, setLoading, registrationMessage, setRegistrationMessage, theme }) => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [enableBiometrics, setEnableBiometrics] = useState(false);
-  const { t, setLocale } = useTranslation();
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpPhoneNumber, setOtpPhoneNumber] = useState('');
+  const [isPhoneVerifiedForLogin, setIsPhoneVerifiedForLogin] = useState(false);
+
+  // Biometric consent phase: shown AFTER successful OTP + login
+  const [loginPhase, setLoginPhase] = useState<'phone' | 'biometric_consent'>('phone');
+  const [pendingUser, setPendingUser] = useState<any>(null);
+
+  const { setLocale } = useTranslation();
   const isDark = theme === 'dark';
 
-  const inputClass = `w-full h-12 px-4 rounded-lg text-sm font-medium border outline-none transition-all ${
-    isDark
-      ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-slate-500'
-      : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-slate-400'
-  }`;
+  // Check if merchant has completed their profile (onboarding wizard)
+  const isMerchantProfileComplete = (profile: any): boolean => {
+    return !!(
+      profile.full_name &&
+      profile.store_name &&
+      profile.business_type &&
+      profile.terms_accepted &&
+      profile.privacy_accepted
+    );
+  };
 
   const handlePostLoginNavigation = async (userProfile: any, session: any) => {
-    const userRole = userProfile.role || 'consumer';
+    await updateSupabaseSession(session);
+    const userRole = userProfile.role || 'merchant';
 
-    // Set language preference from user profile
     if (userProfile.lang_preference) {
-      console.log('[AuthStack] Setting language preference from user profile:', userProfile.lang_preference);
       setLocale(userProfile.lang_preference);
     }
 
-    // Initialize push notifications for all users
     try {
       await fcmService.initialize(userProfile.id);
-      console.log('[AuthStack] Push notifications initialized for user:', userProfile.id);
     } catch (error) {
       console.error('[AuthStack] Failed to initialize push notifications:', error);
-      // Don't block login if FCM fails
     }
 
-    // Check subscription status for merchants
     let subscriptionInfo: { hasActiveSubscription: boolean; subscription_status?: string; current_tier_id?: number } = {
       hasActiveSubscription: false
     };
     if (userRole === 'merchant') {
       subscriptionInfo = await merchantSubscriptionService.checkActiveSubscription(userProfile.id);
-      console.log('[AuthStack] Merchant subscription check:', subscriptionInfo);
     }
 
     const updatedUser = {
@@ -82,17 +93,59 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
       subscription_status: subscriptionInfo.subscription_status,
       current_tier_id: subscriptionInfo.current_tier_id,
     };
-    setUser(updatedUser);
 
+    // Determine target view: if merchant profile is incomplete, show onboarding wizard
+    // Subscription selection is part of onboarding, so complete profile → dashboard
+    let targetView: string;
     if (userRole === 'merchant') {
-      // Route to subscriptions if no active subscription
-      setView(subscriptionInfo.hasActiveSubscription ? 'merchant_dashboard' : 'merchant_subscriptions');
+      if (!isMerchantProfileComplete(userProfile)) {
+        targetView = 'merchant_onboarding';
+      } else {
+        targetView = 'merchant_dashboard';
+      }
     } else if (userRole === 'dealadmin') {
-      setView('dealadmin_review_deals');
-    } else { // 'consumer' role
-      // ALWAYS show onboarding/hoardings on login (not just first time)
-      setView('onboarding');
+      targetView = 'dealadmin_review_deals';
+    } else {
+      targetView = 'onboarding';
     }
+
+    // Check if user already opted in/out of biometric
+    const alreadyAsked = localStorage.getItem('dealpro_merchant_biometric_asked') === 'true';
+    const alreadyOptedIn = !!biometricService.getSavedUser();
+
+    if (alreadyOptedIn) {
+      await biometricService.saveSession(updatedUser);
+      setUser(updatedUser);
+      setView(targetView as AppView);
+    } else if (alreadyAsked) {
+      setUser(updatedUser);
+      setView(targetView as AppView);
+    } else {
+      // First time — show biometric consent screen
+      setPendingUser({ user: updatedUser, targetView });
+      setLoginPhase('biometric_consent');
+    }
+  };
+
+  // User accepted quick login
+  const handleBiometricAccept = async () => {
+    if (!pendingUser) return;
+    localStorage.setItem('dealpro_merchant_biometric_asked', 'true');
+    await biometricService.saveSession(pendingUser.user);
+    setUser(pendingUser.user);
+    setPendingUser(null);
+    setLoginPhase('phone');
+    setView(pendingUser.targetView as AppView);
+  };
+
+  // User declined quick login
+  const handleBiometricDecline = () => {
+    if (!pendingUser) return;
+    localStorage.setItem('dealpro_merchant_biometric_asked', 'true');
+    setUser(pendingUser.user);
+    setPendingUser(null);
+    setLoginPhase('phone');
+    setView(pendingUser.targetView as AppView);
   };
 
   useEffect(() => {
@@ -102,62 +155,161 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
         setRegistrationMessage(null);
       }
 
-      // Check session silently in background without showing loader
+      // Skip Supabase session check if biometric login will handle it (App.tsx)
+      // This prevents a race condition where the async session check overrides
+      // the biometric path's navigation after AuthStack unmounts
+      if (biometricService.getSavedUser()) return;
+
       supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (session) {
-          const authUser = session.user;
-          // Fetch the full user profile to get role and onboarding status
-          const userProfile = await userService.getUserProfile(authUser.id);
-
+          const userProfile = await userService.getUserProfile(session.user.id);
           if (userProfile) {
-            await updateSupabaseSession(session);
             handlePostLoginNavigation(userProfile, session);
           } else {
-            // Handle case where profile is not found (e.g., corrupted DB entry)
-            console.error("User profile not found after session restore. Forcing logout.");
             await biometricService.clearSession();
-            setAuthError("Profile not found. Please log in again.");
+            setAuthError("Your account could not be found. Please log in again.");
           }
         }
       }).catch(err => {
         console.error("Error restoring session:", err);
-        setAuthError("Failed to restore session. Please log in.");
+        setAuthError("Your previous session has expired. Please log in again.");
       });
     }
   }, [view, setUser, setView, setLoading, registrationMessage, setRegistrationMessage]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // After OTP verified → complete login
+  useEffect(() => {
+    if (isPhoneVerifiedForLogin && phoneNumber) {
+      setIsPhoneVerifiedForLogin(false);
+      completeAuth();
+    }
+  }, [isPhoneVerifiedForLogin, phoneNumber]);
+
+  const doOtpLogin = async (phone: string) => {
+    const { user: userProfile, session } = await userService.merchantOtpLogin(phone, selectedCountry.code);
+    if (!userProfile) throw new Error('Unable to load your account. Please try again.');
+    if (!session) throw new Error('Login could not be completed. Please try again.');
+    await handlePostLoginNavigation(userProfile, session);
+  };
+
+  const completeAuth = async () => {
     setLoading(true);
     setAuthError(null);
-    const formData = new FormData(e.currentTarget as HTMLFormElement);
-    const identifier = formData.get('identifier') as string;
-    const password = formData.get('password') as string;
-
     try {
-      const { user: authProfile, session } = await userService.loginUser(identifier, password);
-
-      if (session && authProfile) {
-        if (enableBiometrics) {
-          await biometricService.saveSession(identifier, password);
-        }
-        handlePostLoginNavigation(authProfile, session);
-      }
+      const cleanDigits = phoneNumber.replace(/\D/g, '');
+      await doOtpLogin(cleanDigits);
     } catch (err: any) {
-      // Check if it's an authentication error (invalid credentials)
-      const isAuthError = err.message?.toLowerCase().includes('invalid') ||
-                         err.message?.toLowerCase().includes('credentials') ||
-                         err.message?.toLowerCase().includes('password') ||
-                         err.message?.toLowerCase().includes('email') ||
-                         err.message?.toLowerCase().includes('user');
-
-      setAuthError(isAuthError ? "Invalid username or password" : (err.message || "Connection failed."));
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('network')) {
+        setAuthError('Unable to connect to server. Please check your internet connection.');
+      } else {
+        setAuthError(msg || 'Something went wrong. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  if (view === 'forgot_password') return <ForgotPwd setView={setView} loading={loading} setLoading={setLoading} theme={theme} />;
+  const handleContinue = async () => {
+    const input = phoneNumber.trim();
+    if (!input) return;
+
+    const cleanDigits = input.replace(/\D/g, '');
+
+    if (selectedCountry.code === '+91') {
+      if (cleanDigits.length !== 10 || !/^[6-9]/.test(cleanDigits)) {
+        setAuthError('Please enter a valid 10-digit phone number.');
+        return;
+      }
+    } else {
+      if (cleanDigits.length < 4 || cleanDigits.length > 15) {
+        setAuthError('Please enter a valid phone number.');
+        return;
+      }
+    }
+
+    setAuthError(null);
+    setPhoneNumber(cleanDigits);
+
+    // Test bypass — skip OTP for test numbers
+    if (['9999999999', '8888888888', '6666666666', '7777777777'].includes(cleanDigits)) {
+      setIsPhoneVerifiedForLogin(true);
+      return;
+    }
+
+    const fullPhone = `${selectedCountry.code}${cleanDigits}`;
+    setOtpPhoneNumber(fullPhone);
+    setShowOtpModal(true);
+  };
+
+  const phoneMaxLength = selectedCountry.code === '+91' ? 10 : 15;
+  const isPhoneValid = (() => {
+    const digits = phoneNumber.replace(/\D/g, '');
+    if (selectedCountry.code === '+91') return digits.length === 10;
+    return digits.length >= 4;
+  })();
+
+  // Biometric consent screen — shown after successful OTP + login
+  if (loginPhase === 'biometric_consent') {
+    return (
+      <div className={`px-6 pt-10 flex flex-col items-center ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+        <div className="w-20 h-20 rounded-3xl bg-emerald-50 flex items-center justify-center mb-6">
+          <Fingerprint className="w-10 h-10 text-emerald-600" />
+        </div>
+
+        <h2 className={`text-2xl font-semibold mb-3 text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>
+          Enable Quick Login?
+        </h2>
+
+        <p className={`text-sm text-center mb-8 leading-relaxed max-w-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+          Allow DealPro to use your device's biometric authentication (fingerprint / face) to sign you in instantly next time.
+        </p>
+
+        <div className={`w-full rounded-xl p-4 mb-8 ${isDark ? 'bg-slate-800/50 border border-slate-700' : 'bg-slate-50 border border-slate-200'}`}>
+          <div className="flex items-start gap-3 mb-3">
+            <ShieldCheck className="w-5 h-5 text-emerald-500 mt-0.5 shrink-0" />
+            <div>
+              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>Your data stays on-device</p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                Biometric data is never sent to our servers. Authentication is handled entirely by your device.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="w-5 h-5 text-emerald-500 mt-0.5 shrink-0" />
+            <div>
+              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>Skip OTP next time</p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                Open the app and go straight to your dashboard — no phone verification needed.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full space-y-3">
+          <button
+            onClick={handleBiometricAccept}
+            className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          >
+            <Fingerprint className="w-4 h-4" />
+            Yes, Enable Quick Login
+          </button>
+          <button
+            onClick={handleBiometricDecline}
+            className={`w-full h-12 rounded-xl text-sm font-medium active:scale-[0.98] transition-all ${
+              isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
+            }`}
+          >
+            Not Now
+          </button>
+        </div>
+
+        <p className={`text-[10px] mt-6 text-center px-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+          You can change this later in Settings. We respect your privacy.
+        </p>
+      </div>
+    );
+  }
 
   if (view === 'login') {
     return (
@@ -175,7 +327,8 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
             <span>{successMessage}</span>
           </div>
         )}
-        {/* Sign-in Error Modal */}
+
+        {/* Error Modal */}
         {authError && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 px-8">
             <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
@@ -183,17 +336,11 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
                 <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
                   <ShieldAlert className="w-5 h-5 text-red-500" />
                 </div>
-                <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Signin Error</h3>
+                <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Login Error</h3>
               </div>
               <p className={`text-sm mb-5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                Email or Password is incorrect. Please try again.
+                {authError}
               </p>
-              <button
-                onClick={() => { setAuthError(null); setView('forgot_password'); }}
-                className={`text-sm font-medium mb-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}
-              >
-                Forgot Password?
-              </button>
               <button
                 onClick={() => setAuthError(null)}
                 className="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all"
@@ -204,65 +351,107 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4 flex-1">
-          <div className="relative">
-            <input name="identifier" placeholder="Phone Number / Username" className={inputClass} required />
-          </div>
-          <div className="relative">
-            <input name="password" type={showPassword ? "text" : "password"} placeholder={t('login_placeholder_pass')} className={`${inputClass} pr-12`} required />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className={`absolute right-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
-          </div>
-
-          <label className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-            <div className={`relative w-11 h-6 rounded-full transition-all duration-300
-                ${enableBiometrics
-                  ? 'bg-blue-600'
-                  : isDark ? 'bg-slate-700' : 'bg-slate-300'
+        <div className="space-y-4 flex-1">
+          {/* Phone entry with country code */}
+          <div className="relative flex">
+            {/* Country Code Picker */}
+            <div className={`relative ${showCountryPicker ? 'z-[1000]' : ''}`}>
+              <button
+                type="button"
+                onClick={() => setShowCountryPicker(!showCountryPicker)}
+                className={`h-12 w-[72px] rounded-l-lg border flex items-center justify-center gap-1 active:scale-95 transition-all focus:outline-none ${
+                  isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <span className="text-lg">{selectedCountry.flag}</span>
+                <ChevronDown className="w-3 h-3 text-slate-500" />
+              </button>
+              {showCountryPicker && (
+                <div className={`absolute top-full left-0 mt-2 w-48 rounded-lg p-2 z-[999] shadow-lg border ${
+                  isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'
                 }`}>
-              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white flex items-center justify-center transition-all duration-300 shadow-sm
-                ${enableBiometrics ? 'left-[22px]' : 'left-0.5'}`}>
-                <Fingerprint className={`w-3 h-3 transition-colors duration-300
-                    ${enableBiometrics ? 'text-blue-600' : isDark ? 'text-slate-400' : 'text-slate-500'}`} />
-              </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    {COUNTRY_CODES.map(c => (
+                      <button
+                        key={c.code}
+                        type="button"
+                        onClick={() => { setSelectedCountry(c); setShowCountryPicker(false); }}
+                        className={`w-full text-left p-3 rounded-lg text-xs font-medium flex gap-3 items-center ${
+                          isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>{c.flag}</span>
+                        <span className={`flex-1 ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>{c.country}</span>
+                        <span className="text-slate-500">{c.code}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <input type="checkbox" className="hidden" checked={enableBiometrics} onChange={(e) => setEnableBiometrics(e.target.checked)} />
-            <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Biometric Auth</span>
-          </label>
+            {/* Phone Input */}
+            <input
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+              placeholder={`Phone Number${selectedCountry.code === '+91' ? ' (10 Digits)' : ''}`}
+              type="tel"
+              maxLength={phoneMaxLength}
+              inputMode="numeric"
+              className={`flex-1 h-12 px-4 rounded-r-lg text-sm font-medium outline-none transition-all border border-l-0 ${
+                isDark
+                  ? 'bg-slate-800 text-white placeholder-slate-500 border-slate-700 focus:border-slate-500'
+                  : 'bg-white text-slate-900 placeholder-slate-400 border-slate-200 focus:border-slate-400'
+              }`}
+              autoFocus
+            />
+          </div>
 
-          <button type="submit" disabled={loading} className="w-full h-12 rounded-xl bg-slate-900 text-white font-medium text-sm flex items-center justify-center active:scale-[0.98] transition-all disabled:opacity-50">
-            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : t('login_btn')}
+          {/* Terms of Service and Privacy Policy Notice */}
+          <div className="text-center px-2">
+            <p className={`text-[10px] leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+              By continuing, you agree to our{' '}
+              <button
+                onClick={() => setView('terms_of_service')}
+                className={`underline ${isDark ? 'text-blue-400' : 'text-blue-600'} transition-colors`}
+              >
+                Terms of Service
+              </button>{' '}
+              and acknowledge that you have read our{' '}
+              <button
+                onClick={() => setView('privacy_policy')}
+                className={`underline ${isDark ? 'text-blue-400' : 'text-blue-600'} transition-colors`}
+              >
+                Privacy Policy
+              </button>{' '}
+              to learn how we collect, use and share your data.
+            </p>
+          </div>
+
+          <button
+            onClick={handleContinue}
+            disabled={loading || !isPhoneValid}
+            className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-medium active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Continue'}
           </button>
-        </form>
-
-        {/* Terms of Service and Privacy Policy Notice */}
-        <div className="mt-6 text-center px-4">
-          <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
-            By continuing, you agree to our{' '}
-            <button
-              onClick={() => setView('terms_of_service')}
-              className={`underline ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} transition-colors`}
-            >
-              Terms of Service
-            </button>{' '}
-            and acknowledge that you have read our{' '}
-            <button
-              onClick={() => setView('privacy_policy')}
-              className={`underline ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} transition-colors`}
-            >
-              Privacy Policy
-            </button>{' '}
-            to learn how we collect, use and share your data.
-          </p>
         </div>
 
-        <div className="mt-8 text-center space-y-4 pb-20">
-          <button onClick={() => setView('forgot_password')} className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t('login_forgot') || 'Forgot Password?'}</button>
-          <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-            {t('login_register_hint') || 'New to DealPro?'} <button onClick={() => setView('register')} className={`ml-1 font-semibold ${isDark ? 'text-white' : 'text-green-600'}`}>{t('login_register_action') || 'Signup'}</button>
-          </p>
-        </div>
+        {/* Login OTP Modal */}
+        <OtpVerificationModal
+          isOpen={showOtpModal}
+          onClose={() => {
+            setShowOtpModal(false);
+            setOtpPhoneNumber('');
+          }}
+          phoneNumber={otpPhoneNumber}
+          onVerificationSuccess={() => {
+            setShowOtpModal(false);
+            setIsPhoneVerifiedForLogin(true);
+          }}
+          onVerificationError={() => {
+            setIsPhoneVerifiedForLogin(false);
+          }}
+        />
       </div>
     );
   }

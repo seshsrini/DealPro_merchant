@@ -6,19 +6,21 @@ import {
   ShieldCheck,
   ChevronRight,
   PenLine,
-  BarChart3,
   HelpCircle,
   Share2,
   Loader2,
   CheckCircle2,
   CreditCard,
   Zap,
-  Banknote,
+  PlayCircle,
+  MapPin,
 } from 'lucide-react';
 import { AppView } from './types';
 import { useTranslation } from './contexts/LanguageContext';
 import { userService } from './services/userService';
 import { MreferralService } from './services/MreferralService';
+import { resetFeatureTour } from './components/FeatureTour';
+import { resetCampaignTour } from './components/CampaignTour';
 
 interface MerchantProfileProps {
   user: any;
@@ -106,13 +108,13 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
           <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
         </button>
 
-        {/* Console / Dashboard */}
-        <button onClick={() => setView('merchant_dashboard')} className={`w-full p-4 rounded-xl flex items-center justify-between active:scale-[0.98] transition-all border ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+        {/* My Stores */}
+        <button onClick={() => setView('merchant_stores')} className={`w-full p-4 rounded-xl flex items-center justify-between active:scale-[0.98] transition-all border ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className="flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
-              <BarChart3 className="w-5 h-5 text-blue-500" />
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-teal-500/10' : 'bg-teal-50'}`}>
+              <MapPin className="w-5 h-5 text-teal-500" />
             </div>
-            <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('profile_console')}</span>
+            <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>My Stores</span>
           </div>
           <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
         </button>
@@ -128,17 +130,6 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
           <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
         </button>
 
-        {/* Bank Verification */}
-        <button onClick={() => setView('bank_verification')} className={`w-full p-4 rounded-xl flex items-center justify-between active:scale-[0.98] transition-all border ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-          <div className="flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
-              <Banknote className="w-5 h-5 text-emerald-500" />
-            </div>
-            <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('profile_bank_verification')}</span>
-          </div>
-          <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
-        </button>
-
         {/* Payment Plans */}
         <button onClick={() => setView('payment_plans')} className={`w-full p-4 rounded-xl flex items-center justify-between active:scale-[0.98] transition-all border ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className="flex items-center gap-4">
@@ -146,6 +137,28 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
               <CreditCard className="w-5 h-5 text-rose-500" />
             </div>
             <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('profile_payments')}</span>
+          </div>
+          <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+        </button>
+
+        {/* Replay Feature Tour */}
+        <button onClick={() => { resetFeatureTour(user.id); setView('merchant_dashboard'); }} className={`w-full p-4 rounded-xl flex items-center justify-between active:scale-[0.98] transition-all border ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+          <div className="flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'}`}>
+              <PlayCircle className="w-5 h-5 text-cyan-500" />
+            </div>
+            <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>Replay Feature Tour</span>
+          </div>
+          <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+        </button>
+
+        {/* Replay Campaign Tour */}
+        <button onClick={() => { resetCampaignTour(user.id); setView('merchant_deals'); }} className={`w-full p-4 rounded-xl flex items-center justify-between active:scale-[0.98] transition-all border ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+          <div className="flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-violet-500/10' : 'bg-violet-50'}`}>
+              <PlayCircle className="w-5 h-5 text-violet-500" />
+            </div>
+            <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>Replay Campaign Tour</span>
           </div>
           <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
         </button>

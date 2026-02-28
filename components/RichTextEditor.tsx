@@ -73,14 +73,14 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   return (
     <div className={`space-y-2 ${className}`}>
       {/* Toolbar */}
-      <div className={`flex items-center gap-2 p-2 rounded-lg border ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+      <div className={`flex items-center gap-2 p-2 rounded-lg border ${isDark ? 'bg-white border-slate-300' : 'bg-slate-50 border-slate-200'}`}>
         <button
           type="button"
           onClick={() => execCommand('bold')}
           className={`p-2 rounded-lg transition-colors active:scale-[0.98] ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
           title="Bold (Ctrl+B)"
         >
-          <Bold className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
+          <Bold className={`w-4 h-4 ${isDark ? 'text-slate-900' : 'text-slate-600'}`} />
         </button>
         <button
           type="button"
@@ -88,7 +88,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           className={`p-2 rounded-lg transition-colors active:scale-[0.98] ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
           title="Italic (Ctrl+I)"
         >
-          <Italic className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
+          <Italic className={`w-4 h-4 ${isDark ? 'text-slate-900' : 'text-slate-600'}`} />
         </button>
         <button
           type="button"
@@ -96,7 +96,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           className={`p-2 rounded-lg transition-colors active:scale-[0.98] ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
           title="Bullet List"
         >
-          <List className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
+          <List className={`w-4 h-4 ${isDark ? 'text-slate-900' : 'text-slate-600'}`} />
         </button>
 
         {/* Emoji Picker Toggle */}
@@ -107,7 +107,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
             className={`p-2 rounded-lg transition-colors active:scale-[0.98] ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
             title="Insert Emoji"
           >
-            <Smile className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
+            <Smile className={`w-4 h-4 ${isDark ? 'text-slate-900' : 'text-slate-600'}`} />
           </button>
 
           {showEmojiPicker && (

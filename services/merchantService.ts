@@ -34,6 +34,24 @@ export const merchantService = {
     return data as MerchantSearchStore[];
   },
 
+  // Update an existing store (address fields only)
+  updateStore: async (merchantId: string, storeId: string, data: Record<string, unknown>): Promise<MerchantStore> => {
+    const { data: res, error } = await supabase.functions.invoke('manage-stores', {
+      body: { action: 'update', merchantId, storeId, data },
+    });
+    if (error) throw error;
+    return (res as any).store as MerchantStore;
+  },
+
+  // Add a new store
+  addStore: async (merchantId: string, store: Record<string, unknown>): Promise<MerchantStore> => {
+    const { data: res, error } = await supabase.functions.invoke('manage-stores', {
+      body: { action: 'add', merchantId, store },
+    });
+    if (error) throw error;
+    return (res as any).store as MerchantStore;
+  },
+
   /**
    * Registers a new merchant user via a dedicated Edge Function, creating an entry in Supabase Auth
    * and linking it to the 'merchants' custom profile table and 'merchant_stores' table.
@@ -60,12 +78,12 @@ export const merchantService = {
       if (!response.ok) {
         const rawBody = await response.text();
         console.error('[merchantService] Raw error body:', rawBody);
-        let errorMessage = `Registration failed: ${response.status}`;
+        let errorMessage = 'Registration could not be completed. Please try again.';
         try {
           const errorData = JSON.parse(rawBody);
           errorMessage = errorData.error || errorData.message || errorMessage;
         } catch {
-          if (rawBody) errorMessage = rawBody;
+          // Keep the user-friendly default
         }
         throw new Error(errorMessage);
       }
@@ -73,7 +91,7 @@ export const merchantService = {
       const data = await response.json();
 
       if (!data || !data.user) { // session might be null if email verification is pending
-        throw new Error("Merchant registration failed: Invalid response from registration service.");
+        throw new Error("Registration could not be completed. Please try again.");
       }
 
       // If a session is returned, update the client-side Supabase instance
@@ -86,7 +104,7 @@ export const merchantService = {
       console.error("[merchantService] Merchant registration failed (Direct Fetch):", err);
       // Provide a more generic network error for CORS/network issues
       if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-         throw new Error("Could not connect to registration service. Please open the app in a new window or check your internet connection.");
+         throw new Error("Unable to connect. Please check your internet connection and try again.");
       }
       throw err; // Re-throw other specific errors from the Edge Function
     }

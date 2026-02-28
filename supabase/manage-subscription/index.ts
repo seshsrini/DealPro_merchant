@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
 
     // 2. Verify user is a merchant
     const { data: userProfile, error: profileError } = await supabaseAdmin
-      .from('user_profiles')
+      .from('merchant_profiles')
       .select('role')
       .eq('id', user.id)
       .single();
@@ -149,6 +149,18 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Deactivate any existing active subscriptions for this merchant
+      const { error: deactivateErr } = await supabaseAdmin
+        .from('merchant_subscriptions')
+        .update({ status: 'cancelled', cancel_at_period_end: true })
+        .eq('merchant_id', user.id)
+        .eq('status', 'active');
+
+      if (deactivateErr) {
+        console.error('[manage-subscription] Deactivate old subs error:', deactivateErr);
+        throw deactivateErr;
+      }
+
       // Calculate period dates (1 month from now)
       const now = new Date();
       const periodEnd = new Date(now);
@@ -227,55 +239,47 @@ Deno.serve(async (req) => {
         throw tierError;
       }
 
-      // 3. Count campaigns with start_date in current calendar month
-      // Use provided year/month or fall back to server time
+      // 3. Count campaigns active during the current calendar month
+      // A campaign is "active this month" if its date range overlaps with the month:
+      //   start_date <= end of month AND (end_date >= start of month OR end_date is null)
       const currentYear = year || new Date().getFullYear();
       const currentMonth = month !== undefined ? month : new Date().getMonth();
 
-      const startOfMonth = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0]; // YYYY-MM-DD format
-      const startOfNextMonth = new Date(currentYear, currentMonth + 1, 1).toISOString().split('T')[0]; // YYYY-MM-DD format
+      const startOfMonth = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
+      const endOfMonth = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0]; // last day of month
 
       console.log('[manage-subscription] Campaign count query params:', {
         merchant_id: user.id,
         startOfMonth,
-        startOfNextMonth,
+        endOfMonth,
         year: currentYear,
         month: currentMonth
       });
 
-      // Count regular campaigns (exclude DOTD: is_deal_of_the_day = false or NULL)
+      // Count regular campaigns (exclude DOTD) active during this month
       const { count: campaignsCount, error: campaignsError } = await supabaseAdmin
         .from('campaigns')
         .select('*', { count: 'exact', head: true })
         .eq('merchant_id', user.id)
         .or('is_deal_of_the_day.is.null,is_deal_of_the_day.eq.false')
-        .gte('start_date', startOfMonth)
-        .lt('start_date', startOfNextMonth);
+        .lte('start_date', endOfMonth)
+        .or(`end_date.gte.${startOfMonth},end_date.is.null`);
 
       console.log('[manage-subscription] Campaign count result:', { campaignsCount, error: campaignsError });
-
-      // Debug: Get all campaigns for this merchant to see what's in the table
-      const { data: allCampaigns, error: debugError } = await supabaseAdmin
-        .from('campaigns')
-        .select('campaign_id, start_date, merchant_id')
-        .eq('merchant_id', user.id)
-        .limit(10);
-
-      console.log('[manage-subscription] Debug - All campaigns for merchant:', allCampaigns);
 
       if (campaignsError) {
         console.error('[manage-subscription] Campaigns count error:', campaignsError);
         throw campaignsError;
       }
 
-      // 4. Count DOTD campaigns with start_date in current calendar month
+      // 4. Count DOTD campaigns active during this month
       const { count: dotdCount, error: dotdError } = await supabaseAdmin
         .from('campaigns')
         .select('*', { count: 'exact', head: true })
         .eq('merchant_id', user.id)
         .eq('is_deal_of_the_day', true)
-        .gte('start_date', startOfMonth)
-        .lt('start_date', startOfNextMonth);
+        .lte('start_date', endOfMonth)
+        .or(`end_date.gte.${startOfMonth},end_date.is.null`);
 
       if (dotdError) {
         console.error('[manage-subscription] DOTD count error:', dotdError);
@@ -294,8 +298,60 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (action === 'cancel') {
+      const { reason } = body;
+
+      // Find the active subscription
+      const { data: activeSub, error: fetchErr } = await supabaseAdmin
+        .from('merchant_subscriptions')
+        .select('id, current_period_end')
+        .eq('merchant_id', user.id)
+        .eq('status', 'active')
+        .gte('current_period_end', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchErr) {
+        console.error('[manage-subscription] Cancel fetch error:', fetchErr);
+        throw fetchErr;
+      }
+
+      if (!activeSub) {
+        return new Response(
+          JSON.stringify({ error: 'No active subscription found' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+        );
+      }
+
+      // Mark subscription as cancelled at period end (keeps it active until current_period_end)
+      const { error: updateErr } = await supabaseAdmin
+        .from('merchant_subscriptions')
+        .update({
+          cancel_at_period_end: true,
+          cancellation_reason: reason || null,
+        })
+        .eq('id', activeSub.id);
+
+      if (updateErr) {
+        console.error('[manage-subscription] Cancel update error:', updateErr);
+        throw updateErr;
+      }
+
+      console.log(`[manage-subscription] Subscription ${activeSub.id} cancelled for merchant ${user.id}, reason: ${reason}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Subscription will be cancelled at the end of the current billing period.',
+          current_period_end: activeSub.current_period_end,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Invalid action. Use "check", "fetch", "create", or "campaign_usage"' }),
+      JSON.stringify({ error: 'Invalid action. Use "check", "fetch", "create", "cancel", or "campaign_usage"' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
     );
 

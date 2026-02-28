@@ -7,9 +7,12 @@ import { MerchantStack } from './MerchantStack';
 import { DealAdminStack } from './DealAdminStack';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { LanguageSelection } from './components/LanguageSelection';
+import { LocationPermission } from './components/LocationPermission';
 import { Header, MerchantBottomNav, DealAdminBottomNav } from './components/Navigation';
+import { MerchantOnboarding } from './MerchantOnboarding';
 import { QRscan } from './QRscan';
 import { updateSupabaseSession } from './services/supabaseClient';
+import { userService } from './services/userService';
 import { addCampaignService } from './services/addCampaignService';
 import { OtpVerificationModal } from './OtpVerificationModal';
 import { TrendingUp, BarChart3, Zap } from 'lucide-react';
@@ -28,6 +31,11 @@ const AppContent: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [preSelectedTab, setPreSelectedTab] = useState<'review' | 'active' | 'expired' | 'needs review' | null>(null);
   const [pendingAuthView, setPendingAuthView] = useState<AppView>('login');
+
+  // Location permission state
+  const [detectedHomeLocation, setDetectedHomeLocation] = useState<string | null>(null);
+  const [detectedLocationState, setDetectedLocationState] = useState<string | null>(null);
+  const [allowLocation, setAllowLocation] = useState(false);
 
   // User state now correctly initialized with the User interface structure
   const [user, setUser] = useState<User>({
@@ -77,6 +85,11 @@ const AppContent: React.FC = () => {
     setView(newView);
   };
 
+  // Scroll to top whenever view changes
+  useEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTo(0, 0);
+  }, [view]);
+
   // refreshDeals fetches merchant's own campaigns
   const refreshDeals = useCallback(async () => {
     if (!user.isLoggedIn || !user.id || !user.access_token) {
@@ -123,45 +136,108 @@ const AppContent: React.FC = () => {
   }, [user.id, user.role, user.isLoggedIn, user.access_token]);
 
   useEffect(() => {
-    if (user.id && user.isLoggedIn) {
+    if (user.id && user.isLoggedIn && view !== 'merchant_onboarding') {
       if (user.role === 'merchant') {
         refreshDeals();
       } else if (user.role === 'dealadmin') {
         refreshAdminDeals();
       }
     }
-  }, [user.id, user.isLoggedIn, user.role, refreshDeals, refreshAdminDeals]); // Call refresh when user state settles
+  }, [user.id, user.isLoggedIn, user.role, view, refreshDeals, refreshAdminDeals]); // Call refresh when user state settles
 
   // Update Supabase client session whenever user.access_token changes
+  const wasLoggedInRef = useRef(false);
+  const isReAuthenticatingRef = useRef(false);
   useEffect(() => {
     if (user.access_token && user.refresh_token && user.id) {
-      updateSupabaseSession({ 
-        access_token: user.access_token, 
-        refresh_token: user.refresh_token, 
-        user: { id: user.id, email: user.email, user_metadata: { role: user.role } } as any, // Simulate auth.user structure
-        token_type: 'bearer', 
-        expires_in: 3600, 
-        expires_at: Date.now() + 3600 * 1000 
+      wasLoggedInRef.current = true;
+      updateSupabaseSession({
+        access_token: user.access_token,
+        refresh_token: user.refresh_token,
+        user: { id: user.id, email: user.email, user_metadata: { role: user.role } } as any,
+        token_type: 'bearer',
+        expires_in: 3600,
+        expires_at: Date.now() + 3600 * 1000
+      }).then(async (success) => {
+        if (!success && !isReAuthenticatingRef.current) {
+          // Token refresh failed — silently re-authenticate using saved phone.
+          // This avoids asking the user for OTP again.
+          const savedUser = biometricService.getSavedUser();
+          const phone = savedUser?.phone;
+          const cc = savedUser?.country_code || '+91';
+
+          if (phone) {
+            console.log('[App] Token refresh failed — attempting silent re-auth for:', phone);
+            isReAuthenticatingRef.current = true;
+            try {
+              const { user: freshProfile, session } = await userService.merchantOtpLogin(phone, cc);
+              if (freshProfile && session) {
+                console.log('[App] Silent re-auth succeeded for:', freshProfile.id);
+                const updatedUser = {
+                  ...savedUser,
+                  ...freshProfile,
+                  isLoggedIn: true,
+                  access_token: session.access_token,
+                  refresh_token: session.refresh_token,
+                };
+                setUser(updatedUser);
+                biometricService.saveSession(updatedUser);
+                return; // Success — user stays on current view
+              }
+            } catch (reAuthErr) {
+              console.warn('[App] Silent re-auth failed:', reAuthErr);
+            } finally {
+              isReAuthenticatingRef.current = false;
+            }
+          }
+
+          // Silent re-auth failed too — must redirect to login as last resort
+          console.warn('[App] All session recovery failed — redirecting to login.');
+          biometricService.clearSession();
+          setUser({ id: '', username: '', isLoggedIn: false, role: 'consumer', full_name: '', access_token: null, refresh_token: null, onboarding_complete: false, hasActiveSubscription: false } as User);
+          setView('login');
+        }
       });
-    } else {
-      updateSupabaseSession(null); // Clear session if no access_token
+    } else if (wasLoggedInRef.current) {
+      // Only clear session when transitioning from logged-in to logged-out (explicit logout)
+      wasLoggedInRef.current = false;
+      updateSupabaseSession(null);
     }
-  }, [user.access_token, user.refresh_token, user.id, user.email, user.role]); // Added email, role to dependencies
+  }, [user.access_token, user.refresh_token, user.id, user.email, user.role]);
+
+  // Keep saved session in sync with user state (for onboarding progress, profile changes, etc.)
+  // Only updates if user previously opted in to quick login (session already exists in localStorage)
+  useEffect(() => {
+    if (user.isLoggedIn && user.id && biometricService.getSavedUser()) {
+      biometricService.saveSession(user);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (view === 'splash') {
-      let hasSession = false;
-
-      biometricService.isAvailable().then(available => {
-        setHasBiometricSession(available);
-        if (available) hasSession = true;
-      });
-
       const timer = setTimeout(() => {
-        const hasCompletedLangSelection = localStorage.getItem('hasCompletedLanguageSelection') === 'true';
-        // Returning users (biometric or already selected language) → login
-        // First-time users → welcome
-        setView((hasSession || hasCompletedLangSelection) ? 'login' : 'welcome');
+        // Try to restore saved user from localStorage (instant, no network calls)
+        const savedUser = biometricService.getSavedUser();
+
+        if (savedUser) {
+          console.log('[App] Restored saved user:', savedUser.id);
+          setHasBiometricSession(true);
+          setUser(savedUser);
+
+          const userRole = savedUser.role || 'merchant';
+          if (userRole === 'merchant') {
+            const profileComplete = !!(savedUser.full_name && savedUser.store_name && savedUser.business_type && savedUser.terms_accepted && savedUser.privacy_accepted);
+            navigateTo(profileComplete ? 'merchant_dashboard' : 'merchant_onboarding');
+          } else if (userRole === 'dealadmin') {
+            navigateTo('dealadmin_review_deals');
+          } else {
+            navigateTo('login');
+          }
+        } else {
+          // No saved session — first time or logged out
+          const hasCompletedLangSelection = localStorage.getItem('hasCompletedLanguageSelection') === 'true';
+          setView(hasCompletedLangSelection ? 'login' : 'welcome');
+        }
       }, 4000);
 
       return () => clearTimeout(timer);
@@ -183,34 +259,10 @@ const AppContent: React.FC = () => {
     }
   }, [view]);
 
-  // Biometric Auto-Login
-  useEffect(() => {
-    if (view === 'login' && hasBiometricSession && !user.isLoggedIn) {
-      const attemptBiometricLogin = async () => {
-        try {
-          setLoading(true);
-          const authenticatedUser = await biometricService.authenticate();
-
-          if (authenticatedUser) {
-            setUser(authenticatedUser);
-            const userRole = authenticatedUser.role;
-
-            if (userRole === 'merchant') {
-              navigateTo('merchant_dashboard');
-            } else if (userRole === 'dealadmin') {
-              navigateTo('dealadmin_review_deals');
-            }
-          }
-        } catch (error) {
-          console.error('Biometric authentication failed:', error);
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      attemptBiometricLogin();
-    }
-  }, [view, hasBiometricSession, user.isLoggedIn]);
+  // Biometric auto-login is now handled directly in the splash screen effect above.
+  // When a saved session exists, the splash screen restores the user and navigates
+  // directly to the correct view (merchant_onboarding or merchant_dashboard),
+  // skipping the login screen entirely.
 
 
   const isLoginScreen = !user.isLoggedIn && (view === 'login' || view === 'forgot_password' || view === 'register');
@@ -218,6 +270,8 @@ const AppContent: React.FC = () => {
   const handleBackNavigation = () => {
     if (view === 'language_selection') {
       navigateTo('welcome');
+    } else if (view === 'location_permission') {
+      navigateTo('language_selection');
     } else if (!user.isLoggedIn && (view === 'register' || view === 'forgot_password' || view === 'verify_phone')) {
       navigateTo('login');
     } else if (view === 'merchant_deals') {
@@ -255,7 +309,7 @@ const AppContent: React.FC = () => {
       ) : view === 'welcome' ? (
         <div className="h-screen bg-white flex flex-col px-8 pt-16 pb-10">
           {/* Logo + DealPro branding */}
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3 mb-6 animate-float-in float-in-delay-1">
             <div className="w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
               <img src="/assets/merchantlogo.svg" alt="Logo" className="w-full h-full object-contain" />
             </div>
@@ -263,20 +317,22 @@ const AppContent: React.FC = () => {
           </div>
 
           {/* Headline */}
-          <h2 className="text-[2rem] leading-tight font-semibold text-slate-900 mb-2">
-            Grow <span className="italic text-blue-700">your</span> business
-          </h2>
-          <h2 className="text-[2rem] leading-tight font-semibold text-slate-900 mb-10">
-            with smart deals
-          </h2>
+          <div className="animate-float-in float-in-delay-2">
+            <h2 className="text-[2rem] leading-tight font-semibold text-slate-900 mb-2">
+              Grow <span className="italic text-blue-700">your</span> business
+            </h2>
+            <h2 className="text-[2rem] leading-tight font-semibold text-slate-900 mb-10">
+              with smart deals
+            </h2>
+          </div>
 
           {/* Benefits */}
-          <p className="text-sm font-semibold text-slate-800 mb-6">
+          <p className="text-sm font-semibold text-slate-800 mb-6 animate-float-in float-in-delay-3">
             Everything you need to succeed:
           </p>
 
           <div className="space-y-6 flex-1">
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-4 animate-float-in float-in-delay-4">
               <TrendingUp className="w-5 h-5 text-slate-600 mt-0.5 shrink-0" />
               <div>
                 <p className="text-base font-semibold text-slate-900">Reach</p>
@@ -284,7 +340,7 @@ const AppContent: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-4 animate-float-in float-in-delay-5">
               <BarChart3 className="w-5 h-5 text-slate-600 mt-0.5 shrink-0" />
               <div>
                 <p className="text-base font-semibold text-slate-900">Insights</p>
@@ -292,7 +348,7 @@ const AppContent: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-4 animate-float-in float-in-delay-6">
               <Zap className="w-5 h-5 text-slate-600 mt-0.5 shrink-0" />
               <div>
                 <p className="text-base font-semibold text-slate-900">Easy</p>
@@ -302,7 +358,7 @@ const AppContent: React.FC = () => {
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-3 mt-8">
+          <div className="flex gap-3 mt-8 animate-float-in float-in-delay-7">
             <button
               onClick={() => { setPendingAuthView('login'); navigateTo('language_selection'); }}
               className="flex-1 h-12 rounded-xl border-2 border-slate-900 text-slate-900 text-sm font-semibold tracking-wide active:scale-[0.98] transition-all"
@@ -310,7 +366,7 @@ const AppContent: React.FC = () => {
               SIGN IN
             </button>
             <button
-              onClick={() => { setPendingAuthView('register'); navigateTo('language_selection'); }}
+              onClick={() => { setPendingAuthView('login'); navigateTo('language_selection'); }}
               className="flex-1 h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold tracking-wide active:scale-[0.98] transition-all"
             >
               JOIN
@@ -319,11 +375,23 @@ const AppContent: React.FC = () => {
         </div>
       ) : (
         <>
-          {view === 'language_selection' && <LanguageSelection setView={navigateTo} nextView={pendingAuthView} />}
+          {view === 'language_selection' && <LanguageSelection setView={navigateTo} nextView={'location_permission'} />}
+          {view === 'location_permission' && (
+            <LocationPermission
+              setView={navigateTo}
+              nextView={pendingAuthView}
+              onLocationDetected={(city, state) => {
+                setDetectedHomeLocation(city);
+                setDetectedLocationState(state || null);
+                setAllowLocation(true);
+                console.log('[App] Location detected:', city, state);
+              }}
+            />
+          )}
           <Header
             currentView={view}
             setView={navigateTo}
-            showBack={['detail', 'register', 'forgot_password', 'merchant_deals', 'edit_profile', 'help_feedback', 'my_redemptions', 'verify_phone', 'onboarding', 'merchant_subscriptions', 'payment_plans', 'bank_verification', 'store_search', 'dealadmin_edit_deal', 'notifications'].includes(view)}
+            showBack={['detail', 'register', 'forgot_password', 'merchant_deals', 'edit_profile', 'merchant_stores', 'help_feedback', 'my_redemptions', 'verify_phone', 'onboarding', 'merchant_onboarding', 'merchant_subscriptions', 'payment_plans', 'bank_verification', 'store_search', 'dealadmin_edit_deal', 'notifications'].includes(view)}
             onBack={handleBackNavigation}
             theme={theme}
             toggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
@@ -382,6 +450,13 @@ const AppContent: React.FC = () => {
                 setRegistrationMessage={setRegistrationSuccessMessage} // Pass setter
                 theme={theme} // Pass theme to AuthStack
               />
+            ) : user.role === 'merchant' && view === 'merchant_onboarding' ? (
+              <MerchantOnboarding
+                setView={navigateTo}
+                user={user}
+                setUser={setUser}
+                theme={theme}
+              />
             ) : user.role === 'merchant' ? ( // Check for 'merchant' role
               <MerchantStack
                 view={view}
@@ -421,7 +496,7 @@ const AppContent: React.FC = () => {
               />
             ) : null}
           </main>
-          {user.isLoggedIn && !['verify_phone'].includes(view) && (
+          {user.isLoggedIn && !['verify_phone', 'merchant_onboarding'].includes(view) && (
             user.role === 'merchant' ? <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} /> :
             user.role === 'dealadmin' ? <DealAdminBottomNav currentView={view} setView={navigateTo} theme={theme} /> :
             null

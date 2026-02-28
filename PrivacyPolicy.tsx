@@ -108,8 +108,8 @@ export const PrivacyPolicy: React.FC<PrivacyPolicyProps> = ({ setView, theme }) 
               {/* 3. Data Sharing and Disclosure */}
               <section>
                 <div className="flex items-center gap-2.5 mb-3">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
-                    <Users className="w-3.5 h-3.5 text-amber-500" />
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isDark ? 'bg-slate-500/10' : 'bg-slate-50'}`}>
+                    <Users className="w-3.5 h-3.5 text-slate-600" />
                   </div>
                   <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     3. Data Sharing and Disclosure

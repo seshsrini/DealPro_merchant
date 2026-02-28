@@ -526,7 +526,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   ]); 
 
 
-  // NEW: Pincode Lookup Logic using Google Maps Geocoding API directly
+  // Pincode Lookup Logic using Nominatim (OpenStreetMap) via locationsearchService
   useEffect(() => {
     if (regRole !== 'merchant') return;
 

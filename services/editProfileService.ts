@@ -12,13 +12,13 @@ export const editProfileService = {
 
       if (error) {
         console.error("[editProfileService] Edge Function error:", error);
-        throw new Error(error.message || "Uplink Failed.");
+        throw new Error("Unable to update your profile. Please try again.");
       }
       
       return response;
     } catch (err: any) {
       console.error("[editProfileService] Network/Invoke Error:", err.message);
-      throw new Error("Failed to reach profile server. Check connection.");
+      throw new Error("Unable to connect. Please check your internet and try again.");
     }
   },
 

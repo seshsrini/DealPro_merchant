@@ -2,52 +2,121 @@ import { supabase, updateSupabaseSession } from "./supabaseClient";
 import { ActivityLog } from "../types";
 
 export const userService = {
-  loginUser: async (identifier: string, password: string) => {
-    console.log(`[userService] Attempting login for: ${identifier}`);
-    
-    try {
-      // Added explicit headers to ensure Content-Type is set for the JSON body
-      const { data, error } = await supabase.functions.invoke('login', {
-        body: { identifier, password, userType: 'merchant' },
-        headers: {
-          'Content-Type': 'application/json',
+  /**
+   * OTP-based login for merchants.
+   * 1. Calls login-merchant Edge Function to get a magic-link token_hash
+   * 2. Verifies token_hash via Supabase Auth to create a session
+   */
+  merchantOtpLogin: async (phone: string, countryCode: string) => {
+    console.log(`[userService] Attempting merchant OTP login for: ${phone}`);
+
+    // Retry up to 2 times for transient mobile network failures
+    const MAX_RETRIES = 2;
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
+      try {
+        console.log(`[userService] Calling login-merchant (attempt ${attempt})...`);
+        const { data, error } = await supabase.functions.invoke('login-merchant', {
+          body: { phone, country_code: countryCode },
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        console.log('[userService] Edge function response - data:', JSON.stringify(data)?.substring(0, 200));
+        console.log('[userService] Edge function response - error:', error ? JSON.stringify(error) : 'null');
+
+        if (error) {
+          // Check if this is a network-level fetch failure — retry if so
+          const errMsg = typeof error === 'object' ? (error.message || JSON.stringify(error)) : String(error);
+          if (attempt <= MAX_RETRIES && (
+            errMsg.includes('Failed to send a request') ||
+            errMsg.includes('Failed to fetch') ||
+            errMsg.includes('NetworkError') ||
+            errMsg.includes('network')
+          )) {
+            console.warn(`[userService] Network error on attempt ${attempt}, retrying in 2s...`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+
+          // On mobile, supabase.functions.invoke may return the body in error.context
+          // Try to extract data from the error if function actually succeeded
+          let recoveredData = null;
+          try {
+            if (typeof error === 'object' && error.context) {
+              const text = await error.context.text?.();
+              if (text) recoveredData = JSON.parse(text);
+            }
+          } catch (_) { /* ignore recovery attempt */ }
+
+          if (recoveredData?.user && recoveredData?.token_hash) {
+            console.log('[userService] Recovered data from error context');
+            return await userService._completeLogin(recoveredData);
+          }
+
+          console.error("[userService] login-merchant Edge Function error:", error);
+          throw new Error('Unable to sign in right now. Please try again.');
         }
-      });
 
-      // If the Edge Function itself returns an error (401, 404, etc)
-      if (error) {
-        console.error("[userService] Edge Function returned error:", error);
+        if (!data?.user || !data?.token_hash) {
+          console.error('[userService] Missing user or token_hash in response. data keys:', data ? Object.keys(data) : 'null');
+          throw new Error('No merchant account found with this phone number. Please sign up first.');
+        }
 
-        // Check if it's an authentication error vs other errors
-        const errorMsg = error.message?.toLowerCase() || '';
-        const isAuthError = errorMsg.includes('invalid') ||
-                           errorMsg.includes('credentials') ||
-                           errorMsg.includes('password') ||
-                           errorMsg.includes('unauthorized') ||
-                           errorMsg.includes('authentication');
+        return await userService._completeLogin(data);
 
-        throw new Error(isAuthError ? "Invalid username or password" : error.message);
+      } catch (err: any) {
+        lastError = err;
+
+        // Retry on network-level errors only
+        if (attempt <= MAX_RETRIES && (
+          err.message?.includes('Failed to send a request') ||
+          err.message?.includes('Failed to fetch') ||
+          err.message?.includes('NetworkError')
+        )) {
+          console.warn(`[userService] Fetch error on attempt ${attempt}, retrying in 2s...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+
+        // Don't retry application errors — throw immediately
+        if (err.message && (
+          err.message.includes('No merchant account') ||
+          err.message.includes('Login failed') ||
+          err.message.includes('Session creation') ||
+          err.message.includes('not found') ||
+          err.message.includes('Phone number') ||
+          err.message.includes('Registration failed')
+        )) {
+          throw err;
+        }
+
+        throw new Error('Something went wrong. Please check your internet connection and try again.');
       }
-
-      if (!data?.session || !data?.user) {
-        throw new Error("Invalid username or password");
-      }
-
-      // Crucial: Set the session locally so future calls are authenticated
-      await updateSupabaseSession(data.session);
-
-      return { user: data.user, session: data.session };
-
-    } catch (err: any) {
-      // If the error was already thrown from above (auth error), re-throw it
-      if (err.message === "Invalid username or password" || err.message.includes("Invalid")) {
-        throw err;
-      }
-
-      // Only network/connection errors reach here
-      console.error("[userService] Network or CORS error:", err);
-      throw new Error("Connection to login service failed. Check your internet or CORS settings.");
     }
+
+    // All retries exhausted
+    throw new Error('Unable to connect. Please check your internet and try again.');
+  },
+
+  /** Shared helper: verify magic-link token and create session */
+  _completeLogin: async (data: { user: any; token_hash: string }) => {
+    console.log('[userService] Magic link token received, verifying OTP...');
+
+    const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
+      token_hash: data.token_hash,
+      type: 'magiclink',
+    });
+
+    if (otpError || !otpData?.session) {
+      console.error("[userService] verifyOtp failed:", otpError);
+      throw new Error('Login could not be completed. Please try again.');
+    }
+
+    await updateSupabaseSession(otpData.session);
+
+    console.log('[userService] Merchant login successful for:', data.user.id);
+    return { user: data.user, session: otpData.session };
   },
 
   /**
@@ -73,12 +142,12 @@ export const userService = {
       if (error) {
         console.error("[userService] Registration failed via Edge Function:", error);
         // Try to extract actual error message from various possible locations
-        const errorMessage = error.context?.error || error.context?.message || error.message || "Registration failed";
+        const errorMessage = error.context?.error || error.context?.message || error.message || "Registration could not be completed. Please try again.";
         throw new Error(errorMessage);
       }
 
       if (!data || !data.user) { // session might be null if email verification is pending
-        throw new Error("Registration failed: Invalid response from registration service.");
+        throw new Error("Registration could not be completed. Please try again.");
       }
 
       // If a session is returned, update the client-side Supabase instance
@@ -172,7 +241,7 @@ export const userService = {
 
     if (invokeError) {
       console.error("[userService] Failed to fetch user profile via Edge Function (invoke error):", invokeError);
-      throw new Error(invokeError.message || "Failed to communicate with profile service.");
+      throw new Error("Unable to load your profile. Please check your connection and try again.");
     }
     
     // Check for application-level errors returned by the Edge Function itself
@@ -182,7 +251,7 @@ export const userService = {
     }
 
     if (!data) {
-      throw new Error("Failed to retrieve user profile data.");
+      throw new Error("Could not load your profile. Please try logging in again.");
     }
     return data;
   },

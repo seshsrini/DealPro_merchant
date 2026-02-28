@@ -120,8 +120,12 @@ export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView
   ];
 
   return (
-    <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 w-full max-w-[95%] pointer-events-none">
-       <nav className="pointer-events-auto h-22 glass rounded-[3rem] px-4 flex justify-between items-center shadow-[0_20px_50px_rgba(0,0,0,0.6)] border-white/10">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md pointer-events-none">
+       <nav className={`pointer-events-auto rounded-2xl px-1.5 py-1.5 flex items-center border ${
+         isDark
+           ? 'bg-slate-900 border-slate-800 shadow-lg shadow-black/30'
+           : 'bg-white border-slate-200 shadow-lg shadow-slate-200/60'
+       }`}>
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = currentView === tab.id;
@@ -132,16 +136,18 @@ export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView
                 key={tab.id}
                 onClick={() => !isDisabled && setView(tab.id as AppView)}
                 disabled={isDisabled}
-                className={`flex flex-col items-center justify-center gap-1 transition-all duration-400 min-w-[64px] rounded-2xl h-16 ${
+                className={`flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl py-2 flex-1 ${
                   isDisabled
-                    ? 'text-slate-600 opacity-40 cursor-not-allowed'
+                    ? 'opacity-30 cursor-not-allowed' + (isDark ? ' text-slate-500' : ' text-slate-400')
                     : isActive
-                    ? 'text-white btn-premium h-16 shadow-2xl shadow-green-600/50 scale-110'
-                    : (isDark ? 'text-slate-200 hover:text-white' : 'text-slate-700 hover:text-slate-900')
+                    ? 'text-white bg-yellow-500'
+                    : isDark
+                      ? 'text-slate-400'
+                      : 'text-slate-600'
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'fill-white/20' : ''}`} />
-                <span className={`text-[8px] font-black uppercase tracking-widest ${isActive ? 'opacity-100' : 'opacity-90'}`}>{tab.label}</span>
+                <Icon className="w-[18px] h-[18px]" />
+                <span className={`text-[7px] leading-tight ${isActive ? 'font-bold' : 'font-medium'}`}>{tab.label}</span>
               </button>
             );
           })}
@@ -153,12 +159,12 @@ export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView
 export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view: AppView) => void; theme: 'light' | 'dark' }> = ({ currentView, setView, theme }) => {
   const isDark = theme === 'dark';
   const tabs = [
-    { id: 'merchant_dashboard', label: 'Console', icon: LayoutDashboard },
-    { id: 'merchant_deals', label: 'Campaigns', icon: List },
-    { id: 'merchant_catalogue', label: 'Catalogue', icon: LayoutGrid },
-    { id: 'merchant_deal_of_day', label: 'Deal of Day', icon: Zap },
-    { id: 'merchant_analytics', label: 'Intel', icon: BarChart3 },
-    { id: 'profile', label: 'Hub', icon: User },
+    { id: 'merchant_dashboard', label: 'Console', icon: LayoutDashboard, tourId: 'tour-nav-console' },
+    { id: 'merchant_deals', label: 'Campaigns', icon: List, tourId: 'tour-nav-campaigns' },
+    { id: 'merchant_catalogue', label: 'Catalogue', icon: LayoutGrid, tourId: 'tour-nav-catalogue' },
+    { id: 'merchant_deal_of_day', label: 'Deal of Day', icon: Zap, tourId: 'tour-nav-dotd' },
+    { id: 'merchant_analytics', label: 'Intel', icon: BarChart3, tourId: 'tour-nav-intel' },
+    { id: 'profile', label: 'Hub', icon: User, tourId: 'tour-nav-hub' },
   ];
 
   return (
@@ -175,19 +181,20 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
             return (
               <button
                 key={tab.id}
+                id={tab.tourId}
                 onClick={() => setView(tab.id as AppView)}
                 className={`flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl py-2 flex-1 ${
                   isActive
                     ? isDark
-                      ? 'text-white bg-slate-800'
-                      : 'text-slate-900 bg-slate-100'
+                      ? 'text-slate-900 bg-amber-400'
+                      : 'text-slate-900 bg-amber-400'
                     : isDark
-                      ? 'text-slate-500'
-                      : 'text-slate-400'
+                      ? 'text-slate-400'
+                      : 'text-slate-900'
                 }`}
               >
                 <Icon className="w-[18px] h-[18px]" />
-                <span className={`text-[8px] leading-tight ${isActive ? 'font-semibold' : 'font-medium'}`}>{tab.label}</span>
+                <span className={`text-[8px] leading-tight ${isActive ? 'font-bold' : 'font-medium'}`}>{tab.label}</span>
               </button>
             );
           })}
