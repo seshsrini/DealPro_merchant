@@ -3,8 +3,8 @@ import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { Capacitor } from '@capacitor/core';
 import { initializeApp, getApps } from 'firebase/app';
 
-// Firebase API key from google-services.json (public, restricted by package/domain)
-const FIREBASE_API_KEY = 'AIzaSyAWRUnIIiTT4-DE6mLWuf5n-AhRjwAnYVo';
+// Firebase credentials loaded from environment variables
+const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || '';
 const FIREBASE_REST_BASE = 'https://identitytoolkit.googleapis.com/v1';
 
 // Initialize Firebase web SDK (needed for @capacitor-firebase/authentication on web)
@@ -12,11 +12,11 @@ const FIREBASE_REST_BASE = 'https://identitytoolkit.googleapis.com/v1';
 if (getApps().length === 0) {
   initializeApp({
     apiKey: FIREBASE_API_KEY,
-    authDomain: 'dealpro-merchant.firebaseapp.com',
-    projectId: 'dealpro-merchant',
-    storageBucket: 'dealpro-merchant.firebasestorage.app',
-    messagingSenderId: '1000245713297',
-    appId: '1:1000245713297:android:ccb8999b4e83935d046230',
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
   });
   console.log('[FirebaseAuth] Firebase web SDK initialized');
 }
