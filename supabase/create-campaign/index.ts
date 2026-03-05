@@ -77,7 +77,7 @@ const MODERATION_LISTS: Record<string, string[]> = {
   harassment: [
     // Threats and intimidation
     'i will kill', 'i\'ll kill', 'gonna kill', 'want to kill',
-    'i will hurt', 'gonna hurt', 'beat you', 'beat the',
+    'i will hurt', 'gonna hurt', 'beat you up', 'i will beat you',
     'threaten', 'threat', 'stalk', 'stalking',
     'rape', 'rapist', 'molest',
     'bomb', 'bombing', 'attack', 'shoot', 'shooting',

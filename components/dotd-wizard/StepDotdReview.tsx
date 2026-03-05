@@ -33,6 +33,7 @@ interface StepDotdReviewProps {
   onBack: () => void;
   onPublishSuccess: () => void;
   onPublishError: (error: string) => void;
+  onModerationBlock: (field: string, message: string) => void;
   theme: 'light' | 'dark';
 }
 
@@ -47,7 +48,7 @@ const formatDate = (dateStr: string): string => {
 
 export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
   wizardState, user, stores,
-  onBack, onPublishSuccess, onPublishError, theme,
+  onBack, onPublishSuccess, onPublishError, onModerationBlock, theme,
 }) => {
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
@@ -159,7 +160,11 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
       await dealOfDayService.createDealOfDay(user.id, payload);
       onPublishSuccess();
     } catch (err: any) {
-      onPublishError(err.message || 'Failed to publish. Please try again.');
+      if (err.isModerationBlock && err.moderationField) {
+        onModerationBlock(err.moderationField, err.message || 'This field contains content that violates our guidelines.');
+      } else {
+        onPublishError(err.message || 'Failed to publish. Please try again.');
+      }
     } finally {
       setPublishing(false);
       setProgress(null);

@@ -41,6 +41,19 @@ export const dealOfDayService = {
 
     if (error) {
       console.error('[dealOfDayService] Failed to create Deal of the Day:', error);
+      // Try to extract moderation field info from the error response body
+      try {
+        const body = await (error as any).context?.json?.();
+        if (body?.moderation?.field) {
+          const modErr = new Error(body.error || 'Content moderation failed') as any;
+          modErr.isModerationBlock = true;
+          modErr.moderationField = body.moderation.field;
+          throw modErr;
+        }
+        if (body?.error) throw new Error(body.error);
+      } catch (parseErr: any) {
+        if (parseErr.isModerationBlock) throw parseErr;
+      }
       throw error;
     }
 

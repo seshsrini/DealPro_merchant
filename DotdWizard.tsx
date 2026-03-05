@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useReducer, useCallback } from 'react';
 import { AppView, User } from './types';
-import { X, CheckCircle2, Loader2, RotateCcw } from 'lucide-react';
+import { X, CheckCircle2, Loader2, RotateCcw, AlertTriangle } from 'lucide-react';
 import { addCampaignService } from './services/addCampaignService';
 import { merchantService } from './services/merchantService';
 
@@ -84,6 +84,14 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   const [showSuccess, setShowSuccess] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [moderationAlert, setModerationAlert] = useState<string | null>(null);
+
+  // Field name → wizard step index
+  const FIELD_TO_STEP: Record<string, number> = {
+    deal_heading: 3, localized_heading: 3,
+    offer_value: 4,  localized_offer: 4,
+    long_description: 5, localized_description: 5,
+  };
 
   const DRAFT_KEY = `dotd_wizard_draft_${user.id}`;
 
@@ -156,11 +164,13 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   };
 
   const handleNext = () => {
+    setModerationAlert(null);
     saveDraft();
     goToStep(currentStep + 1);
   };
 
   const handleBack = () => {
+    setModerationAlert(null);
     if (currentStep === 0) {
       setView('merchant_dashboard');
       return;
@@ -180,6 +190,14 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
 
   const handlePublishError = (error: string) => {
     setPublishError(error);
+  };
+
+  const handleModerationBlock = (field: string, message: string) => {
+    setModerationAlert(message);
+    const targetStep = FIELD_TO_STEP[field];
+    if (targetStep !== undefined) {
+      goToStep(targetStep);
+    }
   };
 
   const handleClose = () => {
@@ -295,6 +313,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             onBack={handleBack}
             onPublishSuccess={handlePublishSuccess}
             onPublishError={handlePublishError}
+            onModerationBlock={handleModerationBlock}
             theme={theme}
           />
         );
@@ -348,6 +367,15 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
                 }`}
               />
             ))}
+          </div>
+        )}
+
+        {/* Moderation Alert Banner */}
+        {moderationAlert && (
+          <div className="mx-4 mt-3 flex items-start gap-2.5 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+            <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+            <p className="text-xs text-red-700 flex-1">{moderationAlert} Please edit the highlighted field below.</p>
+            <button onClick={() => setModerationAlert(null)} className="text-red-400 hover:text-red-600 text-lg leading-none -mt-0.5">×</button>
           </div>
         )}
 
