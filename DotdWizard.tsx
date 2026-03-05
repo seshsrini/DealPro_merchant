@@ -57,8 +57,8 @@ function dotdReducer(state: DotdWizardState, action: DotdAction): DotdWizardStat
   }
 }
 
-// Steps: Template → Image → Heading → Offer → Description → Store → Date → Review
-const STEP_LABELS = ['Template', 'Image', 'Heading', 'Offer', 'Description', 'Store', 'Date', 'Review'];
+// Steps: Store → Template → Image → Heading → Offer → Description → Date → Review
+const STEP_LABELS = ['Store', 'Template', 'Image', 'Heading', 'Offer', 'Description', 'Date', 'Review'];
 const TOTAL_STEPS = STEP_LABELS.length;
 
 // --- Component ---
@@ -211,6 +211,17 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
     switch (currentStep) {
       case 0:
         return (
+          <StepStoreSelect
+            stores={merchantStores}
+            selectedStoreId={state.selectedStoreId}
+            onChange={setField('selectedStoreId')}
+            onNext={handleNext}
+            onBack={handleBack}
+            theme={theme}
+          />
+        );
+      case 1:
+        return (
           <StepDotdTemplate
             onSelectTemplate={handleTemplateSelect}
             onSkip={handleNext}
@@ -218,7 +229,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             theme={theme}
           />
         );
-      case 1:
+      case 2:
         return (
           <StepImage
             selectedFile={state.selectedImageFile}
@@ -235,7 +246,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             theme={theme}
           />
         );
-      case 2:
+      case 3:
         return (
           <StepHeading
             value={state.dealHeading}
@@ -245,7 +256,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             theme={theme}
           />
         );
-      case 3:
+      case 4:
         return (
           <StepOffer
             value={state.offerValue}
@@ -255,22 +266,11 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             theme={theme}
           />
         );
-      case 4:
+      case 5:
         return (
           <StepDescription
             value={state.description}
             onChange={setField('description')}
-            onNext={handleNext}
-            onBack={handleBack}
-            theme={theme}
-          />
-        );
-      case 5:
-        return (
-          <StepStoreSelect
-            stores={merchantStores}
-            selectedStoreId={state.selectedStoreId}
-            onChange={setField('selectedStoreId')}
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
