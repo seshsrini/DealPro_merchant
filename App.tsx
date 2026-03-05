@@ -4,16 +4,17 @@ import { biometricService } from './services/biometricService';
 import { AuthStack } from './AuthStack';
 import { MemberJoin } from './memberJoin';
 import { MerchantStack } from './MerchantStack';
-import { DealAdminStack } from './DealAdminStack';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { LanguageSelection } from './components/LanguageSelection';
 import { LocationPermission } from './components/LocationPermission';
-import { Header, MerchantBottomNav, DealAdminBottomNav } from './components/Navigation';
+import { InviteCodeScreen } from './components/InviteCodeScreen';
+import { Header, MerchantBottomNav } from './components/Navigation';
 import { MerchantOnboarding } from './MerchantOnboarding';
 import { QRscan } from './QRscan';
-import { updateSupabaseSession } from './services/supabaseClient';
+import { supabase, updateSupabaseSession } from './services/supabaseClient';
 import { userService } from './services/userService';
 import { addCampaignService } from './services/addCampaignService';
+import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { OtpVerificationModal } from './OtpVerificationModal';
 import { TrendingUp, BarChart3, Zap } from 'lucide-react';
 import { PrivacyPolicy } from './PrivacyPolicy'; // Privacy Policy component
@@ -37,6 +38,20 @@ const AppContent: React.FC = () => {
   const [detectedLocationState, setDetectedLocationState] = useState<string | null>(null);
   const [allowLocation, setAllowLocation] = useState(false);
 
+  // Invite code state — set when user enters valid code on InviteCodeScreen
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+
+  // Expose location callback for AuthStack background detection
+  useEffect(() => {
+    (window as any).__dealpro_onLocationDetected = (city: string, state: string) => {
+      setDetectedHomeLocation(city);
+      setDetectedLocationState(state || null);
+      setAllowLocation(true);
+      console.log('[App] Background location detected:', city, state);
+    };
+    return () => { delete (window as any).__dealpro_onLocationDetected; };
+  }, []);
+
   // User state now correctly initialized with the User interface structure
   const [user, setUser] = useState<User>({
     id: '',
@@ -50,7 +65,6 @@ const AppContent: React.FC = () => {
     hasActiveSubscription: false, // Initialize subscription status
   });
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [adminDeals, setAdminDeals] = useState<Deal[]>([]);
 
   // OTP Modal State for Merchant Phone Verification during Registration
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -78,7 +92,7 @@ const AppContent: React.FC = () => {
   const mainRef = useRef<HTMLElement>(null);
 
   const navigateTo = (newView: AppView) => {
-    if (['home', 'deals', 'deals_of_day', 'favorites', 'merchant_dashboard', 'merchant_deals', 'profile', 'store_search', 'dealadmin_review_deals', 'dealadmin_dashboard', 'dealadmin_analytics'].includes(newView)) {
+    if (['home', 'deals', 'deals_of_day', 'favorites', 'merchant_dashboard', 'merchant_deals', 'profile', 'store_search'].includes(newView)) {
       setLastListView(newView);
     }
     prevViewRef.current = view;
@@ -113,37 +127,13 @@ const AppContent: React.FC = () => {
     }
   }, [user.id, user.role, user.isLoggedIn, user.access_token]); // Removed 'loading' to prevent re-creation loops
 
-  // NEW: refreshAdminDeals for dealadmin role
-  const refreshAdminDeals = useCallback(async () => {
-    if (!user.isLoggedIn || !user.id || user.role !== 'dealadmin' || !user.access_token) {
-      console.log("[App.tsx refreshAdminDeals] DealAdmin authentication state incomplete. Aborting fetch.");
-      setAdminDeals([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      console.log(`[App.tsx refreshAdminDeals] Fetching deals in review for admin user: ${user.id}`);
-      const fetchedAdminDeals = await addCampaignService.getDealsByStatus('review');
-      setAdminDeals(fetchedAdminDeals);
-      console.log(`[App.tsx refreshAdminDeals] Fetched ${fetchedAdminDeals.length} deals for admin review.`);
-    } catch (err) {
-      console.error("[App.tsx refreshAdminDeals] Data pipeline failure:", err);
-      setAdminDeals([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [user.id, user.role, user.isLoggedIn, user.access_token]);
-
   useEffect(() => {
     if (user.id && user.isLoggedIn && view !== 'merchant_onboarding') {
       if (user.role === 'merchant') {
         refreshDeals();
-      } else if (user.role === 'dealadmin') {
-        refreshAdminDeals();
       }
     }
-  }, [user.id, user.isLoggedIn, user.role, view, refreshDeals, refreshAdminDeals]); // Call refresh when user state settles
+  }, [user.id, user.isLoggedIn, user.role, view, refreshDeals]);
 
   // Update Supabase client session whenever user.access_token changes
   const wasLoggedInRef = useRef(false);
@@ -215,7 +205,7 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (view === 'splash') {
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         // Try to restore saved user from localStorage (instant, no network calls)
         const savedUser = biometricService.getSavedUser();
 
@@ -224,12 +214,68 @@ const AppContent: React.FC = () => {
           setHasBiometricSession(true);
           setUser(savedUser);
 
+          // Establish Supabase session BEFORE any authenticated queries.
+          // The saved tokens may be expired but updateSupabaseSession will
+          // refresh them using the refresh_token — this ensures Edge Function
+          // calls and RLS-protected queries work correctly.
+          if (savedUser.access_token && savedUser.refresh_token) {
+            const sessionValid = await updateSupabaseSession({
+              access_token: savedUser.access_token,
+              refresh_token: savedUser.refresh_token,
+              user: { id: savedUser.id, email: savedUser.email, user_metadata: { role: savedUser.role } } as any,
+              token_type: 'bearer',
+              expires_in: 3600,
+              expires_at: Date.now() + 3600 * 1000,
+            });
+            if (!sessionValid) {
+              console.warn('[App] Session refresh failed — redirecting to login');
+              await biometricService.clearSession();
+              setUser({ id: '', username: '', isLoggedIn: false, role: 'consumer', full_name: '', access_token: null, refresh_token: null, onboarding_complete: false, hasActiveSubscription: false } as User);
+              setView('login');
+              return;
+            }
+            console.log('[App] Supabase session established for splash restore');
+          }
+
           const userRole = savedUser.role || 'merchant';
           if (userRole === 'merchant') {
-            const profileComplete = !!(savedUser.full_name && savedUser.store_name && savedUser.business_type && savedUser.terms_accepted && savedUser.privacy_accepted);
-            navigateTo(profileComplete ? 'merchant_dashboard' : 'merchant_onboarding');
-          } else if (userRole === 'dealadmin') {
-            navigateTo('dealadmin_review_deals');
+            // Always check subscription status fresh from DB on every app open
+            // The Edge Function also returns storeCount (bypasses RLS)
+            let subscriptionInfo: { hasActiveSubscription: boolean; subscription_status?: string; current_tier_id?: number; trialExpired?: boolean; storeCount?: number } = { hasActiveSubscription: false };
+            try {
+              subscriptionInfo = await merchantSubscriptionService.checkActiveSubscription(savedUser.id);
+            } catch { /* assume no subscription */ }
+
+            const userWithSub = {
+              ...savedUser,
+              hasActiveSubscription: subscriptionInfo.hasActiveSubscription,
+              subscription_status: subscriptionInfo.subscription_status,
+              current_tier_id: subscriptionInfo.current_tier_id,
+              trialExpired: subscriptionInfo.trialExpired || false,
+            };
+            setUser(userWithSub);
+            await biometricService.saveSession(userWithSub);
+
+            // If no active subscription, force subscription selection
+            if (!subscriptionInfo.hasActiveSubscription) {
+              console.log('[App] No active subscription — forcing subscription selection, trialExpired:', subscriptionInfo.trialExpired);
+              navigateTo('merchant_onboarding');
+              return;
+            }
+
+            const profileFieldsOk = !!(savedUser.full_name && savedUser.store_name && savedUser.category && savedUser.business_type && savedUser.terms_accepted && savedUser.privacy_accepted);
+            // Use storeCount from Edge Function (service_role, bypasses RLS)
+            // instead of querying merchant_stores directly through client
+            const hasStores = (subscriptionInfo.storeCount ?? 0) > 0;
+
+            if (profileFieldsOk && hasStores) {
+              navigateTo('merchant_dashboard');
+            } else {
+              console.log('[App] Profile incomplete — profileFieldsOk:', profileFieldsOk, 'hasStores:', hasStores, 'storeCount:', subscriptionInfo.storeCount);
+              // Clear any stale onboarding draft so merchant starts fresh
+              localStorage.removeItem(`merchant_onboarding_draft_${savedUser.id}`);
+              navigateTo('merchant_onboarding');
+            }
           } else {
             navigateTo('login');
           }
@@ -238,7 +284,7 @@ const AppContent: React.FC = () => {
           const hasCompletedLangSelection = localStorage.getItem('hasCompletedLanguageSelection') === 'true';
           setView(hasCompletedLangSelection ? 'login' : 'welcome');
         }
-      }, 4000);
+      }, 2500);
 
       return () => clearTimeout(timer);
     }
@@ -272,14 +318,13 @@ const AppContent: React.FC = () => {
       navigateTo('welcome');
     } else if (view === 'location_permission') {
       navigateTo('language_selection');
+    } else if (view === 'invite_code') {
+      navigateTo('location_permission');
     } else if (!user.isLoggedIn && (view === 'register' || view === 'forgot_password' || view === 'verify_phone')) {
       navigateTo('login');
     } else if (view === 'merchant_deals') {
       navigateTo('merchant_dashboard');
-    } else if (view === 'dealadmin_edit_deal') { // NEW: Admin edit back to review list
-      navigateTo('dealadmin_review_deals');
-    }
-    else {
+    } else {
       navigateTo(lastListView);
     }
   };
@@ -298,13 +343,7 @@ const AppContent: React.FC = () => {
             Deal<span className="text-yellow-500">Pro</span>
           </h1>
           <p className="mt-4 text-xs text-slate-400 text-center font-medium">Engineered by Vedic Jaalam</p>
-          <img src="/assets/vedicjaalam.svg" alt="Vedic Jaalam" className="mt-2 h-6 w-auto opacity-80" />
-          <div className="absolute bottom-24 text-center w-full px-8">
-             <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mb-4">
-                <div className="h-full bg-yellow-500 animate-[loading_4s_linear]"></div>
-             </div>
-             <p className="text-[10px] font-medium text-slate-500">Loading...</p>
-          </div>
+          <img src="/assets/vedicjaalam.svg?v=2" alt="Vedic Jaalam" className="mt-2 h-6 w-auto" />
         </div>
       ) : view === 'welcome' ? (
         <div className="h-screen bg-white flex flex-col px-8 pt-16 pb-10">
@@ -379,7 +418,7 @@ const AppContent: React.FC = () => {
           {view === 'location_permission' && (
             <LocationPermission
               setView={navigateTo}
-              nextView={pendingAuthView}
+              nextView={'invite_code'}
               onLocationDetected={(city, state) => {
                 setDetectedHomeLocation(city);
                 setDetectedLocationState(state || null);
@@ -388,10 +427,20 @@ const AppContent: React.FC = () => {
               }}
             />
           )}
+          {view === 'invite_code' && (
+            <InviteCodeScreen
+              setView={navigateTo}
+              nextView={pendingAuthView}
+              onInviteCodeValidated={(code) => {
+                setInviteCode(code);
+                console.log('[App] Invite code validated:', code);
+              }}
+            />
+          )}
           <Header
             currentView={view}
             setView={navigateTo}
-            showBack={['detail', 'register', 'forgot_password', 'merchant_deals', 'edit_profile', 'merchant_stores', 'help_feedback', 'my_redemptions', 'verify_phone', 'onboarding', 'merchant_onboarding', 'merchant_subscriptions', 'payment_plans', 'bank_verification', 'store_search', 'dealadmin_edit_deal', 'notifications'].includes(view)}
+            showBack={['detail', 'register', 'forgot_password', 'merchant_deals', 'edit_profile', 'merchant_stores', 'help_feedback', 'my_redemptions', 'verify_phone', 'onboarding', 'merchant_onboarding', 'merchant_subscriptions', 'payment_plans', 'bank_verification', 'store_search', 'notifications'].includes(view)}
             onBack={handleBackNavigation}
             theme={theme}
             toggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
@@ -449,6 +498,10 @@ const AppContent: React.FC = () => {
                 registrationMessage={registrationSuccessMessage} // Pass message
                 setRegistrationMessage={setRegistrationSuccessMessage} // Pass setter
                 theme={theme} // Pass theme to AuthStack
+                detectedHomeLocation={detectedHomeLocation}
+                detectedLocationState={detectedLocationState}
+                allowLocation={allowLocation}
+                inviteCode={inviteCode}
               />
             ) : user.role === 'merchant' && view === 'merchant_onboarding' ? (
               <MerchantOnboarding
@@ -476,30 +529,10 @@ const AppContent: React.FC = () => {
                 preSelectedTab={preSelectedTab}
                 setPreSelectedTab={setPreSelectedTab}
               />
-            ) : user.role === 'dealadmin' ? ( // NEW: Check for 'dealadmin' role
-              <DealAdminStack
-                view={view}
-                setView={navigateTo}
-                user={user}
-                setUser={setUser}
-                adminDeals={adminDeals}
-                refreshAdminDeals={refreshAdminDeals}
-                loading={loading}
-                setLoading={setLoading}
-                theme={theme}
-                dealIdToEdit={dealIdToEdit}
-                setDealIdToEdit={setDealIdToEdit}
-                onClearDealIdToEdit={() => {
-                  setDealIdToEdit(null);
-                  setView('dealadmin_review_deals'); // Navigate back to review list
-                }}
-              />
             ) : null}
           </main>
-          {user.isLoggedIn && !['verify_phone', 'merchant_onboarding'].includes(view) && (
-            user.role === 'merchant' ? <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} /> :
-            user.role === 'dealadmin' ? <DealAdminBottomNav currentView={view} setView={navigateTo} theme={theme} /> :
-            null
+          {user.isLoggedIn && user.role === 'merchant' && !['verify_phone', 'merchant_onboarding'].includes(view) && (
+            <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} />
           )}
 
           <QRscan
