@@ -121,7 +121,7 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
 
       onSaveSuccess();
     } catch (err: any) {
-      onSaveError(err.message || 'Failed to save product. Please try again.');
+      onSaveError('Unable to save product. Please try again.');
     } finally {
       setSaving(false);
       setProgress(null);

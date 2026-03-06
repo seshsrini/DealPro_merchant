@@ -167,7 +167,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data, error } = await supabase.functions.invoke('repair-translations', {
       body: { merchantId: merchantId as string },
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to process campaign. Please try again.');
     return data;
   },
 
@@ -176,7 +176,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data, error } = await supabase.functions.invoke('get-all', {
       method: 'POST', // Changed from GET to POST
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to process campaign. Please try again.');
     return data as Deal[];
   },
   
@@ -186,7 +186,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data, error } = await supabase.functions.invoke('get-by-merchant', {
       body: { merchantId },
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to process campaign. Please try again.');
     return data as Deal[];
   },
 
@@ -196,7 +196,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data, error } = await supabase.functions.invoke('get-by-status', {
       body: { status },
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to process campaign. Please try again.');
     return data as Deal[];
   },
 
@@ -205,7 +205,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data, error } = await supabase.functions.invoke('get-store-categories', {
       method: 'GET',
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to process campaign. Please try again.');
     return data as string[];
   },
 
@@ -215,7 +215,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data: signData, error: signErr } = await supabase.functions.invoke('cloudinary-sign', {
       body: { folder: 'dealpro-campaigns' },
     });
-    if (signErr) throw new Error(signErr.message ?? 'Cloudinary signing failed');
+    if (signErr) throw new Error('Image upload preparation failed. Please try again.');
 
     const { signature, timestamp, api_key, cloud_name, folder } = signData;
 
@@ -231,9 +231,10 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
       `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`,
       { method: 'POST', body: form, signal: AbortSignal.timeout(30000) }
     );
-    if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
+    if (!res.ok) throw new Error('Image upload failed. Please try again.');
 
     const json = await res.json();
+    if (!json.secure_url) throw new Error('Image upload succeeded but no URL returned');
     const imageName = `${mId}/${Date.now()}_${file.name}`;
     return { publicUrl: json.secure_url as string, imageName };
   },
@@ -251,7 +252,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
       } catch (parseErr: any) {
         if (parseErr.message && parseErr.message !== error.message) throw parseErr;
       }
-      throw error;
+      throw new Error('Unable to process campaign. Please try again.');
     }
     return data;
   },
@@ -269,7 +270,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
       } catch (parseErr: any) {
         if (parseErr.message && parseErr.message !== error.message) throw parseErr;
       }
-      throw error;
+      throw new Error('Unable to process campaign. Please try again.');
     }
     return data;
   },
@@ -281,7 +282,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data, error } = await supabase.functions.invoke('admin-update-campaign', {
       body: payload,
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to process campaign. Please try again.');
     return data;
   },
 
@@ -291,7 +292,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data, error } = await supabase.functions.invoke('approve-campaign', {
       body: payload,
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to process campaign. Please try again.');
     return data;
   },
 
@@ -301,7 +302,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data, error } = await supabase.functions.invoke('get-one', {
       body: { campaignId },
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to process campaign. Please try again.');
     return data as Deal;
   },
 
@@ -310,7 +311,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data, error } = await supabase.functions.invoke('verify-scan', { // Changed to 'verify-scan'
       body: { claimData: claim, merchantId: mId as string },
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to process campaign. Please try again.');
     return data as { success: boolean, message?: string, error?: string };
   },
 
@@ -319,8 +320,7 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     const { data, error } = await supabase.functions.invoke('get-merchant-images', {
       body: { merchantId: mId as string },
     });
-    if (error) throw error;
-    // Filter unique by URL or name to prevent duplicates
+    if (error) throw new Error('Unable to process campaign. Please try again.');
     const uniqueImages = Array.from(new Set((data as {url: string, name?: string}[] || []).map(i => i.url)))
       .map(url => (data as {url: string, name?: string}[]).find(i => i.url === url)!);
     return uniqueImages;

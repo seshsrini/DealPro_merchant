@@ -7,7 +7,7 @@ export const userService = {
    * 1. Calls login-merchant Edge Function to get a magic-link token_hash
    * 2. Verifies token_hash via Supabase Auth to create a session
    */
-  merchantOtpLogin: async (phone: string, countryCode: string) => {
+  merchantOtpLogin: async (phone: string, countryCode: string, inviteCode?: string) => {
     console.log(`[userService] Attempting merchant OTP login for: ${phone}`);
 
     // Retry up to 2 times for transient mobile network failures
@@ -18,7 +18,7 @@ export const userService = {
       try {
         console.log(`[userService] Calling login-merchant (attempt ${attempt})...`);
         const { data, error } = await supabase.functions.invoke('login-merchant', {
-          body: { phone, country_code: countryCode },
+          body: { phone, country_code: countryCode, ...(inviteCode ? { invite_code: inviteCode } : {}) },
           headers: { 'Content-Type': 'application/json' },
         });
 
@@ -88,7 +88,7 @@ export const userService = {
           err.message.includes('Phone number') ||
           err.message.includes('Registration failed')
         )) {
-          throw err;
+          throw new Error('Unable to complete request. Please try again.');
         }
 
         throw new Error('Something went wrong. Please check your internet connection and try again.');
@@ -136,14 +136,14 @@ export const userService = {
       // Check for error in data first (Edge Function may return error in body)
       if (data?.error) {
         console.error("[userService] Edge Function returned error in response body:", data.error);
-        throw new Error(data.error);
+        throw new Error("Registration could not be completed. Please try again.");
       }
 
       if (error) {
         console.error("[userService] Registration failed via Edge Function:", error);
         // Try to extract actual error message from various possible locations
-        const errorMessage = error.context?.error || error.context?.message || error.message || "Registration could not be completed. Please try again.";
-        throw new Error(errorMessage);
+        // FunctionsHttpError wraps the response — try to read the body for the real message
+        throw new Error("Registration could not be completed. Please try again.");
       }
 
       if (!data || !data.user) { // session might be null if email verification is pending
@@ -158,7 +158,7 @@ export const userService = {
       return { user: data.user, session: data.session };
     } catch (error: any) {
       console.error("[userService] Registration failed:", error);
-      throw error;
+      throw new Error('Unable to complete request. Please try again.');
     }
   },
 
@@ -224,7 +224,7 @@ export const userService = {
     });
     if (error) {
       console.error("[userService] Activity logging failed via Edge Function:", error);
-      throw error;
+      throw new Error('Unable to complete request. Please try again.');
     }
   },
 
@@ -247,7 +247,7 @@ export const userService = {
     // Check for application-level errors returned by the Edge Function itself
     if (data && data.error) {
       console.error("[userService] Edge Function returned application error during profile fetch:", data.error);
-      throw new Error(data.error);
+      throw new Error("Unable to load your profile. Please try again.");
     }
 
     if (!data) {
@@ -280,16 +280,16 @@ export const userService = {
           errorData = await response.json();
         } catch {
           // If response is not JSON, throw a generic error with status text
-          throw new Error(response.statusText || 'Unknown server error during OTP request.');
+          throw new Error('Unable to send verification code. Please try again.');
         }
         console.error("[userService] Direct fetch OTP Error:", errorData.error || response.statusText);
-        throw new Error(errorData.error || response.statusText || 'Failed to send OTP');
+        throw new Error('Unable to send verification code. Please try again.');
       }
 
       return await response.json();
     } catch (err: any) {
       console.error("[userService] Network/CORS Error during direct OTP fetch:", err.message);
-      throw err; // This error stops your popup from showing
+      throw new Error('Unable to send verification code. Please try again.');
     }
   },
 
@@ -304,7 +304,7 @@ export const userService = {
     });
     if (error) {
       console.error("[userService] Verify Phone Code failed via Edge Function:", error);
-      throw error;
+      throw new Error('Unable to complete request. Please try again.');
     }
     return data;
   },

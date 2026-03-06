@@ -31,9 +31,7 @@ export const notificationInsightsService = {
         body: { merchantId },
       });
 
-      if (error) throw error;
-
-      // Parse timestamp strings back to Date objects
+      if (error) throw new Error('Unable to load notifications. Please try again.');
       const notifications = (data?.notifications || []).map((n: any) => ({
         ...n,
         timestamp: new Date(n.timestamp),

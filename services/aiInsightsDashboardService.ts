@@ -69,7 +69,7 @@ export const aiInsightsDashboardService = {
         body: { merchantId },
       });
 
-      if (error) throw error;
+      if (error) throw new Error('Unable to load dashboard insights. Please try again.');
 
       return data?.insights || null;
     } catch (error) {

@@ -46,6 +46,28 @@ export interface SaveTemplateRequest {
   };
 }
 
+/**
+ * Converts plain text with \n line breaks and • bullets to editor-compatible HTML.
+ * Groups consecutive • lines into a <ul> and wraps other lines in <div>.
+ */
+function textToHtml(text: string): string {
+  const lines = text.split('\n');
+  let html = '';
+  let inList = false;
+
+  for (const line of lines) {
+    if (line.startsWith('• ')) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${line.slice(2)}</li>`;
+    } else {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += line === '' ? '<div><br></div>' : `<div>${line}</div>`;
+    }
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
 export const campaignTemplatesService = {
   /**
    * Get all available templates (system + merchant's personal)
@@ -79,7 +101,7 @@ export const campaignTemplatesService = {
 
       if (error) {
         console.error('[campaignTemplatesService] Error saving template:', error);
-        return { success: false, message: error.message };
+        return { success: false, message: 'Unable to process template. Please try again.' };
       }
 
       return {
@@ -125,7 +147,7 @@ export const campaignTemplatesService = {
 
       if (error) {
         console.error('[campaignTemplatesService] Error deleting template:', error);
-        return { success: false, message: error.message };
+        return { success: false, message: 'Unable to process template. Please try again.' };
       }
 
       return { success: true, message: data.message };
@@ -215,7 +237,7 @@ export const campaignTemplatesService = {
     return {
       title: title.replace('{{product}}', ''), // Remove placeholder if no product name
       dealOffer,
-      description,
+      description: textToHtml(description),
       launchDate: launchDate.toISOString(),
       endDate: endDate.toISOString(),
       tips: template.tips,

@@ -3,6 +3,7 @@ import { Eye, Loader2, CheckCircle2, Upload, Rocket, AlertTriangle, TrendingUp }
 import { floatIn } from './floatIn';
 import { addCampaignService } from '../../services/addCampaignService';
 import { campaignOptimizerService, OptimizationResult } from '../../services/campaignOptimizerService';
+import { perfTimer } from '../../services/perfLogger';
 
 interface MerchantStore {
   id?: string;
@@ -99,10 +100,12 @@ export const StepReview: React.FC<StepReviewProps> = ({
   const imageUrl = previewUrl || wizardState.existingThumbnail;
 
   const handlePublish = async () => {
+    const timer = perfTimer('save_campaign', 'add_deal');
     setPublishing(true);
     try {
       // Phase 1: Content + Image moderation
       setProgress({ step: 1, label: 'Checking content...' });
+      timer.mark('moderation_start');
       const plainDesc = stripHtml(wizardState.description);
       const moderationPromises: Promise<{ flagged: boolean; reason: string }>[] = [
         addCampaignService.moderateContent(wizardState.dealHeading, wizardState.offerValue, plainDesc),
@@ -114,18 +117,35 @@ export const StepReview: React.FC<StepReviewProps> = ({
       if (results[0].flagged) throw new Error(results[0].reason);
       if (wizardState.selectedImageFile && results[1]?.flagged) throw new Error(results[1].reason);
 
-      // Phase 2: Image upload
+      // Phase 2: Image upload (retry once on failure)
       setProgress({ step: 2, label: 'Uploading image...' });
+      timer.mark('image_upload');
       let finalImageUrl = wizardState.existingThumbnail;
       let finalImageName = wizardState.existingImageName;
       if (wizardState.selectedImageFile) {
-        const upload = await addCampaignService.uploadDealImage(user.id, wizardState.selectedImageFile);
-        finalImageUrl = upload.publicUrl;
-        finalImageName = upload.imageName;
+        let upload: { publicUrl: string; imageName: string } | null = null;
+        try {
+          upload = await addCampaignService.uploadDealImage(user.id, wizardState.selectedImageFile);
+        } catch {
+          // Retry once after a brief pause
+          setProgress({ step: 2, label: 'Retrying image upload...' });
+          try {
+            upload = await addCampaignService.uploadDealImage(user.id, wizardState.selectedImageFile);
+          } catch { /* will be caught by validation below */ }
+        }
+        if (upload?.publicUrl) {
+          finalImageUrl = upload.publicUrl;
+          finalImageName = upload.imageName;
+        }
+      }
+
+      if (!finalImageUrl) {
+        throw new Error('Image upload failed. Please go back and re-select your image, then try again.');
       }
 
       // Phase 3: Create/Update campaign
       setProgress({ step: 3, label: editingDealId ? 'Updating deal...' : 'Publishing deal...' });
+      timer.mark('campaign_create');
       const payload = {
         merchant_id: user.id,
         shop_name: user.store_name,
@@ -166,9 +186,11 @@ export const StepReview: React.FC<StepReviewProps> = ({
         }
       }).catch(err => console.error('[CampaignWizard] Background translation failed:', err));
 
+      timer.end('publish_success');
       onPublishSuccess();
     } catch (err: any) {
-      onPublishError(err.message || 'Failed to publish. Please try again.');
+      timer.end('error');
+      onPublishError('Unable to publish. Please try again.');
     } finally {
       setPublishing(false);
       setProgress(null);

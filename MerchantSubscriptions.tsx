@@ -17,7 +17,8 @@ import {
   Gauge,
   Tags,
   BadgeDollarSign,
-  HelpCircle
+  HelpCircle,
+  Clock
 } from 'lucide-react';
 
 interface MerchantSubscriptionsProps {
@@ -56,7 +57,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         setCurrentSubscription(subscription);
       } catch (err: any) {
         console.error("Failed to fetch subscription tiers:", err);
-        setError(err.message || "Failed to load subscription plans. Please try again.");
+        setError("Unable to load subscription plans. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -145,6 +146,25 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         </div>
       </div>
 
+      {/* Trial info banner */}
+      {currentSubscription?.status === 'trialing' && currentSubscription?.trial_end && (
+        <div className={`p-3.5 rounded-xl flex items-start gap-2.5 ${isDark ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-blue-50 border border-blue-200'}`}>
+          <Clock className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+          <div>
+            <p className={`text-xs font-semibold mb-0.5 ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+              Free trial active
+            </p>
+            <p className={`text-xs leading-relaxed ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              Your trial ends on{' '}
+              <span className="font-semibold">
+                {new Date(currentSubscription.trial_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
+              . You'll be charged after the trial period.
+            </p>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
@@ -223,8 +243,10 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               {/* Action Button */}
               <div className="col-span-3 flex justify-end">
                 {currentTierId === tier.id ? (
-                  <span className="px-3 h-8 rounded-lg bg-blue-500 text-white font-semibold text-[11px] flex items-center">
-                    Active
+                  <span className={`px-3 h-8 rounded-lg text-white font-semibold text-[11px] flex items-center ${
+                    currentSubscription?.status === 'trialing' ? 'bg-amber-500' : 'bg-blue-500'
+                  }`}>
+                    {currentSubscription?.status === 'trialing' ? 'Trial' : 'Active'}
                   </span>
                 ) : (
                   <button
@@ -325,11 +347,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                       setShowCancelModal(false);
                       setCurrentSubscription((prev: any) => prev ? { ...prev, cancel_at_period_end: true } : prev);
                     } else {
-                      setError(result.error || 'Failed to cancel subscription.');
+                      setError('Unable to cancel subscription. Please try again.');
                       setShowCancelModal(false);
                     }
                   } catch (err: any) {
-                    setError(err.message || 'Cancellation failed.');
+                    setError('Unable to cancel subscription. Please try again.');
                     setShowCancelModal(false);
                   } finally {
                     setCancelling(false);

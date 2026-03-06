@@ -14,8 +14,6 @@ import {
   Trash2, 
   Plus, 
   ChevronDown,
-  Eye,
-  EyeOff,
   Lock,
   MapPin,
   CheckCircle2,
@@ -96,10 +94,6 @@ const STATE_ABBREVIATIONS: Record<string, string> = {
   'Punjab': 'PB', 'Rajasthan': 'RJ', 'Sikkim': 'SK', 'Tamil Nadu': 'TN',
   'Telangana': 'TS', 'Tripura': 'TR', 'Uttar Pradesh': 'UP',
   'Uttarakhand': 'UK', 'West Bengal': 'WB',
-};
-
-const isValidPassword = (password: string): boolean => {
-  return password.length >= 6;
 };
 
 const formatPhoneNumber = (value: string, countryCode: string) => {
@@ -202,9 +196,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const [otpError, setOtpError] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState('');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [regPhone, setRegPhone] = useState<string>('');
   const [storeName, setStoreName] = useState(''); // Overall store name for merchant profile
   const [category, setCategory] = useState('');
@@ -222,16 +213,11 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
   // Real-time validation states
-  const [usernameTaken, setUsernameTaken] = useState<boolean | null>(null);
-  const [emailTaken, setEmailTaken] = useState<boolean | null>(null);
   const [phoneTaken, setPhoneTaken] = useState<boolean | null>(null);
   const [gstinTaken, setGstinTaken] = useState<boolean | null>(null);
   const [panTaken, setPanTaken] = useState<boolean | null>(null);
-  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
-  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [isCheckingPhone, setIsCheckingPhone] = useState(false);
   const [isCheckingGstin, setIsCheckingGstin] = useState(false);
   const [isCheckingPan, setIsCheckingPan] = useState(false);
@@ -251,8 +237,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const [localityResolved, setLocalityResolved] = useState<Record<number, boolean>>({});
 
   // Ref for debounce timeouts
-  const usernameDebounceRef = useRef<number | null>(null);
-  const emailDebounceRef = useRef<number | null>(null);
   const phoneDebounceRef = useRef<number | null>(null);
   const gstinDebounceRef = useRef<number | null>(null);
   const panDebounceRef = useRef<number | null>(null);
@@ -260,74 +244,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const fssaiDebounceRef = useRef<number | null>(null);
   const tradeLicenseDebounceRef = useRef<number | null>(null);
 
-
-  // Real-time username validation
-  const validateUsername = useCallback(async (value: string) => {
-    if (value.length < 3) {
-      setUsernameTaken(null);
-      setIsCheckingUsername(false);
-      return;
-    }
-    setIsCheckingUsername(true);
-    try {
-      const exists = await userService.validateUserIdentifier(value);
-      setUsernameTaken(exists);
-    } catch (e) {
-      console.error("Username validation failed:", e);
-      setUsernameTaken(null); // Set to null on error: cannot determine if taken
-    } finally {
-      setIsCheckingUsername(false);
-    }
-  }, []);
-
-  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setUsername(value);
-    setUsernameTaken(null); // Reset on change
-    setIsCheckingUsername(false);
-
-    if (usernameDebounceRef.current) {
-      clearTimeout(usernameDebounceRef.current as number); 
-    }
-    usernameDebounceRef.current = setTimeout(() => validateUsername(value), 500) as number;
-  };
-
-  // Real-time email validation
-  const validateEmail = useCallback(async (value: string) => {
-    // Allow empty email for merchants
-    if (!value || value.length === 0) {
-      setEmailTaken(null);
-      setIsCheckingEmail(false);
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      setEmailTaken(null);
-      setIsCheckingEmail(false);
-      return;
-    }
-    setIsCheckingEmail(true);
-    try {
-      const exists = await userService.validateUserIdentifier(value);
-      setEmailTaken(exists);
-    } catch (e) {
-      console.error("Email validation failed:", e);
-      setEmailTaken(null); // Set to null on error
-    } finally {
-      setIsCheckingEmail(false);
-    }
-  }, []);
-
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setEmail(value);
-    setEmailTaken(null); // Reset on change
-    setIsCheckingEmail(false);
-
-    if (emailDebounceRef.current) {
-      clearTimeout(emailDebounceRef.current as number); 
-    }
-    emailDebounceRef.current = setTimeout(() => validateEmail(value), 500) as number;
-  };
 
   // Real-time phone number validation (for consumer role)
   const validatePhoneNumber = useCallback(async (value: string, countryCode: string) => {
@@ -511,8 +427,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           clearTimeout(timeout as number);
         }
       });
-      if (usernameDebounceRef.current) clearTimeout(usernameDebounceRef.current as number); 
-      if (emailDebounceRef.current) clearTimeout(emailDebounceRef.current as number); 
       if (phoneDebounceRef.current) clearTimeout(phoneDebounceRef.current as number); 
     };
   }, [
@@ -522,7 +436,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     ...merchantStores.map(s => s.city), 
     ...merchantStores.map(s => s.state), 
     ...merchantStores.map(s => s.pincode),
-    validateUsername, validateEmail, validatePhoneNumber, selectedCountry.code
+    validatePhoneNumber, selectedCountry.code
   ]); 
 
 
@@ -564,7 +478,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
               });
               console.log(`Pincode lookup successful for store ${index}:`, result);
             } else {
-              setOtpError(`Pincode ${store.pincode} not found or could not resolve city/state.`);
+              setOtpError('Invalid pincode. Please check and try again.');
               setMerchantStores(prev => {
                 const next = [...prev];
                 next[index] = { ...next[index], city: '', state: '' }; // Clear on failure
@@ -573,7 +487,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
             }
           } catch (e: any) {
             console.error(`Error looking up pincode for store ${index}:`, e);
-            setOtpError(`Pincode lookup failed: ${e.message || "Network Error"}.`);
+            setOtpError('Could not verify pincode. Please check your connection and try again.');
             setMerchantStores(prev => {
               const next = [...prev];
               next[index] = { ...next[index], city: '', state: '' }; // Clear on error
@@ -975,24 +889,12 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     setLoading(true);
 
     try {
-      // Client-side validation: Rely on `canSubmit` to disable button for these checks
-      if (!isValidPassword(password)) {
-        throw new Error("Password strength invalid.");
-      }
-      
       if (regRole === 'user' && (phoneTaken === true)) {
         throw new Error("Phone number already registered.");
       }
-      // For consumers: only validate phone (username and email are auto-generated)
-      if (regRole === 'user' && (isCheckingPhone || (regPhone.length > 0 && phoneTaken === null))) {
+      // Validate phone check is complete
+      if (isCheckingPhone || (regPhone.length > 0 && phoneTaken === null)) {
         throw new Error("Phone validation still in progress. Please wait.");
-      }
-      // For merchants, email is optional, so only check if email is provided
-      if (regRole === 'merchant' && email.length > 0 && (isCheckingUsername || isCheckingEmail || isCheckingPhone || usernameTaken === null || emailTaken === null)) {
-        throw new Error("Validation still in progress or inconclusive. Please ensure all identifiers are checked and available.");
-      }
-      if (regRole === 'merchant' && email.length === 0 && (isCheckingUsername || isCheckingPhone || usernameTaken === null)) {
-        throw new Error("Validation still in progress or inconclusive. Please ensure all identifiers are checked and available.");
       }
 
 
@@ -1007,12 +909,9 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           throw new Error("Phone number not verified.");
         }
 
-        // Consumer signup: phone-first, username is optional, email/fullName are null
+        // Consumer signup: phone-first, no email/username/password
         const consumerRegData = {
           fullName: null,
-          username: username || null,
-          email: null,
-          password,
           phone: finalRegPhone,
           role: 'consumer',
           languagePreference,
@@ -1074,9 +973,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
         const merchantRegData = {
           fullName,
-          username,
-          email,
-          password,
           phone: finalRegPhone,
           role: 'merchant',
           storeName,
@@ -1122,7 +1018,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     } catch (err: any) {
       console.error("Registration Error:", err);
       // Display the error in the OTP error field as a general form error
-      setOtpError(err.message || "Registration failed. Please check your inputs.");
+      setOtpError("Registration failed. Please check your details and try again.");
     } finally {
       setLoading(false);
     }
@@ -1137,14 +1033,9 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
   const canSubmit = useMemo(() => {
     // Universal validations
-    if (loading || isCheckingUsername || isCheckingEmail || isCheckingPhone || isCheckingGstin || isCheckingPan ||
+    if (loading || isCheckingPhone || isCheckingGstin || isCheckingPan ||
         isCheckingUdyam || isCheckingFssai || isCheckingTradeLicense) {
       return false; // Always block if any check is in progress
-    }
-
-    // For merchants: username is required and must be validated
-    if (regRole === 'merchant' && usernameTaken === null) {
-      return false;
     }
 
     // Phone validation - required for both roles now
@@ -1152,17 +1043,8 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       return false; // Phone entered but validation not complete
     }
 
-    // For merchants, only validate email if it's provided
-    if (regRole === 'merchant' && email.length > 0 && emailTaken === null) {
-      return false;
-    }
-
-    // Basic fields must be filled and valid format
+    // Basic fields must be filled
     if (regRole === 'user') {
-      // For consumers: phone and password are required, username is optional
-      if (!isValidPassword(password)) {
-        return false;
-      }
       // Phone is required and must meet minimum length
       if (regPhone.length === 0 || regPhone.length < 7) {
         return false;
@@ -1171,33 +1053,20 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
       if (!isPhoneVerified) {
         return false;
       }
-      // If username is provided, it must be valid (3+ chars) and validation must be complete
-      if (username.length > 0 && (username.length < 3 || usernameTaken === null)) {
-        return false;
-      }
-    } else {
-      // For merchant, email is optional, so only validate format if provided
-      if (username.length < 3 || (email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) || !isValidPassword(password)) {
-        return false;
-      }
     }
     // Check if identifiers are actually available (not taken)
-    if (usernameTaken === true || emailTaken === true || phoneTaken === true || gstinTaken === true || panTaken === true ||
+    if (phoneTaken === true || gstinTaken === true || panTaken === true ||
         udyamTaken === true || fssaiTaken === true || tradeLicenseTaken === true) {
       return false;
     }
 
-
     if (regRole === 'user') {
       // Locality validation: If user started typing locality, all fields must be resolved
-      // If consumerLocality is not empty, then pincode, city, and state must also be populated
       if (consumerLocality.trim().length > 0) {
-        // User started typing locality, so all related fields must be populated from autocomplete
         if (!consumerPincode || !consumerCity || !consumerState) {
           return false; // Locality not fully resolved
         }
       }
-
       return true;
     } else { // regRole === 'merchant'
       // Merchant-specific validations
@@ -1205,7 +1074,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
         return false;
       }
       // Business type specific document validation
-      if (!businessType) return false; // Must select a type
+      if (!businessType) return false;
       const bizDocValid = (() => {
         if (businessType === 'gstin') return !!gstinValue && isGstValid(gstinValue) && !!panValue && isPanValid(panValue);
         if (businessType === 'udyam') return !!udyamValue && isUdyamValid(udyamValue);
@@ -1214,39 +1083,35 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
         return false;
       })();
       if (!bizDocValid) return false;
-      // Require both Terms of Service and Privacy Policy acceptance
       if (!termsAccepted || !privacyAccepted) {
         return false;
       }
-      if (!isPhoneVerified) { // Phone must be verified for merchants
+      if (!isPhoneVerified) {
         return false;
       }
       if (merchantStores.length === 0) {
         return false;
       }
-
-      // All stores must be valid, including new pincode and lookup status
       const allStoresValid = merchantStores.every(s =>
-        s.store_name.length > 0 && // New validation for store name
+        s.store_name.length > 0 &&
         s.street.length > 0 &&
-        s.pincode.length === 6 && // Pincode must be 6 digits
-        !s.isPincodeSearching && // No active pincode search
+        s.pincode.length === 6 &&
+        !s.isPincodeSearching &&
         s.city.length > 0 &&
         s.state.length > 0 &&
-        s.coords !== null && // GPS coordinates must be resolved
+        s.coords !== null &&
         (s.is24hrs || (s.shift1.length > 0 && s.shift2.length > 0))
       );
       return allStoresValid;
     }
   }, [
-    loading, isCheckingUsername, isCheckingEmail, isCheckingPhone, isCheckingGstin, isCheckingPan,
+    loading, isCheckingPhone, isCheckingGstin, isCheckingPan,
     isCheckingUdyam, isCheckingFssai, isCheckingTradeLicense,
-    usernameTaken, emailTaken, phoneTaken, gstinTaken, panTaken,
+    phoneTaken, gstinTaken, panTaken,
     udyamTaken, fssaiTaken, tradeLicenseTaken,
-    username, email, password,
     regRole, fullName, storeName, category, gstinValue, panValue, regPhone,
     businessType, udyamValue, fssaiValue, tradeLicenseValue,
-    isGstValid, isPanValid, isValidPassword, isPhoneVerified, merchantStores,
+    isGstValid, isPanValid, isPhoneVerified, merchantStores,
     consumerLocality, consumerPincode, consumerCity, consumerState,
     termsAccepted, privacyAccepted
   ]);
@@ -1454,50 +1319,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
             </div>
           )}
 
-          {/* Username - For both consumers and merchants */}
-          <div className="relative">
-            <input
-              type="text"
-              placeholder={t('reg_username')}
-              className={inputClass}
-              value={username}
-              onChange={handleUsernameChange}
-              required={regRole === 'merchant'}
-            />
-            {isCheckingUsername && (
-              <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
-            )}
-            {usernameTaken === false && !isCheckingUsername && username.length >= 3 && (
-              <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-            )}
-            {usernameTaken === true && !isCheckingUsername && (
-              <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-            )}
-          </div>
-
-          {/* Email - Only for merchants */}
-          {regRole === 'merchant' && (
-            <div className="relative">
-              <input
-                type="email"
-                placeholder="Email Address (Optional)"
-                className={inputClass}
-                value={email}
-                onChange={handleEmailChange}
-                required={false}
-              />
-              {isCheckingEmail && (
-                <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 animate-spin" />
-              )}
-              {emailTaken === false && !isCheckingEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (
-                <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
-              )}
-              {emailTaken === true && !isCheckingEmail && (
-                <ShieldAlert className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
-              )}
-            </div>
-          )}
-
           {/* Full Name - Only for merchants */}
           {regRole === 'merchant' && (
             <input
@@ -1508,22 +1329,6 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
               onChange={(e) => setFullName(e.target.value)}
               required
             />
-          )}
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              placeholder={t('reg_password')}
-              className={`${inputClass} pr-12 ${password.length > 0 && !isValidPassword(password) ? 'border-red-500' : ''}`}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className={`absolute right-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
-          </div>
-          {password.length > 0 && !isValidPassword(password) && (
-            <p className="text-red-500 text-xs font-semibold mt-1 ml-1">Password must be at least 6 characters</p>
           )}
 
           {/* Consumer Locality Field - Only for user role */}

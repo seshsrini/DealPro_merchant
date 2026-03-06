@@ -73,13 +73,13 @@ export const paymentService = {
 
       if (error) {
         console.error("[paymentService] Penny drop EF error:", error);
-        throw error;
+        throw new Error('Unable to process payment. Please try again.');
       }
 
       return data as { success: boolean, message?: string, status?: PennyDropStatus };
     } catch (err: any) {
       console.error("[paymentService] Failed to initiate penny drop:", err);
-      throw new Error(err.message || "Failed to initiate penny drop. Please try again.");
+      throw new Error('Failed to initiate penny drop. Please try again.');
     }
   },
   // Example:

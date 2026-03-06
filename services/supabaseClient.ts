@@ -19,13 +19,13 @@ console.log(`[SupabaseClient] Using Anon Key: ${supabaseAnonKey.substring(0, 10)
 // Initialize the client with the anon key initially
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
-// Keep Authorization header in sync when tokens refresh
+// Keep Authorization header in sync when tokens refresh.
+// IMPORTANT: mutate in-place — do NOT reassign (supabase as any).headers to a new object.
+// supabase.functions.headers shares the same object reference as supabase.headers;
+// reassigning would disconnect that shared reference and leave functions using a stale header.
 supabase.auth.onAuthStateChange((event, session) => {
   if (session?.access_token) {
-    (supabase as any).headers = {
-      ...((supabase as any).headers || {}),
-      'Authorization': `Bearer ${session.access_token}`,
-    };
+    (supabase as any).headers['Authorization'] = `Bearer ${session.access_token}`;
     if (event === 'TOKEN_REFRESHED') {
       console.log('[SupabaseClient] Token refreshed — Authorization header updated.');
     }
@@ -34,18 +34,37 @@ supabase.auth.onAuthStateChange((event, session) => {
 
 /**
  * Ensures the current session has a fresh (non-expired) JWT token.
- * Call this before critical Edge Function invocations.
- * On mobile, the app may be backgrounded long enough for the token to expire
- * without Supabase's auto-refresh timer firing.
+ * Checks token expiry and proactively refreshes if it expires within 2 minutes
+ * or is already expired — covers the case where the app is backgrounded long
+ * enough for the auto-refresh timer to miss an expiry cycle.
  */
+let _refreshPromise: Promise<string> | null = null;
 export const ensureFreshToken = async (): Promise<string> => {
-  const { data, error } = await supabase.auth.refreshSession();
-  if (error || !data.session) {
-    console.error('[SupabaseClient] Token refresh failed:', error?.message);
-    throw new Error('Session expired. Please log in again.');
+  const { data, error } = await supabase.auth.getSession();
+  if (!error && data.session?.access_token) {
+    const expiresAt = data.session.expires_at;
+    const secondsLeft = expiresAt ? expiresAt - Math.floor(Date.now() / 1000) : 0;
+    if (secondsLeft > 120) {
+      return data.session.access_token;
+    }
+    console.log(`[SupabaseClient] Token expires in ${secondsLeft}s — refreshing proactively`);
   }
-  console.log('[SupabaseClient] Token refreshed successfully.');
-  return data.session.access_token;
+  // Mutex: if a refresh is already in progress, reuse that promise
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = (async () => {
+    try {
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !refreshData.session) {
+        console.error('[SupabaseClient] Token refresh failed:', refreshError?.message);
+        throw new Error('Session expired. Please log in again.');
+      }
+      console.log('[SupabaseClient] Token refreshed successfully.');
+      return refreshData.session.access_token;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+  return _refreshPromise;
 };
 
 // Wrap functions.invoke to automatically refresh token before every authenticated Edge Function call.
@@ -63,7 +82,7 @@ supabase.functions.invoke = async (functionName: string, options?: any) => {
       };
     } catch (err: any) {
       console.error('[SupabaseClient] Token refresh failed for', functionName, ':', err?.message);
-      throw err;
+      throw new Error('Session expired. Please log in again.');
     }
   }
   return originalInvoke(functionName, options);
@@ -84,10 +103,7 @@ export const updateSupabaseSession = async (session: Session | null): Promise<bo
     // If so, skip setSession to avoid token conflicts — just ensure the header is set.
     const { data: existing } = await supabase.auth.getSession();
     if (existing?.session?.access_token && existing.session.user?.id) {
-      (supabase as any).headers = {
-        ...((supabase as any).headers || {}),
-        'Authorization': `Bearer ${existing.session.access_token}`,
-      };
+      (supabase as any).headers['Authorization'] = `Bearer ${existing.session.access_token}`;
       console.log(`[SupabaseClient] Active session found for user: ${existing.session.user.id}. Header synced.`);
       return true;
     }
@@ -117,10 +133,7 @@ export const updateSupabaseSession = async (session: Session | null): Promise<bo
         return false; // Caller should redirect to login
       }
       const freshToken = refreshData.session.access_token;
-      (supabase as any).headers = {
-        ...((supabase as any).headers || {}),
-        'Authorization': `Bearer ${freshToken}`,
-      };
+      (supabase as any).headers['Authorization'] = `Bearer ${freshToken}`;
       console.log(`[SupabaseClient] Session restored & refreshed for user: ${refreshData.session.user?.id}.`);
       return true;
     } catch (err: any) {

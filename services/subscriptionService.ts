@@ -14,7 +14,7 @@ export const subscriptionService = {
 
       if (error) {
         console.error("[subscriptionService] Edge Function returned error:", error);
-        throw error;
+        throw new Error('Unable to load subscription plans. Please try again.');
       }
 
       if (!data) {

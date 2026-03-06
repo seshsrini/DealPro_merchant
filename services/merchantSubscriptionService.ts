@@ -9,6 +9,10 @@ export const merchantSubscriptionService = {
     hasActiveSubscription: boolean;
     subscription_status?: string;
     current_tier_id?: number;
+    plan_name?: string;
+    trial_end?: string;
+    trialExpired?: boolean;
+    storeCount?: number;
   }> => {
     console.log("[merchantSubscriptionService] Checking active subscription for merchant:", merchantId);
 
@@ -26,6 +30,10 @@ export const merchantSubscriptionService = {
       return {
         hasActiveSubscription: data?.hasActiveSubscription || false,
         subscription_status: data?.subscription_status,
+        plan_name: data?.plan_name,
+        trial_end: data?.trial_end,
+        trialExpired: data?.trialExpired || false,
+        storeCount: data?.storeCount ?? 0,
       };
     } catch (err: any) {
       console.error("[merchantSubscriptionService] Exception checking subscription:", err.message);
@@ -71,7 +79,7 @@ export const merchantSubscriptionService = {
     tierId: number,
     tierKey: string,
     tierName: string
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{ success: boolean; error?: string; isTrialing?: boolean; trial_end?: string }> => {
     console.log("[merchantSubscriptionService] Creating subscription for merchant:", merchantId, "tier:", tierName);
 
     try {
@@ -86,19 +94,19 @@ export const merchantSubscriptionService = {
 
       if (error) {
         console.error("[merchantSubscriptionService] Error creating subscription:", error);
-        return { success: false, error: error.message };
+        return { success: false, error: 'Unable to process subscription. Please try again.' };
       }
 
       if (data?.success) {
-        console.log("[merchantSubscriptionService] Subscription created successfully:", data.subscription);
-        return { success: true };
+        console.log("[merchantSubscriptionService] Subscription created successfully:", data.subscription, "trialing:", data.isTrialing);
+        return { success: true, isTrialing: data.isTrialing, trial_end: data.subscription?.trial_end };
       } else {
         console.error("[merchantSubscriptionService] Subscription creation failed:", data?.error);
         return { success: false, error: data?.error || 'Unknown error' };
       }
     } catch (err: any) {
       console.error("[merchantSubscriptionService] Exception creating subscription:", err.message);
-      return { success: false, error: err.message };
+      return { success: false, error: 'Unable to process subscription. Please try again.' };
     }
   },
 
@@ -172,7 +180,7 @@ export const merchantSubscriptionService = {
 
       if (error) {
         console.error("[merchantSubscriptionService] Cancel error:", error);
-        return { success: false, error: error.message };
+        return { success: false, error: 'Unable to process subscription. Please try again.' };
       }
 
       if (data?.success) {
@@ -182,7 +190,7 @@ export const merchantSubscriptionService = {
       return { success: false, error: data?.error || 'Cancellation failed' };
     } catch (err: any) {
       console.error("[merchantSubscriptionService] Cancel exception:", err.message);
-      return { success: false, error: err.message };
+      return { success: false, error: 'Unable to process subscription. Please try again.' };
     }
   },
 };

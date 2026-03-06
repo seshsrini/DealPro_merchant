@@ -54,7 +54,7 @@ export const dealOfDayService = {
       } catch (parseErr: any) {
         if (parseErr.isModerationBlock) throw parseErr;
       }
-      throw error;
+      throw new Error('Unable to process deal. Please try again.');
     }
 
     console.log('[dealOfDayService] Successfully created Deal of the Day:', data);
@@ -76,7 +76,7 @@ export const dealOfDayService = {
 
     if (error) {
       console.error('[dealOfDayService] Failed to upload image:', error);
-      throw error;
+      throw new Error('Unable to process deal. Please try again.');
     }
 
     return data as { publicUrl: string, imageName: string };

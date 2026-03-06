@@ -77,7 +77,7 @@ export const ForgotPwd: React.FC<ForgotPwdProps> = ({ setView, loading, setLoadi
           setForgotError("Identity not recognized. Please check your username or email.");
         }
       } catch (err: any) {
-        setForgotError(err.message || "Validation failed. Please try again.");
+        setForgotError("Validation failed. Please try again.");
       } finally {
         if (forgotStep === 'identify') setLoading(false);
       }
@@ -115,7 +115,7 @@ export const ForgotPwd: React.FC<ForgotPwdProps> = ({ setView, loading, setLoadi
           setLoading(false);
         }, 2000);
       } catch (err: any) {
-        setForgotError(err.message || "Password reset failed. Please try again.");
+        setForgotError("Unable to reset password. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -131,7 +131,7 @@ export const ForgotPwd: React.FC<ForgotPwdProps> = ({ setView, loading, setLoadi
       setResendTimer(60);
       setForgotError(null);
     } catch (err: any) {
-      setForgotError(err.message || "Failed to resend OTP.");
+      setForgotError("Unable to resend code. Please try again.");
     } finally {
       setLoading(false);
     }

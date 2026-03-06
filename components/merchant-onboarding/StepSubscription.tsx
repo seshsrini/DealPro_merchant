@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Loader2, CheckCircle2, Gauge, Tags } from 'lucide-react';
+import { CreditCard, Loader2, CheckCircle2, Gauge, Tags, Gift, AlertTriangle } from 'lucide-react';
 import { SubscriptionTier, User } from '../../types';
 import { subscriptionService } from '../../services/subscriptionService';
 import { merchantSubscriptionService } from '../../services/merchantSubscriptionService';
@@ -11,10 +11,11 @@ interface StepSubscriptionProps {
   onComplete: () => void;
   onBack: () => void;
   theme: 'light' | 'dark';
+  trialExpired?: boolean; // true when shown because trial period ended
 }
 
 export const StepSubscription: React.FC<StepSubscriptionProps> = ({
-  user, setUser, onComplete, onBack, theme,
+  user, setUser, onComplete, onBack, theme, trialExpired = false,
 }) => {
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
@@ -34,7 +35,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
   useEffect(() => {
     subscriptionService.getSubscriptionTiers()
       .then((data) => setTiers(data))
-      .catch((err) => setError(err.message || 'Failed to load plans'))
+      .catch(() => setError('Unable to load plans. Please try again.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -60,7 +61,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
         setUser({
           ...user,
           hasActiveSubscription: true,
-          subscription_status: 'active',
+          subscription_status: result.isTrialing ? 'trialing' : 'active',
           current_tier_id: tierToConfirm.id,
         });
         onComplete();
@@ -70,7 +71,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
         setSelectedTierId(null);
       }
     } catch (err: any) {
-      setError(err.message || 'Subscription failed.');
+      setError('Unable to activate subscription. Please try again.');
       setSelecting(false);
       setSelectedTierId(null);
     }
@@ -78,19 +79,40 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
 
   return (
     <div className="flex flex-col min-h-full px-6 pt-5">
-      <div style={floatIn(0, visible)} className="flex items-center gap-3 mb-6">
-        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
-          <CreditCard className="w-6 h-6 text-emerald-500" />
+      <div style={floatIn(0, visible)} className="flex items-center gap-3 mb-4">
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${trialExpired ? 'bg-amber-500/10' : 'bg-emerald-500/10'}`}>
+          {trialExpired ? <AlertTriangle className="w-6 h-6 text-amber-500" /> : <CreditCard className="w-6 h-6 text-emerald-500" />}
         </div>
         <div>
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Choose your plan
+            {trialExpired ? 'Trial period ended' : 'Choose your plan'}
           </h2>
           <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Select a subscription to get started
+            {trialExpired ? 'Select a plan to continue using DealPro' : 'Select a subscription to get started'}
           </p>
         </div>
       </div>
+
+      {/* Trial banner */}
+      {trialExpired ? (
+        <div style={floatIn(50, visible)} className={`p-3.5 rounded-xl mb-4 ${isDark ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50 border border-amber-200'}`}>
+          <p className={`text-xs leading-relaxed ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+            Your 60-day free trial has ended. To continue creating deals, managing your store, and reaching customers, please select a paid plan below.
+          </p>
+        </div>
+      ) : (
+        <div style={floatIn(50, visible)} className={`p-3.5 rounded-xl mb-4 flex items-start gap-2.5 ${isDark ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-200'}`}>
+          <Gift className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+          <div>
+            <p className={`text-xs font-semibold mb-0.5 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+              First 60 days free!
+            </p>
+            <p className={`text-[11px] leading-relaxed ${isDark ? 'text-emerald-400/80' : 'text-emerald-600'}`}>
+              Enjoy all features at no cost. You'll only be charged after your trial ends.
+            </p>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16">
@@ -105,7 +127,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
               setLoading(true);
               subscriptionService.getSubscriptionTiers()
                 .then((data) => setTiers(data))
-                .catch((err) => setError(err.message || 'Failed to load plans'))
+                .catch(() => setError('Unable to load plans. Please try again.'))
                 .finally(() => setLoading(false));
             }}
             className="h-12 px-6 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all"
@@ -115,6 +137,11 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
         </div>
       ) : (
         <div className="space-y-3 pb-4">
+          {error && (
+            <div className={`p-3 rounded-xl text-sm text-center ${isDark ? 'bg-red-900/30 text-red-400' : 'bg-red-50 text-red-600'}`}>
+              {error}
+            </div>
+          )}
           {tiers.map((tier, i) => (
             <div
               key={tier.id}
@@ -175,10 +202,15 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
             <h3 className={`text-lg font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
               Confirm Subscription
             </h3>
-            <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            <p className={`text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               You're selecting <strong>{tierToConfirm.tier_name}</strong> at{' '}
               <strong>{tierToConfirm.currency}{tierToConfirm.subscription_fee}/{tierToConfirm.billing_frequency}</strong>
             </p>
+            {!trialExpired && (
+              <p className={`text-xs mb-3 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                Your first 60 days are free. Billing starts after the trial.
+              </p>
+            )}
             <div className={`space-y-2 mb-6 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -215,16 +247,18 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
         </div>
       )}
 
-      <div style={floatIn(600, visible)} className="mt-auto pb-8 pt-4">
-        <button
-          onClick={onBack}
-          className={`w-full h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
-            isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
-          }`}
-        >
-          Back
-        </button>
-      </div>
+      {!trialExpired && (
+        <div style={floatIn(600, visible)} className="mt-auto pb-8 pt-4">
+          <button
+            onClick={onBack}
+            className={`w-full h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
+              isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            Back
+          </button>
+        </div>
+      )}
     </div>
   );
 };

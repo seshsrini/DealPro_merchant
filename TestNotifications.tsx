@@ -29,7 +29,7 @@ export const TestNotifications: React.FC<TestNotificationsProps> = ({ user }) =>
       setNotifications(result);
     } catch (err: any) {
       console.error('[TEST] Error:', err);
-      setError(err.message);
+      setError('Failed to load notifications. Please try again.');
     } finally {
       setLoading(false);
     }

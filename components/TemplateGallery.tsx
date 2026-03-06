@@ -66,7 +66,7 @@ export const TemplateGallery: React.FC<TemplateGalleryProps> = ({
     if (result.success) {
       fetchTemplates();
     } else {
-      alert(result.message || 'Failed to delete template');
+      alert('Unable to delete template. Please try again.');
     }
   };
 

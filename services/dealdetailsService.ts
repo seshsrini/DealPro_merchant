@@ -12,7 +12,7 @@ export const dealDetailsService = {
 
       if (error) {
         console.error("[dealDetailsService] Edge Function returned an error:", error);
-        throw error;
+        throw new Error('Unable to load deal details. Please try again.');
       }
 
       console.log(`[dealDetailsService] Successfully fetched deal details`);
@@ -22,7 +22,7 @@ export const dealDetailsService = {
 
     } catch (err) {
       console.error(`[dealDetailsService] Network or unexpected error:`, err);
-      throw err;
+      throw new Error('Unable to load deal details. Please try again.');
     }
   },
 
@@ -34,7 +34,7 @@ export const dealDetailsService = {
     });
     if (error) {
       console.error("Failed to toggle favorite via Edge Function:", error);
-      throw error;
+      throw new Error('Unable to load deal details. Please try again.');
     }
     return data;
   },

@@ -2,11 +2,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, MapPin, Plus, Edit2, X, Loader2, CheckCircle2,
-  Clock, Navigation, ChevronDown, Store,
+  Clock, Navigation, ChevronDown, Store, Trash2, AlertTriangle,
 } from 'lucide-react';
 import { AppView, MerchantStore, User } from './types';
 import { merchantService } from './services/merchantService';
 import { locationsearchService } from './services/locationsearchService';
+import { addCampaignService } from './services/addCampaignService';
 
 const SHIFT1_OPTIONS = [
   '5:00 AM','5:30 AM','6:00 AM','6:30 AM','7:00 AM','7:30 AM',
@@ -22,6 +23,12 @@ const SHIFT2_OPTIONS = [
   '2:00 AM','2:30 AM','3:00 AM','3:30 AM','4:00 AM',
 ];
 
+const FALLBACK_CATEGORIES = [
+  'Grocery', 'Restaurant', 'Electronics', 'Fashion', 'Beauty',
+  'Health', 'Books', 'Home', 'Automotive', 'Tires',
+  'Sports', 'Jewellery', 'Toys', 'Furniture', 'General',
+];
+
 interface StoreForm {
   store_name: string;
   address: string;
@@ -35,6 +42,7 @@ interface StoreForm {
   shift1: string;
   shift2: string;
   is24hrs: boolean;
+  store_category: string;
 }
 
 const blankForm = (): StoreForm => ({
@@ -42,6 +50,7 @@ const blankForm = (): StoreForm => ({
   city: '', state: '', pincode: '',
   latitude: 0, longitude: 0,
   shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false,
+  store_category: '',
 });
 
 function parseStoreHrs(hrs?: string): { shift1: string; shift2: string; is24hrs: boolean } {
@@ -60,9 +69,12 @@ interface Props {
   user: User;
   setView: (view: AppView) => void;
   theme: 'light' | 'dark';
+  forceAddMode?: boolean;
+  onFirstStoreAdded?: () => void;
+  onStoreCountChange?: (count: number) => void;
 }
 
-export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
+export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAddMode = false, onFirstStoreAdded, onStoreCountChange }) => {
   const isDark = theme === 'dark';
   const [stores, setStores] = useState<MerchantStore[]>([]);
   const [loadingStores, setLoadingStores] = useState(true);
@@ -74,14 +86,34 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
   const [error, setError] = useState<string | null>(null);
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [storeCategories, setStoreCategories] = useState<string[]>(FALLBACK_CATEGORIES);
+  const [deletingStoreId, setDeletingStoreId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Fetch stores on mount
   useEffect(() => {
     merchantService.getMerchantStores(user.id)
-      .then(data => setStores(data))
+      .then(data => {
+        setStores(data);
+        const activeCount = data.filter(s => s.active_status !== 'disabled').length;
+        onStoreCountChange?.(activeCount);
+        if (forceAddMode && activeCount === 0) {
+          setForm(blankForm());
+          setEditingStoreId(null);
+          setShowPanel(true);
+          setError(null);
+        }
+      })
       .catch(() => {})
       .finally(() => setLoadingStores(false));
   }, [user.id]);
+
+  // Fetch store categories
+  useEffect(() => {
+    addCampaignService.getStoreCategories()
+      .then(cats => { if (cats.length > 0) setStoreCategories(cats); })
+      .catch(() => {});
+  }, []);
 
   const openAddStore = () => {
     setForm(blankForm());
@@ -105,6 +137,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
       shift1: hrs.shift1,
       shift2: hrs.shift2,
       is24hrs: hrs.is24hrs,
+      store_category: store.store_category || '',
     });
     setEditingStoreId(store.id || null);
     setShowPanel(true);
@@ -115,6 +148,24 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
     setShowPanel(false);
     setEditingStoreId(null);
     setError(null);
+  };
+
+  const handleDeleteStore = async (storeId: string) => {
+    setDeleting(true);
+    try {
+      await merchantService.deleteStore(user.id, storeId);
+      // Soft delete: mark disabled locally so it moves to the deleted section immediately
+      const updated = stores.map(s => s.id === storeId ? { ...s, active_status: 'disabled' } : s);
+      setStores(updated);
+      const activeCount = updated.filter(s => s.active_status !== 'disabled').length;
+      onStoreCountChange?.(activeCount);
+      setDeletingStoreId(null);
+    } catch (err: any) {
+      setError('Unable to delete store. Please try again.');
+      setDeletingStoreId(null);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Auto-geocode when address + city are available and coords are still 0,0
@@ -261,6 +312,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
     if (!form.address.trim()) { setError('Address is required'); return; }
     if (!form.city.trim()) { setError('City is required'); return; }
     if (!form.state.trim()) { setError('State is required'); return; }
+    if (!form.store_category) { setError('Store category is required'); return; }
 
     setSaving(true);
     setError(null);
@@ -280,6 +332,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
           latitude: form.latitude,
           longitude: form.longitude,
           store_hrs: storeHrs,
+          store_category: form.store_category,
         });
         setStores(prev => prev.map(s => s.id === editingStoreId ? updated : s));
         setSuccess('Store updated successfully');
@@ -297,14 +350,18 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
           latitude: form.latitude,
           longitude: form.longitude,
           store_hrs: storeHrs,
+          store_category: form.store_category,
         });
+        const newCount = stores.length + 1;
         setStores(prev => [...prev, added]);
+        onStoreCountChange?.(newCount);
         setSuccess('Store added successfully');
+        if (forceAddMode) onFirstStoreAdded?.();
       }
       closePanel();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setError(err.message || 'Failed to save store');
+      setError('Unable to save store. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -324,30 +381,41 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
 
   const labelClass = `block text-xs font-medium mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`;
 
+  const activeStores = stores.filter(s => s.active_status !== 'disabled');
+  const disabledStores = stores.filter(s => s.active_status === 'disabled');
+
   return (
     <div className={`min-h-screen pb-40 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
       {/* Header */}
       <div className="px-6 pt-6 pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setView('profile')}
-              className={`w-9 h-9 rounded-lg flex items-center justify-center active:scale-90 transition-all ${isDark ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'}`}
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
+            {!forceAddMode && (
+              <button
+                onClick={() => setView('profile')}
+                className={`w-9 h-9 rounded-lg flex items-center justify-center active:scale-90 transition-all ${isDark ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'}`}
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+            )}
             <div>
-              <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>My Stores</h2>
-              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{stores.length} {stores.length === 1 ? 'store' : 'stores'}</p>
+              <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {forceAddMode ? 'Add Your Store' : 'My Stores'}
+              </h2>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                {forceAddMode ? 'Required to continue' : `${activeStores.length} active${disabledStores.length > 0 ? `, ${disabledStores.length} deleted` : ''}`}
+              </p>
             </div>
           </div>
-          <button
-            onClick={openAddStore}
-            className="flex items-center gap-2 h-10 px-4 rounded-xl bg-slate-900 text-white text-sm font-medium active:scale-[0.98] transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Add Store
-          </button>
+          {!forceAddMode && (
+            <button
+              onClick={openAddStore}
+              className="flex items-center gap-2 h-10 px-4 rounded-xl bg-slate-900 text-white text-sm font-medium active:scale-[0.98] transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              Add Store
+            </button>
+          )}
         </div>
       </div>
 
@@ -359,6 +427,18 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
         </div>
       )}
 
+      {/* Force-add banner */}
+      {forceAddMode && (
+        <div className={`mx-6 mb-4 p-3 rounded-xl border text-center ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+          <p className={`text-xs font-semibold ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
+            You need at least one store to use DealPro Merchant.
+          </p>
+          <p className={`text-[11px] mt-0.5 ${isDark ? 'text-amber-400/70' : 'text-amber-600/70'}`}>
+            Add your store below to continue.
+          </p>
+        </div>
+      )}
+
       {/* Loading */}
       {loadingStores && (
         <div className="flex justify-center py-16">
@@ -367,7 +447,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
       )}
 
       {/* Empty state */}
-      {!loadingStores && stores.length === 0 && (
+      {!loadingStores && activeStores.length === 0 && (
         <div className="flex flex-col items-center px-6 py-20 text-center">
           <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-4 ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
             <Store className={`w-8 h-8 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
@@ -385,9 +465,9 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
       )}
 
       {/* Store cards */}
-      {!loadingStores && stores.length > 0 && (
+      {!loadingStores && activeStores.length > 0 && (
         <div className="px-6 space-y-3">
-          {stores.map(store => {
+          {activeStores.map(store => {
             const hrs = parseStoreHrs(store.store_hrs);
             return (
               <div
@@ -403,13 +483,74 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
                       {store.city}, {store.state}
                     </p>
                   </div>
-                  <button
-                    onClick={() => openEditStore(store)}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => openEditStore(store)}
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setDeletingStoreId(store.id || null)}
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-400'}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
+
+                {/* Inline delete confirmation */}
+                {deletingStoreId === store.id && (
+                  <div className={`mt-2 rounded-xl border overflow-hidden ${isDark ? 'border-red-500/20' : 'border-red-200'}`}>
+                    {/* Warning header */}
+                    <div className={`px-3 py-2.5 flex items-center gap-2 ${isDark ? 'bg-red-500/20' : 'bg-red-100'}`}>
+                      <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                      <p className={`text-xs font-bold ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+                        Delete this store?
+                      </p>
+                    </div>
+
+                    {/* Consequences */}
+                    <div className={`px-3 py-3 space-y-2 ${isDark ? 'bg-red-500/10' : 'bg-red-50'}`}>
+                      <div className="flex items-start gap-2">
+                        <span className={`text-[10px] font-bold mt-0.5 ${isDark ? 'text-red-400' : 'text-red-500'}`}>•</span>
+                        <p className={`text-[11px] leading-snug ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+                          All active, pending, and under-review campaigns for this store will be <span className="font-bold">immediately expired</span> and removed from the consumer app.
+                        </p>
+                      </div>
+                      {activeStores.length === 1 && (
+                        <div className="flex items-start gap-2">
+                          <span className={`text-[10px] font-bold mt-0.5 ${isDark ? 'text-red-400' : 'text-red-500'}`}>•</span>
+                          <p className={`text-[11px] leading-snug font-semibold ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+                            This is your only store — you'll need to add another to continue using the app.
+                          </p>
+                        </div>
+                      )}
+                      <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Store is preserved in records and can be reviewed by support.
+                      </p>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className={`px-3 py-3 flex gap-2 ${isDark ? 'bg-red-500/10' : 'bg-red-50'} border-t ${isDark ? 'border-red-500/20' : 'border-red-200'}`}>
+                      <button
+                        onClick={() => setDeletingStoreId(null)}
+                        disabled={deleting}
+                        className={`flex-1 h-9 rounded-lg text-xs font-medium border ${isDark ? 'border-slate-700 text-slate-400' : 'border-slate-300 text-slate-600'}`}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleDeleteStore(store.id!)}
+                        disabled={deleting}
+                        className="flex-1 h-9 rounded-lg text-xs font-bold bg-red-500 text-white disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
+                        {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        Yes, Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <div className="flex items-start gap-2">
@@ -420,7 +561,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
                   </div>
                   {store.pincode && (
                     <div className="flex items-center gap-2 ml-5">
-                      <span className={`text-[10px] font-mono ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>PIN: {store.pincode}</span>
+                      <span className={`text-[10px] font-mono font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>PIN: {store.pincode}</span>
                     </div>
                   )}
                   {store.store_hrs && (
@@ -436,10 +577,43 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
         </div>
       )}
 
+      {/* Deleted stores section */}
+      {!loadingStores && disabledStores.length > 0 && (
+        <div className="px-6 mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <div className={`flex-1 h-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+            <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+              Deleted Stores
+            </span>
+            <div className={`flex-1 h-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+          </div>
+          <div className="space-y-2">
+            {disabledStores.map(store => (
+              <div
+                key={store.id}
+                className={`p-3 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className={`text-xs font-medium line-through ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {store.store_name}
+                  </h3>
+                  <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${isDark ? 'bg-slate-800 text-slate-600' : 'bg-slate-200 text-slate-400'}`}>
+                    Deleted
+                  </span>
+                </div>
+                <p className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                  {store.city}, {store.state}{store.pincode ? ` · ${store.pincode}` : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Add/Edit Panel */}
       {showPanel && (
         <div className="fixed inset-0 z-[9999]">
-          <div className="absolute inset-0 bg-black/50" onClick={closePanel} />
+          <div className="absolute inset-0 bg-black/50" onClick={!forceAddMode ? closePanel : undefined} />
           <div className="max-w-md mx-auto w-full h-full relative">
             <div
               className={`absolute bottom-0 left-0 right-0 rounded-t-2xl overflow-hidden flex flex-col ${isDark ? 'bg-slate-900' : 'bg-white'}`}
@@ -456,9 +630,11 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
                 <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   {editingStoreId ? 'Edit Store' : 'Add Store'}
                 </h2>
-                <button onClick={closePanel} className={`w-9 h-9 rounded-lg flex items-center justify-center ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
-                  <X className="w-5 h-5" />
-                </button>
+                {!forceAddMode && (
+                  <button onClick={closePanel} className={`w-9 h-9 rounded-lg flex items-center justify-center ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
               </div>
 
               {/* Error */}
@@ -483,6 +659,21 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
                       className={inputClass}
                     />
                   )}
+                </div>
+
+                {/* Store Category */}
+                <div>
+                  <label className={labelClass}>Store Category <span className="text-red-500">*</span></label>
+                  <select
+                    value={form.store_category}
+                    onChange={e => setForm(f => ({ ...f, store_category: e.target.value }))}
+                    className={`${inputClass} ${!form.store_category ? (isDark ? 'text-slate-500' : 'text-slate-400') : ''}`}
+                  >
+                    <option value="">Select category</option>
+                    {storeCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Address */}
@@ -623,16 +814,18 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme }) => {
 
               {/* Footer */}
               <div className={`shrink-0 px-6 py-4 border-t flex gap-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-                <button
-                  onClick={closePanel}
-                  className={`flex-1 h-12 rounded-xl text-sm font-medium border ${isDark ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-500'}`}
-                >
-                  Cancel
-                </button>
+                {!forceAddMode && (
+                  <button
+                    onClick={closePanel}
+                    className={`flex-1 h-12 rounded-xl text-sm font-medium border ${isDark ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-500'}`}
+                  >
+                    Cancel
+                  </button>
+                )}
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex-1 h-12 rounded-xl text-sm font-semibold text-white bg-slate-900 disabled:opacity-40 flex items-center justify-center gap-2"
+                  className={`${forceAddMode ? 'w-full' : 'flex-1'} h-12 rounded-xl text-sm font-semibold text-white bg-slate-900 disabled:opacity-40 flex items-center justify-center gap-2`}
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : editingStoreId ? 'Save Changes' : 'Add Store'}
                 </button>

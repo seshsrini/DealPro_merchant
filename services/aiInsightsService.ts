@@ -27,7 +27,7 @@ export const aiInsightsService = {
         body: { merchantId },
       });
 
-      if (error) throw error;
+      if (error) throw new Error('Unable to load insights. Please try again.');
 
       return data?.insights || [];
     } catch (error) {

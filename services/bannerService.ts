@@ -31,14 +31,14 @@ export const bannerService = {
 
       if (error) {
         console.error('[bannerService] Error updating banner:', error);
-        return { success: false, error };
+        return { success: false, error: 'Unable to update banner. Please try again.' };
       }
 
       console.log('[bannerService] Successfully updated banner:', hoarding_no);
       return { success: true, error: null };
     } catch (err: any) {
       console.error('[bannerService] Exception updating banner:', err);
-      return { success: false, error: err };
+      return { success: false, error: 'Unable to update banner. Please try again.' };
     }
   }
 };

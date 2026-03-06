@@ -27,7 +27,7 @@ export const MreferralService = {
 
     if (error) {
       console.error("Edge Function Invoke Error:", error);
-      throw error; 
+      throw new Error('Unable to process referral. Please try again.'); 
     }
 
     return data;
@@ -41,7 +41,7 @@ export const MreferralService = {
       body: { refereeId, refereePhoneNumber },
     });
 
-    if (error) throw error;
+    if (error) throw new Error('Unable to process referral. Please try again.');
     return data;
   },
 };

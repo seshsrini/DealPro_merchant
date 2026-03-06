@@ -12,7 +12,7 @@ export const merchantService = {
     });
     if (error) {
       console.error("Failed to fetch merchant stores via Edge Function:", error);
-      throw error; // Propagate error
+      throw new Error('Unable to complete request. Please try again.');
     }
     return data as MerchantStore[];
   },
@@ -29,7 +29,7 @@ export const merchantService = {
     });
     if (error) {
       console.error("Failed to search stores via Edge Function:", error);
-      throw error;
+      throw new Error('Unable to complete request. Please try again.');
     }
     return data as MerchantSearchStore[];
   },
@@ -39,7 +39,7 @@ export const merchantService = {
     const { data: res, error } = await supabase.functions.invoke('manage-stores', {
       body: { action: 'update', merchantId, storeId, data },
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to complete request. Please try again.');
     return (res as any).store as MerchantStore;
   },
 
@@ -48,8 +48,16 @@ export const merchantService = {
     const { data: res, error } = await supabase.functions.invoke('manage-stores', {
       body: { action: 'add', merchantId, store },
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to complete request. Please try again.');
     return (res as any).store as MerchantStore;
+  },
+
+  // Delete a store
+  deleteStore: async (merchantId: string, storeId: string): Promise<void> => {
+    const { error } = await supabase.functions.invoke('manage-stores', {
+      body: { action: 'delete', merchantId, storeId },
+    });
+    if (error) throw new Error('Unable to complete request. Please try again.');
   },
 
   /**

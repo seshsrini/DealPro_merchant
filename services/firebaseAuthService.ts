@@ -76,7 +76,7 @@ class FirebaseAuthService {
           (event) => {
             console.error('[FirebaseAuth] phoneVerificationFailed event:', event.message);
             cleanup();
-            reject(new Error(event.message || 'Phone verification failed.'));
+            reject(new Error('Phone verification failed.'));
           }
         );
 
@@ -123,7 +123,7 @@ class FirebaseAuthService {
         throw new Error('SMS quota exceeded. Please try again later.');
       }
 
-      throw new Error(error.message || 'Failed to send OTP. Please try again.');
+      throw new Error('Failed to send OTP. Please try again.');
     }
   }
 
@@ -170,7 +170,7 @@ class FirebaseAuthService {
         throw new Error('OTP expired. Please request a new one.');
       }
 
-      throw new Error(error.message || 'OTP verification failed. Please try again.');
+      throw new Error('OTP verification failed. Please try again.');
     }
   }
 
@@ -229,7 +229,7 @@ class FirebaseAuthService {
           });
           signUpData = await retryRes.json();
           if (signUpData.error) {
-            throw new Error(signUpData.error.message || 'Failed to initiate email verification.');
+            throw new Error('Failed to initiate email verification.');
           }
         } else {
           // Can't sign in (maybe old password was random) — try stored refresh token
@@ -272,7 +272,7 @@ class FirebaseAuthService {
                 });
                 signUpData = await retryRes.json();
                 if (signUpData.error) {
-                  throw new Error(signUpData.error.message || 'Failed to initiate email verification.');
+                  throw new Error('Failed to initiate email verification.');
                 }
               }
             } catch (e) {
@@ -284,7 +284,7 @@ class FirebaseAuthService {
           }
         }
       } else if (signUpData.error) {
-        throw new Error(signUpData.error.message || 'Failed to initiate email verification.');
+        throw new Error('Failed to initiate email verification.');
       }
 
       idToken = signUpData.idToken;
@@ -311,7 +311,7 @@ class FirebaseAuthService {
       const verifyData = await verifyRes.json();
 
       if (verifyData.error) {
-        throw new Error(verifyData.error.message || 'Failed to send verification email.');
+        throw new Error('Failed to send verification email.');
       }
 
       console.log('[FirebaseAuth] Verification email sent successfully to:', email);
@@ -322,7 +322,7 @@ class FirebaseAuthService {
         throw new Error('Too many attempts. Please try again later.');
       }
 
-      throw new Error(error.message || 'Failed to send verification email.');
+      throw new Error('Failed to send verification email.');
     }
   }
 

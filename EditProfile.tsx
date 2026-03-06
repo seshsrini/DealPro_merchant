@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   User as UserIcon,
   Mail,
@@ -17,7 +17,6 @@ import {
 import { biometricService } from './services/biometricService';
 import { fcmService } from './services/fcmService';
 import { AppView } from './types';
-import { addCampaignService } from './services/addCampaignService';
 import { editProfileService } from './services/editProfileService';
 
 const BUSINESS_TYPES = ['GSTIN + PAN', 'Udyam', 'FSSAI', 'Trade License'];
@@ -42,6 +41,7 @@ interface EditProfileProps {
 
 export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView, theme = 'dark' }) => {
   const isDark = theme === 'dark';
+  const topRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,10 +53,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
   const [countryCode] = useState(user.country_code || '');
 
   // Store
-  const [storeName, setStoreName] = useState(user.store_name || '');
-  const [category, setCategory] = useState(user.category || '');
-  const [dbCategories, setDbCategories] = useState<string[]>([]);
-  const [isCatsLoading, setIsCatsLoading] = useState(false);
+  const [storeName] = useState(user.store_name || '');
 
   // Business Verification (read-only display)
   const [businessType] = useState(user.business_type || '');
@@ -74,16 +71,6 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
 
   const isMerchant = user.role?.startsWith('merchant');
 
-  useEffect(() => {
-    if (isMerchant) {
-      setIsCatsLoading(true);
-      addCampaignService.getStoreCategories().then(cats => {
-        setDbCategories(cats);
-        setIsCatsLoading(false);
-      });
-    }
-  }, [isMerchant]);
-
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -95,10 +82,6 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         email: email,
       };
 
-      if (isMerchant) {
-        updateData.category = category;
-      }
-
       // Preferences
       updateData.lang_preference = langPreference;
       updateData.push_notification = pushNotification;
@@ -109,9 +92,10 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
 
       setUser({ ...user, ...updateData });
       setSuccess(true);
+      topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
-      setError(err.message || "Failed to update profile.");
+      setError("Unable to save changes. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -171,7 +155,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
   };
 
   return (
-    <div className={`px-6 pt-6 pb-32 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
+    <div ref={topRef} className={`px-6 pt-6 pb-32 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -262,22 +246,6 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
               className={readOnlyClass}
               readOnly
             />
-
-            <div className="relative">
-              <select
-                value={category}
-                onChange={e => setCategory(e.target.value)}
-                className={inputClass}
-                required
-                disabled={isCatsLoading}
-              >
-                <option value="">{isCatsLoading ? 'Loading categories...' : 'Select Category'}</option>
-                {dbCategories.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              {isCatsLoading && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-slate-400" />}
-            </div>
           </div>
         )}
 

@@ -80,7 +80,7 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
       setResendTimer(60);
     } catch (err: any) {
       console.error("[OtpModal] Failed to send OTP:", err);
-      setOtpError(err.message || "Failed to send OTP. Please try again.");
+      setOtpError("Unable to send verification code. Please try again.");
       setCurrentStep('sending');
     } finally {
       setIsSendingOtp(false);
@@ -111,7 +111,7 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
       }
     } catch (err: any) {
       console.error("[OtpModal] OTP verification failed:", err);
-      setOtpError(err.message || "OTP verification failed. Please try again.");
+      setOtpError("Verification failed. Please check the code and try again.");
       onVerificationError();
     } finally {
       setIsVerifyingOtp(false);

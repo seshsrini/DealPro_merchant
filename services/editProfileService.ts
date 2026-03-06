@@ -26,7 +26,7 @@ export const editProfileService = {
     const { data: response, error } = await supabase.functions.invoke('reset-password', {
       body: { identifier, newPassword },
     });
-    if (error) throw error;
+    if (error) throw new Error('Unable to update profile. Please try again.');
     return response;
   },
 };

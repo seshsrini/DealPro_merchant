@@ -25,7 +25,7 @@ export const aiAssistantService = {
         body: { merchantId, query },
       });
 
-      if (error) throw error;
+      if (error) throw new Error('Unable to get AI response. Please try again.');
 
       return data?.response || null;
     } catch (error) {

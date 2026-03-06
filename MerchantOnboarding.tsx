@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useReducer, useCallback } from 'react';
 import { AppView, StoreLocation, User } from './types';
 import { merchantOnboardingService } from './services/merchantOnboardingService';
+import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { encryptionService, auditLogger } from './services/encryptionService';
 import { biometricService } from './services/biometricService';
 import { Loader2 } from 'lucide-react';
@@ -20,7 +21,7 @@ import { StepSubscription } from './components/merchant-onboarding/StepSubscript
 import { StepCongrats } from './components/merchant-onboarding/StepCongrats';
 
 // --- Types ---
-type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license';
+type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
 
 interface WizardState {
   fullName: string;
@@ -45,8 +46,8 @@ type WizardAction =
 
 const createEmptyStore = (): StoreLocation => ({
   store_name: '', street: '', pincode: '', locality: '', state: '', city: '',
-  landmark: '', coords: null, isGeocoding: false, shift1: '9:00 AM', shift2: '10:00 PM',
-  is24hrs: false, isPincodeSearching: false,
+  landmark: '', store_category: '', coords: null, isGeocoding: false,
+  shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, isPincodeSearching: false,
 });
 
 const initialState: WizardState = {
@@ -77,7 +78,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
 
 // --- Step Definitions ---
 const STEP_LABELS = [
-  'Welcome', 'Name', 'Store', 'Category', 'Address', 'Stores',
+  'Welcome', 'Name', 'Store', '', 'Address', 'Stores',
   'Verification', 'Review', 'Terms', 'Privacy', 'Plan', 'Done',
 ];
 const TOTAL_STEPS = STEP_LABELS.length;
@@ -102,20 +103,67 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [returnToReview, setReturnToReview] = useState(false);
+  const [hasExistingStores, setHasExistingStores] = useState(false);
 
   const DRAFT_KEY = `merchant_onboarding_draft_${user.id}`;
 
-  // Restore draft on mount
+  // On mount: pre-fill wizard from existing profile data and skip to first missing step
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        const draft = JSON.parse(saved);
-        if (draft && draft.fullName !== undefined) {
-          dispatch({ type: 'RESTORE_DRAFT', draft });
-        }
+    localStorage.removeItem(DRAFT_KEY);
+
+    // Pre-fill from existing profile
+    if (user.full_name) dispatch({ type: 'SET_FIELD', field: 'fullName', value: user.full_name });
+    if (user.store_name) dispatch({ type: 'SET_FIELD', field: 'storeName', value: user.store_name });
+    if (user.category) dispatch({ type: 'SET_FIELD', field: 'category', value: user.category });
+    if (user.business_type) dispatch({ type: 'SET_FIELD', field: 'businessType', value: user.business_type });
+    if (user.gstin) dispatch({ type: 'SET_FIELD', field: 'gstinValue', value: user.gstin });
+    if (user.pan) dispatch({ type: 'SET_FIELD', field: 'panValue', value: user.pan });
+    if (user.udyam_no) dispatch({ type: 'SET_FIELD', field: 'udyamValue', value: user.udyam_no });
+    if (user.fssai_no) dispatch({ type: 'SET_FIELD', field: 'fssaiValue', value: user.fssai_no });
+    if (user.trade_license_no) dispatch({ type: 'SET_FIELD', field: 'tradeLicenseValue', value: user.trade_license_no });
+    if (user.terms_accepted) dispatch({ type: 'SET_FIELD', field: 'termsAccepted', value: true });
+    if (user.privacy_accepted) dispatch({ type: 'SET_FIELD', field: 'privacyAccepted', value: true });
+
+    // If profile is already complete but subscription is missing/expired,
+    // jump directly to subscription step (step 10).
+    // For brand-new merchants whose profile is incomplete, fall through to
+    // determineStartStep() so the wizard guides them through Name → Store → etc.
+    const profileComplete = !!(user.full_name && user.store_name && user.business_type && user.terms_accepted && user.privacy_accepted);
+    if (!user.hasActiveSubscription && profileComplete) {
+      console.log('[MerchantOnboarding] Profile complete but no active subscription — jumping to subscription step, trialExpired:', (user as any).trialExpired);
+      setCurrentStep(10);
+      return;
+    }
+
+    // Check if merchant already has stores in DB, then determine start step
+    // Uses Edge Function (service_role) to bypass RLS on merchant_stores
+    const determineStartStep = async () => {
+      let hasStores = false;
+      try {
+        const subInfo = await merchantSubscriptionService.checkActiveSubscription(user.id);
+        hasStores = (subInfo.storeCount ?? 0) > 0;
+        setHasExistingStores(hasStores);
+      } catch { /* assume no stores */ }
+
+      // Steps: 0=Welcome, 1=Name, 2=Store, 4=Address, 5=Stores, 6=Verification, 7=Review, 8=Terms, 9=Privacy
+      // (Step 3 Category removed — auto-computed as single/multiple at submission)
+      // Brand-new merchants (no full_name) always start at step 0 (Welcome) — they must acknowledge it.
+      // Returning merchants who partially completed onboarding skip to their first missing step.
+      let startStep = 0;
+      if (user.full_name && !user.store_name) { startStep = 2; }
+      else if (user.full_name && user.store_name && !hasStores) { startStep = 4; }
+      else if (user.full_name && user.store_name && hasStores && !user.business_type) { startStep = 6; }
+      else if (user.full_name && user.store_name && hasStores && user.business_type && !user.terms_accepted) { startStep = 8; }
+      else if (user.full_name && user.store_name && hasStores && user.business_type && user.terms_accepted && !user.privacy_accepted) { startStep = 9; }
+      else if (user.full_name && user.store_name && hasStores && user.business_type && user.terms_accepted && user.privacy_accepted) { startStep = 7; } // Everything filled — show review
+
+      if (startStep > 0) {
+        setCurrentStep(startStep);
+        console.log(`[MerchantOnboarding] Pre-filled from profile, starting at step ${startStep} (${STEP_LABELS[startStep]}), hasStores: ${hasStores}`);
       }
-    } catch {}
+    };
+
+    determineStartStep();
   }, [DRAFT_KEY]);
 
   // Save draft
@@ -136,8 +184,80 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     }, 250);
   };
 
+  // Check if a step's data is already filled (used to skip pre-completed steps)
+  const isStepComplete = (step: number): boolean => {
+    switch (step) {
+      case 0: return true; // Welcome — always skippable
+      case 1: return !!state.fullName;
+      case 2: return !!state.storeName;
+      case 3: return true; // Category step removed — always skipped
+      case 4: return hasExistingStores || state.stores.some(s => !!(s.city || s.street || s.pincode));
+      case 5: return hasExistingStores || state.stores.some(s => !!(s.city || s.street || s.pincode));
+      case 6: return !!state.businessType;
+      // Steps 7+ (Review, Terms, Privacy, Plan, Done) are never skipped
+      default: return false;
+    }
+  };
+
+  // Silently persist the data collected on the given step to the DB.
+  // Fire-and-forget — never blocks navigation.
+  const saveStepProgress = (step: number) => {
+    switch (step) {
+      case 1:
+        if (state.fullName)
+          merchantOnboardingService.patchProfile({ fullName: state.fullName });
+        break;
+      case 2:
+        if (state.storeName)
+          merchantOnboardingService.patchProfile({ storeName: state.storeName });
+        break;
+      case 5: {
+        // Save all geocoded stores after the "Add More Stores" confirmation step
+        const readyStores = state.stores.filter(s => s.pincode && s.street);
+        if (readyStores.length > 0) {
+          merchantOnboardingService.patchProfile({
+            stores: readyStores.map(s => ({
+              store_name:     s.store_name || state.storeName,
+              address:        s.street,
+              pincode:        s.pincode,
+              locality:       s.locality,
+              city:           s.city,
+              state:          s.state,
+              landmark:       s.landmark,
+              store_category: s.store_category || '',
+              latitude:       s.coords?.latitude  || 0,
+              longitude:      s.coords?.longitude || 0,
+              store_hrs:      s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`,
+            })),
+          });
+        }
+        break;
+      }
+      case 6:
+        if (state.businessType) {
+          merchantOnboardingService.patchProfile({
+            businessType:    state.businessType,
+            gstin:           state.businessType === 'gstin'          ? state.gstinValue    : null,
+            pan:             state.businessType === 'gstin'          ? state.panValue      : null,
+            udyamNo:         state.businessType === 'udyam'          ? state.udyamValue    : null,
+            fssaiNo:         state.businessType === 'fssai'          ? state.fssaiValue    : null,
+            tradeLicenseNo:  state.businessType === 'trade_license'  ? state.tradeLicenseValue : null,
+          });
+        }
+        break;
+      case 8:
+        merchantOnboardingService.patchProfile({ termsAccepted: true });
+        break;
+      // step 9 (Privacy) is handled by handlePrivacyNext → handleFinalSubmit
+      default:
+        break;
+    }
+  };
+
   const handleNext = () => {
     saveDraft();
+    // Persist step data to DB before navigating away
+    saveStepProgress(currentStep);
     if (returnToReview && currentStep >= 1 && currentStep <= 6) {
       // After editing from review, return to review step
       // Special case: step 4 (Address) always goes to step 5 (Store List) first
@@ -148,7 +268,13 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         goToStep(7);
       }
     } else {
-      goToStep(currentStep + 1);
+      // Skip forward past any steps that already have data
+      let next = currentStep + 1;
+      while (next < 7 && isStepComplete(next)) {
+        console.log(`[MerchantOnboarding] Skipping step ${next} (${STEP_LABELS[next]}) — already complete`);
+        next++;
+      }
+      goToStep(next);
     }
   };
 
@@ -159,8 +285,9 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     goToStep(currentStep - 1);
   };
 
-  const handleEditFromReview = (targetStep: number) => {
+  const handleEditFromReview = (targetStep: number, storeIndex?: number) => {
     setReturnToReview(true);
+    if (storeIndex !== undefined) setEditingStoreIndex(storeIndex);
     goToStep(targetStep);
   };
 
@@ -196,11 +323,12 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         auditLogger.logSensitiveDataAccess('ENCRYPT_FOR_ONBOARDING', 'PAN');
       }
 
+      const filteredStores = state.stores.filter(s => s.city || s.street || s.pincode);
       await merchantOnboardingService.completeMerchantProfile({
         userId: user.id,
         fullName: state.fullName,
         storeName: state.storeName,
-        category: state.category,
+        category: filteredStores.length > 1 ? 'multiple' : 'single',
         businessType: state.businessType,
         gstin: encryptedGstin,
         pan: encryptedPan,
@@ -209,18 +337,19 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         tradeLicenseNo: state.businessType === 'trade_license' ? state.tradeLicenseValue.toUpperCase() : null,
         termsAccepted: true,
         privacyAccepted: true,
-        stores: state.stores.map(s => ({
-          store_name: s.store_name || state.storeName,
-          address: s.street,
-          pincode: s.pincode,
-          locality: s.locality,
-          city: s.city,
-          state: s.state,
-          landmark: s.landmark,
-          latitude: s.coords?.latitude || 0,
-          longitude: s.coords?.longitude || 0,
-          store_hrs: s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`,
-        })),
+        stores: filteredStores.map(s => ({
+            store_name:     s.store_name || state.storeName,
+            address:        s.street,
+            pincode:        s.pincode,
+            locality:       s.locality,
+            city:           s.city,
+            state:          s.state,
+            landmark:       s.landmark,
+            store_category: s.store_category || '',
+            latitude:       s.coords?.latitude || 0,
+            longitude:      s.coords?.longitude || 0,
+            store_hrs:      s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`,
+          })),
       });
 
       // Clear draft
@@ -231,7 +360,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         ...user,
         full_name: state.fullName,
         store_name: state.storeName,
-        category: state.category,
+        category: filteredStores.length > 1 ? 'multiple' : 'single',
         business_type: state.businessType,
         terms_accepted: true,
         privacy_accepted: true,
@@ -241,11 +370,15 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       // Re-save biometric session so app reopen sees complete profile
       await biometricService.saveSession(updatedUser);
 
-      // Move to subscription step
-      goToStep(10);
+      // Skip subscription step if merchant already has an active subscription
+      if (user.hasActiveSubscription) {
+        goToStep(11); // Congrats
+      } else {
+        goToStep(10); // Subscription selection
+      }
     } catch (err: any) {
       console.error('[MerchantOnboarding] Submit error:', err);
-      setSubmitError(err.message || 'Failed to save profile. Please try again.');
+      setSubmitError('Unable to save profile. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -265,10 +398,13 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   };
 
   // Subscription complete → show congrats
+  // Note: StepSubscription calls setUser() with updated subscription info
+  // right before calling onComplete(), but due to React closures 'user' here
+  // still references the pre-setUser value. The useEffect([user]) in App.tsx
+  // auto-saves the latest user to biometric session, so we don't need to
+  // save here (which would overwrite with stale data).
   const handleSubscriptionComplete = async () => {
     localStorage.removeItem(DRAFT_KEY);
-    // Re-save biometric session with subscription info
-    await biometricService.saveSession(user);
     goToStep(11);
   };
 
@@ -293,7 +429,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             value={state.fullName}
             onChange={(v) => dispatch({ type: 'SET_FIELD', field: 'fullName', value: v })}
             onNext={handleNext}
-            onBack={handleBack}
+            onBack={returnToReview ? undefined : handleBack}
             theme={theme}
           />
         );
@@ -303,7 +439,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             value={state.storeName}
             onChange={(v) => dispatch({ type: 'SET_FIELD', field: 'storeName', value: v })}
             onNext={handleNext}
-            onBack={handleBack}
+            onBack={returnToReview ? undefined : handleBack}
             theme={theme}
           />
         );
@@ -313,7 +449,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             value={state.category}
             onChange={(v) => dispatch({ type: 'SET_FIELD', field: 'category', value: v })}
             onNext={handleNext}
-            onBack={handleBack}
+            onBack={returnToReview ? undefined : handleBack}
             theme={theme}
           />
         );
@@ -326,7 +462,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             brandName={state.storeName}
             onChange={handleStoreFieldChange}
             onNext={handleNext}
-            onBack={handleBack}
+            onBack={returnToReview ? undefined : handleBack}
             theme={theme}
           />
         );
@@ -337,7 +473,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             brandName={state.storeName}
             onAddStore={handleAddStore}
             onNext={handleNext}
-            onBack={handleBack}
+            onBack={returnToReview ? undefined : handleBack}
             theme={theme}
           />
         );
@@ -353,7 +489,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             onChangeType={(v) => dispatch({ type: 'SET_FIELD', field: 'businessType', value: v })}
             onChangeField={(field, value) => dispatch({ type: 'SET_FIELD', field: field as keyof WizardState, value })}
             onNext={handleNext}
-            onBack={handleBack}
+            onBack={returnToReview ? undefined : handleBack}
             theme={theme}
           />
         );
@@ -406,6 +542,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             onComplete={handleSubscriptionComplete}
             onBack={handleBack}
             theme={theme}
+            trialExpired={!!((user as any).trialExpired && !user.hasActiveSubscription)}
           />
         );
       case 11:

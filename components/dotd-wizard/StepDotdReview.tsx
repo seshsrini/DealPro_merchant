@@ -163,7 +163,7 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
       if (err.isModerationBlock && err.moderationField) {
         onModerationBlock(err.moderationField, err.message || 'This field contains content that violates our guidelines.');
       } else {
-        onPublishError(err.message || 'Failed to publish. Please try again.');
+        onPublishError('Unable to publish. Please try again.');
       }
     } finally {
       setPublishing(false);

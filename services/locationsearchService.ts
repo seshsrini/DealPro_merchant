@@ -44,7 +44,7 @@ export const locationsearchService = {
     });
     if (error) {
       console.error("Registry Error: Failed to fetch states via Edge Function", error);
-      throw error; // Propagate error
+      throw new Error('Unable to search locations. Please try again.');
     }
     return data as DBState[];
   },
@@ -57,7 +57,7 @@ export const locationsearchService = {
     });
     if (error) {
       console.error(`Registry Error: Failed to fetch cities for state ${stateId} via Edge Function`, error);
-      throw error; // Propagate error
+      throw new Error('Unable to search locations. Please try again.');
     }
     return data as DBCity[];
   },
@@ -70,7 +70,7 @@ export const locationsearchService = {
     });
     if (error) {
       console.error(`Registry Error: Failed to fetch localities for city ${cityId} via Edge Function`, error);
-      throw error; // Propagate error
+      throw new Error('Unable to search locations. Please try again.');
     }
     return data as DBLocality[];
   },
@@ -83,7 +83,7 @@ export const locationsearchService = {
     });
     if (error) {
       console.error("Locality Search Failed via Edge Function:", error);
-      throw error; // Propagate error
+      throw new Error('Unable to search locations. Please try again.');
     }
     return data as DBLocality[];
   },
@@ -99,7 +99,7 @@ export const locationsearchService = {
     });
     if (error) {
       console.error("Pincode lookup failed via Edge Function:", error);
-      throw error; // Propagate error
+      throw new Error('Unable to search locations. Please try again.');
     }
     return data as PincodeLookupResponse;
   },

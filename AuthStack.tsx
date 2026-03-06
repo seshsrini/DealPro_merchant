@@ -14,7 +14,10 @@ import {
   ChevronDown,
   Fingerprint,
   ShieldCheck,
+  MapPin,
 } from 'lucide-react';
+import { Geolocation } from '@capacitor/geolocation';
+import { locationsearchService } from './services/locationsearchService';
 import { supabase, updateSupabaseSession } from './services/supabaseClient';
 
 const COUNTRY_CODES = [
@@ -33,9 +36,13 @@ interface AuthStackProps {
   registrationMessage: string | null;
   setRegistrationMessage: (msg: string | null) => void;
   theme: 'light' | 'dark';
+  detectedHomeLocation: string | null;
+  detectedLocationState: string | null;
+  allowLocation: boolean;
+  inviteCode?: string | null;
 }
 
-export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, loading, setLoading, registrationMessage, setRegistrationMessage, theme }) => {
+export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, loading, setLoading, registrationMessage, setRegistrationMessage, theme, detectedHomeLocation, detectedLocationState, allowLocation, inviteCode }) => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -49,18 +56,84 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
   const [loginPhase, setLoginPhase] = useState<'phone' | 'biometric_consent'>('phone');
   const [pendingUser, setPendingUser] = useState<any>(null);
 
-  const { setLocale } = useTranslation();
+  const { setLocale, locale } = useTranslation();
   const isDark = theme === 'dark';
 
-  // Check if merchant has completed their profile (onboarding wizard)
-  const isMerchantProfileComplete = (profile: any): boolean => {
-    return !!(
+  // Background location detection state
+  const [bgLocationCity, setBgLocationCity] = useState<string | null>(detectedHomeLocation || null);
+  const [bgLocationState, setBgLocationState] = useState<string | null>(detectedLocationState || null);
+  const [bgLocationLoading, setBgLocationLoading] = useState(false);
+  const bgLocationAttempted = React.useRef(false);
+
+  // Background location detection — runs once when login screen appears
+  useEffect(() => {
+    if (view !== 'login' || bgLocationAttempted.current) return;
+    if (detectedHomeLocation && detectedHomeLocation.length > 0) return;
+    if (!allowLocation) return;
+    bgLocationAttempted.current = true;
+    setBgLocationLoading(true);
+
+    const detect = async () => {
+      try {
+        const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+        const { latitude, longitude } = position.coords;
+        const geoResult = await locationsearchService.reverseGeocodeCoordinates(latitude, longitude);
+        if (geoResult?.city) {
+          setBgLocationCity(geoResult.city);
+          setBgLocationState(geoResult.state || null);
+          if ((window as any).__dealpro_onLocationDetected) {
+            (window as any).__dealpro_onLocationDetected(geoResult.city, geoResult.state || '');
+          }
+          console.log('[AuthStack] Background location detected:', geoResult.city, geoResult.state);
+        }
+      } catch (err) {
+        console.log('[AuthStack] Background location detection skipped:', err);
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
+          });
+          const geoResult = await locationsearchService.reverseGeocodeCoordinates(pos.coords.latitude, pos.coords.longitude);
+          if (geoResult?.city) {
+            setBgLocationCity(geoResult.city);
+            setBgLocationState(geoResult.state || null);
+            if ((window as any).__dealpro_onLocationDetected) {
+              (window as any).__dealpro_onLocationDetected(geoResult.city, geoResult.state || '');
+            }
+            console.log('[AuthStack] Background location (browser fallback):', geoResult.city, geoResult.state);
+          }
+        } catch {
+          console.log('[AuthStack] Browser location fallback also failed');
+        }
+      } finally {
+        setBgLocationLoading(false);
+      }
+    };
+
+    detect();
+  }, [view, detectedHomeLocation]);
+
+  // Check if merchant has completed all required onboarding fields + has at least one store
+  const isMerchantProfileComplete = async (profile: any): Promise<boolean> => {
+    const profileOk = !!(
       profile.full_name &&
       profile.store_name &&
+      profile.category &&
       profile.business_type &&
       profile.terms_accepted &&
       profile.privacy_accepted
     );
+    if (!profileOk) return false;
+
+    // Also verify merchant has at least one store in DB
+    try {
+      const { count } = await supabase
+        .from('merchant_stores')
+        .select('id', { count: 'exact', head: true })
+        .eq('merchant_id', profile.id);
+      return (count ?? 0) > 0;
+    } catch {
+      return false;
+    }
   };
 
   const handlePostLoginNavigation = async (userProfile: any, session: any) => {
@@ -77,7 +150,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
       console.error('[AuthStack] Failed to initialize push notifications:', error);
     }
 
-    let subscriptionInfo: { hasActiveSubscription: boolean; subscription_status?: string; current_tier_id?: number } = {
+    let subscriptionInfo: { hasActiveSubscription: boolean; subscription_status?: string; current_tier_id?: number; trialExpired?: boolean; storeCount?: number } = {
       hasActiveSubscription: false
     };
     if (userRole === 'merchant') {
@@ -92,19 +165,29 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
       hasActiveSubscription: subscriptionInfo.hasActiveSubscription,
       subscription_status: subscriptionInfo.subscription_status,
       current_tier_id: subscriptionInfo.current_tier_id,
+      trialExpired: subscriptionInfo.trialExpired || false,
     };
 
     // Determine target view: if merchant profile is incomplete, show onboarding wizard
     // Subscription selection is part of onboarding, so complete profile → dashboard
     let targetView: string;
     if (userRole === 'merchant') {
-      if (!isMerchantProfileComplete(userProfile)) {
+      // If no active subscription, force subscription selection via onboarding
+      if (!subscriptionInfo.hasActiveSubscription) {
+        console.log('[AuthStack] No active subscription — forcing subscription selection, trialExpired:', subscriptionInfo.trialExpired);
         targetView = 'merchant_onboarding';
       } else {
-        targetView = 'merchant_dashboard';
+        // Use storeCount from Edge Function (service_role, bypasses RLS)
+        const profileOk = !!(userProfile.full_name && userProfile.store_name && userProfile.category && userProfile.business_type && userProfile.terms_accepted && userProfile.privacy_accepted);
+        const hasStores = (subscriptionInfo.storeCount ?? 0) > 0;
+        if (!profileOk || !hasStores) {
+          targetView = 'merchant_onboarding';
+          // Clear any stale onboarding draft so merchant starts fresh
+          localStorage.removeItem(`merchant_onboarding_draft_${userProfile.id}`);
+        } else {
+          targetView = 'merchant_dashboard';
+        }
       }
-    } else if (userRole === 'dealadmin') {
-      targetView = 'dealadmin_review_deals';
     } else {
       targetView = 'onboarding';
     }
@@ -186,7 +269,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
   }, [isPhoneVerifiedForLogin, phoneNumber]);
 
   const doOtpLogin = async (phone: string) => {
-    const { user: userProfile, session } = await userService.merchantOtpLogin(phone, selectedCountry.code);
+    const { user: userProfile, session } = await userService.merchantOtpLogin(phone, selectedCountry.code, inviteCode ?? undefined);
     if (!userProfile) throw new Error('Unable to load your account. Please try again.');
     if (!session) throw new Error('Login could not be completed. Please try again.');
     await handlePostLoginNavigation(userProfile, session);
@@ -197,13 +280,34 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     setAuthError(null);
     try {
       const cleanDigits = phoneNumber.replace(/\D/g, '');
-      await doOtpLogin(cleanDigits);
+      try {
+        await doOtpLogin(cleanDigits);
+      } catch (loginErr: any) {
+        // If login fails (user not found), try registering then login again
+        const loginMsg = loginErr.message?.toLowerCase() || '';
+        console.log('[AuthStack] Login failed, attempting registration fallback. Error:', loginMsg);
+        try {
+          await userService.registerUser({
+            phone: cleanDigits,
+            country_code: selectedCountry.code,
+            role: 'merchant',
+            languagePreference: locale,
+            home_location: detectedHomeLocation || undefined,
+            location_state: detectedLocationState || undefined,
+            allow_location: allowLocation,
+          });
+          await doOtpLogin(cleanDigits);
+        } catch (regErr) {
+          // Both login and registration failed — throw the original login error
+          throw loginErr;
+        }
+      }
     } catch (err: any) {
       const msg = err.message || '';
       if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('network')) {
         setAuthError('Unable to connect to server. Please check your internet connection.');
       } else {
-        setAuthError(msg || 'Something went wrong. Please try again.');
+        setAuthError('Something went wrong. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -434,6 +538,24 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
           >
             {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Continue'}
           </button>
+
+          {/* Background location indicator */}
+          <div className="flex items-center justify-center gap-1.5 mt-3 min-h-[20px]">
+            {bgLocationLoading && (
+              <>
+                <Loader2 className={`w-3 h-3 animate-spin ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+                <span className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Detecting location...</span>
+              </>
+            )}
+            {!bgLocationLoading && bgLocationCity && (
+              <>
+                <MapPin className="w-3 h-3 text-emerald-500" />
+                <span className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {bgLocationCity}{bgLocationState ? `, ${bgLocationState}` : ''}
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Login OTP Modal */}

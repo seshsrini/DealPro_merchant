@@ -227,12 +227,12 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         body: { period: selectedPeriod }
       });
       if (error) {
-        setError(error.message || 'Failed to fetch analytics');
+        setError('Unable to load analytics. Please try again.');
         return;
       }
       setAnalytics(data);
     } catch (err: any) {
-      setError(err.message || 'An error occurred');
+      setError('Unable to load analytics. Please try again.');
     } finally {
       setLoading(false);
     }

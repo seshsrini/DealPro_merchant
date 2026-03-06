@@ -5,6 +5,7 @@ import { QRCanvas } from './components/QRCanvas';
 import { LocationMap } from './components/LocationMap';
 import { useTranslation } from './contexts/LanguageContext';
 import { dealdetailsService } from './services/dealdetailsService';
+import { sanitizeHtml } from './utils/sanitizeHtml';
 import { redeemNowservice } from './services/redeemNowservice';
 import { pinnedDealsService } from './services/pinnedDealsService';
 import {
@@ -316,7 +317,7 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
              <div className={`px-5 py-5 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
                 <div
                   className={`text-sm font-normal leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-700'} rich-text-content`}
-                  dangerouslySetInnerHTML={{ __html: fullDescription }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(fullDescription) }}
                 />
              </div>
           </div>

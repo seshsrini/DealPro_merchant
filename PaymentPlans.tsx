@@ -87,7 +87,7 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView, theme
 
     } catch (err: any) {
       console.error('UPI Payment Initiation Error:', err);
-      setPaymentError(err.message || 'Could not launch UPI app or payment failed.');
+      setPaymentError('Payment could not be completed. Please try again.');
     } finally {
       setIsProcessing(false);
     }

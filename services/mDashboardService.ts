@@ -11,7 +11,7 @@ export const mDashboardService = {
     });
     if (error) {
       console.error("[mDashboardService] Failed to fetch merchant dashboard metrics via Edge Function:", error);
-      throw error; // Propagate error
+      throw new Error('Unable to load dashboard data. Please try again.');
     }
     return data;
   },
@@ -29,7 +29,7 @@ export const mDashboardService = {
     });
     if (error) {
       console.error("Failed to fetch campaign specific clicks via Edge Function:", error);
-      throw error; // Propagate error
+      throw new Error('Unable to load dashboard data. Please try again.');
     }
     return data as Record<string, number>;
   },
@@ -47,7 +47,7 @@ export const mDashboardService = {
     });
     if (error) {
       console.error("Failed to fetch campaign specific redemptions via Edge Function:", error);
-      throw error; // Propagate error
+      throw new Error('Unable to load dashboard data. Please try again.');
     }
     return data as Record<string, number>;
   },
@@ -63,7 +63,7 @@ export const mDashboardService = {
     });
     if (error) {
       console.error("[mDashboardService] EF Invocation Error for total lifetime deals:", error);
-      throw error;
+      throw new Error('Unable to load dashboard data. Please try again.');
     }
     return data; // Edge function already returns { count: number }
   },
@@ -79,7 +79,7 @@ export const mDashboardService = {
     });
     if (error) {
       console.error("[mDashboardService] EF Invocation Error for total lifetime clicks:", error);
-      throw error;
+      throw new Error('Unable to load dashboard data. Please try again.');
     }
     return data; // Edge function already returns { count: number }
   },
@@ -95,7 +95,7 @@ export const mDashboardService = {
     });
     if (error) {
       console.error("[mDashboardService] EF Invocation Error for total lifetime redemptions:", error);
-      throw error;
+      throw new Error('Unable to load dashboard data. Please try again.');
     }
     return data;
   },
@@ -111,7 +111,7 @@ export const mDashboardService = {
     });
     if (error) {
       console.error("[mDashboardService] EF Invocation Error for total invites sent:", error);
-      throw error;
+      throw new Error('Unable to load dashboard data. Please try again.');
     }
     return data;
   },
@@ -127,7 +127,7 @@ export const mDashboardService = {
     });
     if (error) {
       console.error("[mDashboardService] EF Invocation Error for total invites accepted:", error);
-      throw error;
+      throw new Error('Unable to load dashboard data. Please try again.');
     }
     return data;
   },

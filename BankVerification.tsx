@@ -93,7 +93,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
       }
     } catch (err: any) {
       console.error("Razorpay IFSC API Error:", err);
-      setIfscError(err.message || 'Failed to fetch bank details.');
+      setIfscError('Unable to fetch bank details. Please try again.');
       setBankName('');
       setBranchName('');
     } finally {
@@ -151,7 +151,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
     } catch (err: any) {
       console.error("Penny drop initiation failed:", err);
       setPennyDropStatus('failed');
-      setPennyDropFeedback(err.message || 'Failed to initiate penny drop.');
+      setPennyDropFeedback('Unable to initiate verification. Please try again.');
     } finally {
       setIsVerifyingAccount(false);
     }
@@ -205,7 +205,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
         setTimeout(() => setView('profile'), 2000);
     } catch (err: any) {
         console.error("Failed to save bank/KYC details:", err);
-        setSaveError(err.message || "Failed to save details. Please try again.");
+        setSaveError("Unable to save details. Please try again.");
     } finally {
         setIsSaving(false);
     }
