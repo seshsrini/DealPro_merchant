@@ -1,4 +1,4 @@
-import { supabase, updateSupabaseSession } from "./supabaseClient";
+import { supabase, supabaseUrl, supabaseAnonKey, updateSupabaseSession } from "./supabaseClient";
 import { ActivityLog } from "../types";
 
 export const userService = {
@@ -261,15 +261,15 @@ export const userService = {
    * @param phone The phone number to send OTP to.
    */
   requestPhoneVerification: async (phone: string) => {
-    const FUNCTION_URL = `https://gkulyxglzqlhpqxlwjqw.supabase.co/functions/v1/request-otp-for-profile`; // Directly using your provided Supabase URL
-    
+    const FUNCTION_URL = `${supabaseUrl}/functions/v1/request-otp-for-profile`;
+
     try {
       const response = await fetch(FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFhYmFzZSIsInJlZiI6ImdrdWx5eGdsenFsaHBxeGx3anF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NjA4MjIsImV4cCI6MjA4NDQzNjgyMn0.liawuu5aYsaS6IcELQwGGzsho_ZGBTeGpAwPMCm2l7c', // Directly using your provided Supabase Anon Key
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFhYmFzZSIsInJlZiI6ImdrdWx5eGdsenFsaHBxeGx3anF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NjA4MjIsImV4cCI6MjA4NDQzNjgyMn0.liawuu5aYsaS6IcELQwGGzsho_ZGBTeGpAwPMCm2l7c`, // Added for robust network handling
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`,
         },
         body: JSON.stringify({ phone }),
       });
