@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ClipboardCheck, Pencil, User, Store, Tags, MapPin, ShieldCheck, ArrowRight } from 'lucide-react';
+import { ClipboardCheck, Pencil, User, Store, MapPin, ShieldCheck, ArrowRight } from 'lucide-react';
 import { floatIn } from './floatIn';
 
 // Matches WizardState from MerchantOnboarding.tsx
@@ -20,7 +20,7 @@ interface ReviewState {
     shift1: string;
     shift2: string;
   }>;
-  businessType: '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license';
+  businessType: '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
   gstinValue: string;
   panValue: string;
   udyamValue: string;
@@ -30,7 +30,7 @@ interface ReviewState {
 
 interface StepReviewDetailsProps {
   state: ReviewState;
-  onEditStep: (stepIndex: number) => void;
+  onEditStep: (stepIndex: number, storeIndex?: number) => void;
   onNext: () => void;
   onBack: () => void;
   theme: 'light' | 'dark';
@@ -47,6 +47,7 @@ const BUSINESS_TYPE_LABELS: Record<string, string> = {
   udyam: 'Udyam (MSME)',
   fssai: 'FSSAI',
   trade_license: 'Trade License',
+  none: 'None / Unregistered',
 };
 
 // Reusable review card
@@ -140,38 +141,43 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
           <p className={valueClass}>{state.storeName}</p>
         </ReviewCard>
 
-        {/* Category → edits step 3 */}
-        <ReviewCard
-          title="Category"
-          icon={<Tags className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
-          onEdit={() => onEditStep(3)}
-          isDark={isDark}
-          style={floatIn(300, visible)}
-        >
-          <p className={valueClass}>{state.category}</p>
-        </ReviewCard>
-
         {/* Stores → edits step 5 (Add More Stores) */}
         <ReviewCard
           title={`Store${state.stores.length > 1 ? 's' : ''} (${state.stores.length})`}
           icon={<MapPin className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
           onEdit={() => onEditStep(5)}
           isDark={isDark}
-          style={floatIn(400, visible)}
+          style={floatIn(300, visible)}
         >
           <div className="space-y-2">
             {state.stores.map((s, i) => (
-              <div key={i} className={i > 0 ? `pt-2 border-t ${isDark ? 'border-slate-700' : 'border-slate-100'}` : ''}>
-                <p className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                  {s.store_name || state.storeName || `Store ${i + 1}`}
-                </p>
-                <p className={labelClass}>
-                  {[s.street, s.locality, s.city, s.state, s.pincode].filter(Boolean).join(', ')}
-                </p>
-                {s.landmark && <p className={labelClass}>Near {s.landmark}</p>}
-                <p className={labelClass}>
-                  {s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`}
-                </p>
+              <div key={i} className={`${i > 0 ? `pt-2 border-t ${isDark ? 'border-slate-700' : 'border-slate-100'}` : ''}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                      {s.store_name || state.storeName || `Store ${i + 1}`}
+                    </p>
+                    <p className={labelClass}>
+                      {[s.street, s.locality, s.city, s.state, s.pincode].filter(Boolean).join(', ')}
+                    </p>
+                    {s.landmark && <p className={labelClass}>Near {s.landmark}</p>}
+                    <p className={labelClass}>
+                      {s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`}
+                    </p>
+                    {s.store_category && (
+                      <p className="text-xs font-semibold text-amber-500 mt-0.5">{s.store_category}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => onEditStep(4, i)}
+                    className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90 mt-0.5 ${
+                      isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-100 hover:bg-slate-200'
+                    }`}
+                    aria-label={`Edit store ${i + 1}`}
+                  >
+                    <Pencil className={`w-3 h-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -183,25 +189,25 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
           icon={<ShieldCheck className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
           onEdit={() => onEditStep(6)}
           isDark={isDark}
-          style={floatIn(500, visible)}
+          style={floatIn(400, visible)}
         >
           <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             {BUSINESS_TYPE_LABELS[state.businessType] || 'Not selected'}
           </p>
           {state.businessType === 'gstin' && (
             <>
-              <p className={valueClass}>GSTIN: {maskValue(state.gstinValue, 2, 3)}</p>
-              <p className={valueClass}>PAN: {maskValue(state.panValue, 2, 2)}</p>
+              <p className={valueClass}>GSTIN: <span className="font-bold">{maskValue(state.gstinValue, 2, 3)}</span></p>
+              <p className={valueClass}>PAN: <span className="font-bold">{maskValue(state.panValue, 2, 2)}</span></p>
             </>
           )}
           {state.businessType === 'udyam' && (
-            <p className={valueClass}>Udyam: {maskValue(state.udyamValue, 6, 4)}</p>
+            <p className={valueClass}>Udyam: <span className="font-bold">{maskValue(state.udyamValue, 6, 4)}</span></p>
           )}
           {state.businessType === 'fssai' && (
-            <p className={valueClass}>FSSAI: {maskValue(state.fssaiValue, 3, 3)}</p>
+            <p className={valueClass}>FSSAI: <span className="font-bold">{maskValue(state.fssaiValue, 3, 3)}</span></p>
           )}
           {state.businessType === 'trade_license' && (
-            <p className={valueClass}>License: {maskValue(state.tradeLicenseValue, 2, 3)}</p>
+            <p className={valueClass}>License: <span className="font-bold">{maskValue(state.tradeLicenseValue, 2, 3)}</span></p>
           )}
         </ReviewCard>
       </div>

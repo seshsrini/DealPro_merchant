@@ -46,15 +46,10 @@ Deno.serve(async (req) => {
   try {
     const user = await authenticateRequest(req);
     const body = await req.json();
-    const { action, merchantId } = body;
+    const { action } = body;
 
-    // Security: merchant can only manage their own stores
-    if (merchantId !== user.id) {
-      return new Response(JSON.stringify({ error: 'Forbidden: ID mismatch' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 403,
-      });
-    }
+    // Use authenticated user ID — don't trust merchantId from body
+    const merchantId = user.id;
 
     const admin = createClient(supabaseUrl, serviceKey);
 
@@ -79,6 +74,7 @@ Deno.serve(async (req) => {
       if (typeof data.latitude === 'number') allowed.latitude = data.latitude;
       if (typeof data.longitude === 'number') allowed.longitude = data.longitude;
       if (typeof data.store_hrs === 'string') allowed.store_hrs = data.store_hrs;
+      if (typeof data.store_category === 'string') allowed.store_category = data.store_category;
 
       if (Object.keys(allowed).length === 0) {
         return new Response(JSON.stringify({ error: 'No valid fields to update' }), {
@@ -125,6 +121,7 @@ Deno.serve(async (req) => {
         longitude: store.longitude || 0,
         store_hrs: store.store_hrs || null,
         pincode: store.pincode || null,
+        store_category: store.store_category || null,
       };
 
       const { data: inserted, error: insertErr } = await admin
@@ -141,7 +138,44 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: 'Invalid action. Use "update" or "add".' }), {
+    // ── DELETE STORE ──
+    if (action === 'delete') {
+      const { storeId } = body;
+      if (!storeId) {
+        return new Response(JSON.stringify({ error: 'storeId is required' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        });
+      }
+
+      // Expire all active/pending/review campaigns linked to this store before deleting it
+      const now = new Date().toISOString();
+      const { count: expiredCount } = await admin
+        .from('campaigns')
+        .update({ status: 'expired', modified_at: now, last_modified: now })
+        .eq('store_id', storeId)
+        .eq('merchant_id', merchantId)
+        .in('status', ['active', 'review', 'pending'])
+        .select('*', { count: 'exact', head: true });
+
+      console.log(`[manage-stores] Expired ${expiredCount ?? 0} campaign(s) for store ${storeId}`);
+
+      // Soft-delete the store (preserve row for records)
+      const { error: deleteErr } = await admin
+        .from('merchant_stores')
+        .update({ active_status: 'disabled' })
+        .eq('id', storeId)
+        .eq('merchant_id', merchantId);
+
+      if (deleteErr) throw deleteErr;
+
+      return new Response(JSON.stringify({ success: true, expiredCampaigns: expiredCount ?? 0 }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }
+
+    return new Response(JSON.stringify({ error: 'Invalid action. Use "update", "add", or "delete".' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
     });

@@ -105,13 +105,13 @@ Deno.serve(async (req) => {
     });
 
     // Check if the authenticated user is a merchant
-    const { data: userProfile, error: profileError } = await supabase
-      .from('user_profiles')
+    const { data: merchantProfile, error: profileError } = await supabase
+      .from('merchant_profiles')
       .select('role')
       .eq('id', user.id)
       .single();
 
-    if (profileError || userProfile?.role !== 'merchant') {
+    if (profileError || merchantProfile?.role !== 'merchant') {
       console.error(`[campaigns/create-campaign EF] User ${user.id} is not a merchant or profile not found.`);
       return new Response(JSON.stringify({ error: 'Unauthorized: Only merchants can create campaigns.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 });
     }

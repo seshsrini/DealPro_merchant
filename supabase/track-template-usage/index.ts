@@ -3,8 +3,19 @@
  * Increments usage counter when a template is used
  */
 
+// @ts-ignore
+declare const Deno: {
+  env: { get(key: string): string | undefined; };
+  serve: (handler: (req: Request) => Promise<Response> | Response) => void;
+};
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { corsHeaders } from '../_shared/cors.ts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+};
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -25,11 +36,20 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Fetch current times_used before incrementing
+    const { data: current, error: fetchError } = await supabase
+      .from('campaign_templates')
+      .select('times_used')
+      .eq('id', templateId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
     // Increment times_used and update last_used_at
     const { data, error } = await supabase
       .from('campaign_templates')
       .update({
-        times_used: supabase.raw('times_used + 1'),
+        times_used: (current.times_used || 0) + 1,
         last_used_at: new Date().toISOString(),
       })
       .eq('id', templateId)
@@ -46,7 +66,7 @@ Deno.serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('[track-template-usage] Error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),

@@ -52,11 +52,20 @@ serve(async (req) => {
       imageUrl: campaign.image_url,
       store_details: store_details,
       // Flattened address for the UI
-      displayAddress: store_details ? `${store_details.address}, ${store_details.city}` : '',
-      // Flattened store fields for Deal of the Day details page
-      address: store_details?.address || '',
+      displayAddress: store_details
+        ? [store_details.address, store_details.locality, store_details.city, store_details.state, store_details.pincode]
+            .filter(Boolean).join(', ')
+        : '',
+      // Flattened store fields for Deal details page
+      address: store_details
+        ? [store_details.address, store_details.locality, store_details.city, store_details.state, store_details.pincode]
+            .filter(Boolean).join(', ')
+        : '',
+      street: store_details?.address || '',
+      locality: store_details?.locality || '',
       landmark: store_details?.landmark || '',
       storeHrs: store_details?.store_hours || store_details?.storeHrs || store_details?.store_hrs || '',
+      pincode: store_details?.pincode || '',
       city: store_details?.city || campaign.city || '',
       state: store_details?.state || campaign.state || ''
     }

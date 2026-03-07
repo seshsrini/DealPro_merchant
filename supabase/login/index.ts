@@ -67,7 +67,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // userType determines which profile table to query:
-    // 'merchant' → merchant_profiles (merchants + dealAdmins)
+    // 'merchant' → merchant_profiles
     // 'consumer' (default) → user_profiles
     const profileTable = (userType === 'merchant') ? 'merchant_profiles' : 'user_profiles';
 

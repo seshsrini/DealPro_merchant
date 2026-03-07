@@ -4,6 +4,7 @@ import { AppView, Deal } from './types';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { merchantService } from './services/merchantService';
 import { mDashboardService } from './services/mDashboardService';
+import { perfTimer } from './services/perfLogger';
 import { NotificationBadge } from './components/NotificationBadge';
 import { getUpcomingFestivals, getDaysUntilDate, FestivalEvent } from './components/festivalCalendar';
 import {
@@ -144,11 +145,15 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
   useEffect(() => {
     const fetchCampaignUsage = async () => {
+      const timer = perfTimer('load_merchant_dashboard', 'merchant_dashboard');
       try {
+        timer.mark('campaign_usage_call');
         const usage = await merchantSubscriptionService.getCampaignUsage(user.id);
         setCampaignUsage(usage);
+        timer.end('campaign_usage_done');
       } catch (err) {
         console.error("[MerchantDashboard] Error fetching campaign usage:", err);
+        timer.end('error');
       }
     };
 
@@ -160,25 +165,32 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   // Fetch per-deal clicks & redemptions for active deals
   useEffect(() => {
     if (!activeDeals.length || !user?.id) return;
+    const timer = perfTimer('load_campaign_stats', 'merchant_dashboard');
     const ids = activeDeals.map(d => d.campaign_id);
+    timer.mark('clicks_redemptions_call');
     Promise.all([
       mDashboardService.getCampaignSpecificClicks(ids),
       mDashboardService.getCampaignSpecificRedemptions(user.id, ids),
     ]).then(([clicks, redemptions]) => {
       setClickCounts(clicks);
       setRedeemCounts(redemptions);
-    }).catch(() => {});
+      timer.end('stats_rendered');
+    }).catch(() => { timer.end('error'); });
   }, [activeDeals, user?.id]);
 
   // Fetch merchant stores → extract states → compute upcoming festivals
   useEffect(() => {
     if (!user?.id) return;
+    const timer = perfTimer('load_merchant_stores', 'merchant_dashboard');
+    timer.mark('stores_call');
     merchantService.getMerchantStores(user.id).then(stores => {
       const states = [...new Set((stores || []).map(s => s.state).filter(Boolean))];
       setUpcomingEvents(getUpcomingFestivals(states.length > 0 ? states : ['all']));
+      timer.end('festivals_computed');
     }).catch(() => {
       // Fallback: show national festivals only
       setUpcomingEvents(getUpcomingFestivals(['all']));
+      timer.end('error_fallback');
     });
   }, [user?.id]);
 

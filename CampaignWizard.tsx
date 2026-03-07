@@ -60,7 +60,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
 }
 
 // --- Step Definitions ---
-const STEP_LABELS = ['Template', 'Image', 'Heading', 'Offer', 'Description', 'Store', 'Start', 'End', 'Review'];
+const STEP_LABELS = ['Store', 'Template', 'Image', 'Heading', 'Offer', 'Description', 'Start', 'End', 'Review'];
 const TOTAL_STEPS = STEP_LABELS.length;
 
 // --- Component ---
@@ -78,8 +78,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
 }) => {
   const isDark = theme === 'dark';
   const [state, dispatch] = useReducer(wizardReducer, initialState);
-  // In edit mode, skip template step (start at step 1 = Image)
-  const [currentStep, setCurrentStep] = useState(editDealId ? 1 : 0);
+  const [currentStep, setCurrentStep] = useState(0);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('left');
   const [isTransitioning, setIsTransitioning] = useState(false);
 
@@ -191,16 +190,19 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
 
   const handleNext = () => {
     saveDraft();
-    goToStep(currentStep + 1);
+    // In edit mode, skip Template step (step 1) going forward from Store (step 0)
+    const nextStep = (editDealId && currentStep === 0) ? 2 : currentStep + 1;
+    goToStep(nextStep);
   };
 
   const handleBack = () => {
-    const firstStep = editDealId ? 1 : 0; // Skip template step when editing
-    if (currentStep === firstStep) {
+    if (currentStep === 0) {
       setView('merchant_deals');
       return;
     }
-    goToStep(currentStep - 1);
+    // In edit mode, skip Template step (step 1) going back from Image (step 2)
+    const prevStep = (editDealId && currentStep === 2) ? 0 : currentStep - 1;
+    goToStep(prevStep);
   };
 
   const handlePublishSuccess = async () => {
@@ -227,7 +229,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
     dispatch({ type: 'RESET' });
-    setCurrentStep(editDealId ? 1 : 0);
+    setCurrentStep(0);
     setShowDiscardConfirm(false);
   };
 
@@ -252,6 +254,17 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     switch (currentStep) {
       case 0:
         return (
+          <StepStoreSelect
+            stores={merchantStores}
+            selectedStoreId={state.selectedStoreId}
+            onChange={setField('selectedStoreId')}
+            onNext={handleNext}
+            onBack={handleBack}
+            theme={theme}
+          />
+        );
+      case 1:
+        return (
           <StepTemplate
             merchantId={user.id}
             onSelectTemplate={handleTemplateSelect}
@@ -260,7 +273,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             theme={theme}
           />
         );
-      case 1:
+      case 2:
         return (
           <StepImage
             selectedFile={state.selectedImageFile}
@@ -277,7 +290,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             theme={theme}
           />
         );
-      case 2:
+      case 3:
         return (
           <StepHeading
             value={state.dealHeading}
@@ -287,7 +300,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             theme={theme}
           />
         );
-      case 3:
+      case 4:
         return (
           <StepOffer
             value={state.offerValue}
@@ -297,22 +310,11 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             theme={theme}
           />
         );
-      case 4:
+      case 5:
         return (
           <StepDescription
             value={state.description}
             onChange={setField('description')}
-            onNext={handleNext}
-            onBack={handleBack}
-            theme={theme}
-          />
-        );
-      case 5:
-        return (
-          <StepStoreSelect
-            stores={merchantStores}
-            selectedStoreId={state.selectedStoreId}
-            onChange={setField('selectedStoreId')}
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
@@ -369,7 +371,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
         >
           <X className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
         </button>
-        <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+        <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>
           {editDealId ? 'Edit Campaign' : 'New Campaign'}
         </span>
         <button

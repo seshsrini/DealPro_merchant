@@ -8,6 +8,7 @@ interface MerchantStore {
   address: string;
   city: string;
   state?: string;
+  store_category?: string;
   latitude?: number;
   longitude?: number;
 }
@@ -81,6 +82,13 @@ export const StepStoreSelect: React.FC<StepStoreSelectProps> = ({
                     <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                       {store.state}
                     </p>
+                  )}
+                  {store.store_category && (
+                    <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium ${
+                      isDark ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-50 text-amber-700'
+                    }`}>
+                      {store.store_category}
+                    </span>
                   )}
                 </div>
                 {isSelected && (

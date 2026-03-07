@@ -3,7 +3,7 @@
 
 import { MerchantMyCampaigns } from './MerchantMyCampaigns.tsx';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { AppView, Deal, User } from './types';
 import { MerchantProfile } from './merchantProfile';
 import { EditProfile } from './EditProfile';
@@ -17,6 +17,8 @@ import { MerchantCatalogue } from './MerchantCatalogue';
 import { SmartNotifications } from './SmartNotifications'; // Import SmartNotifications
 import { MerchantAIInsights } from './MerchantAIInsights'; // Import AI Insights Dashboard
 import { MerchantStores } from './MerchantStores';
+import { StoreQRPrint } from './components/StoreQRPrint';
+import { merchantService } from './services/merchantService';
 import { AIAssistantChat } from './AIAssistantChat'; // Import AI Assistant Chat
 import { FeatureTour } from './components/FeatureTour'; // Import Feature Tour
 import { CampaignTour } from './components/CampaignTour'; // Import Campaign Tour
@@ -55,6 +57,15 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
   // Product wizard edit state (local to MerchantStack)
   const [editProduct, setEditProduct] = useState<CatalogueItem | null>(null);
 
+  // Store gate: blocks app if merchant has no stores
+  const [storeGate, setStoreGate] = useState<'open' | 'blocked'>('open');
+  useEffect(() => {
+    if (!user.id) return;
+    merchantService.getMerchantStores(user.id)
+      .then(s => { if (s.filter(store => store.active_status !== 'disabled').length === 0) setStoreGate('blocked'); })
+      .catch(() => {}); // fail open — don't block on network error
+  }, [user.id]);
+
   if (user.role !== 'merchant') {
     return null;
   }
@@ -64,10 +75,10 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
 
   if (view === 'profile') currentView = <MerchantProfile user={user} setUser={setUser} setView={setView} theme={theme} />;
   else if (view === 'edit_profile') currentView = <EditProfile user={user} setUser={setUser} setView={setView} theme={theme} />;
-  else if (view === 'merchant_subscriptions') currentView = <MerchantSubscriptions user={user} setView={setView} setUser={setUser} />;
-  else if (view === 'payment_plans') currentView = <PaymentPlans user={user} setView={setView} />;
+  else if (view === 'merchant_subscriptions') currentView = <MerchantSubscriptions user={user} setView={setView} setUser={setUser} theme={theme} />;
+  else if (view === 'payment_plans') currentView = <PaymentPlans user={user} setView={setView} theme={theme} />;
 
-  else if (view === 'bank_verification') currentView = <BankVerification user={user} setUser={setUser} setView={setView} />;
+  else if (view === 'bank_verification') currentView = <BankVerification user={user} setUser={setUser} setView={setView} theme={theme} />;
   else if (view === 'merchant_deals') {
     // Clear the preSelectedTab after using it
     const tabToSelect = preSelectedTab;
@@ -128,7 +139,15 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
       setPreSelectedTab={setPreSelectedTab}
     />
   );
-  else if (view === 'merchant_stores') currentView = <MerchantStores user={user} setView={setView} theme={theme} />;
+  else if (view === 'merchant_stores') currentView = (
+    <MerchantStores
+      user={user}
+      setView={setView}
+      theme={theme}
+      onStoreCountChange={(count) => { if (count === 0) setStoreGate('blocked'); }}
+    />
+  );
+  else if (view === 'refer_consumer') currentView = <StoreQRPrint user={user} setView={setView} theme={theme} />;
   else if (view === 'merchant_analytics') currentView = <MerchantAnalytics user={user} theme={theme} setView={setView} />;
   else if (view === 'merchant_catalogue') currentView = (
     <MerchantCatalogue user={user} theme={theme} setView={setView} setEditProduct={setEditProduct} />
@@ -168,13 +187,27 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
   return (
     <>
       {currentView}
-      {view === 'merchant_dashboard' && (
+      {view === 'merchant_dashboard' && storeGate !== 'blocked' && (
         <FeatureTour userId={user.id} theme={theme} />
       )}
-      {view === 'merchant_deals' && (
+      {view === 'merchant_deals' && storeGate !== 'blocked' && (
         <CampaignTour userId={user.id} theme={theme} />
       )}
-      <AIAssistantChat user={user} theme={theme} setView={setView} />
+      {storeGate !== 'blocked' && <AIAssistantChat user={user} theme={theme} setView={setView} />}
+
+      {/* Store gate: fullscreen block when merchant has no stores */}
+      {storeGate === 'blocked' && (
+        <div className={`fixed inset-0 z-[9999] ${theme === 'dark' ? 'bg-slate-950' : 'bg-white'}`}>
+          <MerchantStores
+            user={user}
+            setView={setView}
+            theme={theme}
+            forceAddMode={true}
+            onFirstStoreAdded={() => setStoreGate('open')}
+            onStoreCountChange={(count) => { if (count > 0) setStoreGate('open'); }}
+          />
+        </div>
+      )}
     </>
   );
 };

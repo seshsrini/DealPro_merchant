@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
 
     // Determine table from auth user metadata (set at registration time)
     const userRole = authenticatedUser.user_metadata?.role || 'consumer';
-    const profileTable = (userRole === 'merchant' || userRole === 'dealadmin')
+    const profileTable = (userRole === 'merchant')
       ? 'merchant_profiles'
       : 'user_profiles';
 

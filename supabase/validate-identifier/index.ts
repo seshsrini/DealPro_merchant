@@ -95,14 +95,14 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Invalid identifier.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
     }
 
-    // Check in the unified user_profiles table
+    // Check in merchant_profiles table (phone-based lookup)
     const { count: userCount, error: userError } = await supabase
-      .from('user_profiles')
+      .from('merchant_profiles')
       .select('id', { count: 'exact', head: true })
-      .or(`username.ilike.${identifier},email.eq.${identifier},phone.eq.${identifier}`);
+      .eq('phone', identifier);
 
     if (userError) {
-      console.error('[validate-identifier EF] Error querying user_profiles:', userError.message);
+      console.error('[validate-identifier EF] Error querying merchant_profiles:', userError.message);
       // Return a 500 status for actual database errors
       return new Response(JSON.stringify({ error: 'Internal Server Error during validation.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

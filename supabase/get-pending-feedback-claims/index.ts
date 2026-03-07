@@ -143,19 +143,17 @@ Deno.serve(async (req) => {
       },
     });
 
-    const { userId } = await req.json();
-    console.log(`[redemption/get-pending-feedback-claims EF] Received userId in body: ${userId}`);
-
-    // 1. Validate Input Data
-    if (!isString(userId) || userId.length < 1) {
-      console.error('[redemption/get-pending-feedback-claims EF] Validation Error: User ID is required.');
-      return new Response(JSON.stringify({ error: 'User ID is required.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+    // Accept userId from body for backwards compatibility, but always prefer the authenticated user's ID
+    let userId = user.id;
+    try {
+      const body = await req.json();
+      if (body.userId && body.userId !== user.id) {
+        console.warn(`[redemption/get-pending-feedback-claims EF] userId mismatch (body: ${body.userId}, JWT: ${user.id}). Using JWT user.`);
+      }
+    } catch {
+      // Empty body is fine — we use JWT user.id
     }
-    // Authorization check: userId must match the authenticated user's ID
-    if (userId !== user.id) {
-      console.error(`[redemption/get-pending-feedback-claims EF] Authorization Error: userId mismatch. Authenticated: ${user.id}, Requested: ${userId}`);
-      return new Response(JSON.stringify({ error: 'Unauthorized: Cannot access another user\'s pending claims.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 });
-    }
+    console.log(`[redemption/get-pending-feedback-claims EF] Using authenticated userId: ${userId}`);
 
     // Fetch all redeemed interactions for the user
     const { data: interactions, error: interactionsError } = await supabase

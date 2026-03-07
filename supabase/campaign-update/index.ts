@@ -139,11 +139,8 @@ Deno.serve(async (req) => {
       .eq('id', user.id)
       .single();
 
-    const isAdmin = profile?.role === 'dealadmin';
-    const isMerchant = profile?.role === 'merchant';
-
-    if (!isAdmin && !isMerchant) {
-      return new Response(JSON.stringify({ error: 'Forbidden: Insufficient Role' }), { status: 403, headers: corsHeaders });
+    if (profile?.role !== 'merchant') {
+      return new Response(JSON.stringify({ error: 'Forbidden: Merchant access required' }), { status: 403, headers: corsHeaders });
     }
 
     // 2. Parse Body
@@ -154,17 +151,15 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'campaign_id is required' }), { status: 400, headers: corsHeaders });
     }
 
-    // 3. Security Check for Merchants
-    if (isMerchant && !isAdmin) {
-      const { data: campaign } = await userClient
-        .from('campaigns')
-        .select('merchant_id')
-        .eq('campaign_id', campaign_id)
-        .single();
+    // 3. Security Check: Merchant can only update their own campaigns
+    const { data: campaign } = await userClient
+      .from('campaigns')
+      .select('merchant_id')
+      .eq('campaign_id', campaign_id)
+      .single();
 
-      if (campaign?.merchant_id !== user.id) {
-        return new Response(JSON.stringify({ error: 'Forbidden: Ownership mismatch' }), { status: 403, headers: corsHeaders });
-      }
+    if (campaign?.merchant_id !== user.id) {
+      return new Response(JSON.stringify({ error: 'Forbidden: Ownership mismatch' }), { status: 403, headers: corsHeaders });
     }
 
     // 4. Content Moderation — only check text fields being updated

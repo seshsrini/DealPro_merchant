@@ -62,26 +62,26 @@ Deno.serve(async (req) => {
     // 4. Create Admin Client to verify role (bypasses RLS to see if profile exists)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: userProfile, error: profileError } = await supabaseAdmin
-      .from('user_profiles')
+    const { data: merchantProfile, error: profileError } = await supabaseAdmin
+      .from('merchant_profiles')
       .select('role')
       .eq('id', user.id)
-      .maybeSingle(); // This fix prevents the "Coerce to JSON" error
+      .maybeSingle();
 
     if (profileError) throw new Error(`DB Error: ${profileError.message}`);
-    
-    if (!userProfile) {
-      console.error(`[get-stores] Profile row missing in user_profiles for UUID: ${user.id}`);
-      return new Response(JSON.stringify({ error: 'Merchant profile row does not exist.' }), { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: 404 
+
+    if (!merchantProfile) {
+      console.error(`[get-stores] Profile row missing in merchant_profiles for UUID: ${user.id}`);
+      return new Response(JSON.stringify({ error: 'Merchant profile row does not exist.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 404
       });
     }
 
-    if (userProfile.role !== 'merchant') {
-      return new Response(JSON.stringify({ error: 'Unauthorized: Not a merchant account.' }), { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: 403 
+    if (merchantProfile.role !== 'merchant') {
+      return new Response(JSON.stringify({ error: 'Unauthorized: Not a merchant account.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 403
       });
     }
 

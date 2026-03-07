@@ -2,8 +2,15 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MapPin, Loader2, Navigation, Clock, CheckCircle2 } from 'lucide-react';
 import { StoreLocation } from '../../types';
 import { locationsearchService } from '../../services/locationsearchService';
+import { addCampaignService } from '../../services/addCampaignService';
 import { Geolocation } from '@capacitor/geolocation';
 import { floatIn } from './floatIn';
+
+const FALLBACK_CATEGORIES = [
+  'Grocery', 'Restaurant', 'Electronics', 'Fashion', 'Beauty',
+  'Health', 'Books', 'Home', 'Automotive', 'Tires',
+  'Sports', 'Jewellery', 'Toys', 'Furniture', 'General',
+];
 
 const SHIFT1_OPTIONS = [
   '5:00 AM', '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM'
@@ -19,7 +26,7 @@ interface StepStoreAddressProps {
   brandName: string;
   onChange: (field: keyof StoreLocation, value: any) => void;
   onNext: () => void;
-  onBack: () => void;
+  onBack?: () => void;
   theme: 'light' | 'dark';
 }
 
@@ -30,10 +37,17 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
   const [localityResults, setLocalityResults] = useState<any[]>([]);
   const [showLocalityDropdown, setShowLocalityDropdown] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [storeCategories, setStoreCategories] = useState<string[]>(FALLBACK_CATEGORIES);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
     return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    addCampaignService.getStoreCategories()
+      .then((cats) => { if (cats.length > 0) setStoreCategories(cats); })
+      .catch(() => { /* keep fallback */ });
   }, []);
 
   // Auto-populate store name with brand name if empty
@@ -221,6 +235,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
 
   const isValid = !!(
     store.store_name?.trim() &&
+    store.store_category &&
     store.street?.trim() &&
     store.pincode?.length === 6 &&
     store.city &&
@@ -256,6 +271,21 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
           />
         </div>
 
+        {/* Store Category */}
+        <div>
+          <label className={labelClass}>Store Category *</label>
+          <select
+            value={store.store_category}
+            onChange={(e) => onChange('store_category', e.target.value)}
+            className={`${inputClass} ${!store.store_category ? (isDark ? 'text-slate-500' : 'text-slate-400') : ''}`}
+          >
+            <option value="">Select category</option>
+            {storeCategories.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Street */}
         <div>
           <label className={labelClass}>Street Address *</label>
@@ -286,6 +316,9 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
               <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
             )}
           </div>
+          {store.pincode && store.pincode.length > 0 && store.pincode.length < 6 && (
+            <p className="text-xs text-amber-500 mt-1">Enter all 6 digits to continue</p>
+          )}
         </div>
 
         {/* City & State (auto-filled) */}
@@ -407,18 +440,20 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
       </div>
 
       <div style={floatIn(300, visible)} className="mt-auto pb-8 pt-4 flex gap-3">
-        <button
-          onClick={onBack}
-          className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
-            isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
-          }`}
-        >
-          Back
-        </button>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
+              isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            Back
+          </button>
+        )}
         <button
           onClick={onNext}
           disabled={!isValid}
-          className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex-1 h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Continue
         </button>

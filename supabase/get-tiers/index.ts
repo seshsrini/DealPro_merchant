@@ -28,13 +28,13 @@ Deno.serve(async (req) => {
     if (authError || !user) throw new Error('Unauthorized: Invalid token');
 
     // 2. Role Check (Authorization)
-    const { data: userProfile, error: profileError } = await supabaseClient
-      .from('user_profiles')
+    const { data: merchantProfile, error: profileError } = await supabaseClient
+      .from('merchant_profiles')
       .select('role')
       .eq('id', user.id)
       .single();
 
-    if (profileError || userProfile?.role !== 'merchant') {
+    if (profileError || merchantProfile?.role !== 'merchant') {
       console.error(`[get-tiers] Role check failed for user ${user.id}`);
       return new Response(
         JSON.stringify({ error: 'Forbidden: Merchant access required' }), 

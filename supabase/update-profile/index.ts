@@ -220,7 +220,7 @@ Deno.serve(async (req) => {
     }
 
     // Perform update on the correct profile table based on role
-    const profileTable = (role === 'merchant' || role === 'dealadmin')
+    const profileTable = (role === 'merchant')
       ? 'merchant_profiles'
       : 'user_profiles';
     if (Object.keys(profileUpdatePayload).length > 0) {

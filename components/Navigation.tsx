@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Ticket, Languages, ChevronDown, Search, CheckSquare, TrendingUp, Image, Bell, LayoutGrid } from 'lucide-react';
+import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Ticket, Languages, ChevronDown, Search, Bell, LayoutGrid } from 'lucide-react';
 import { AppView, Locale, User as UserType } from '../types';
 import { useTranslation } from '../contexts/LanguageContext';
 
@@ -203,47 +203,3 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
   );
 };
 
-export const DealAdminBottomNav: React.FC<{ currentView: AppView; setView: (view: AppView) => void; theme: 'light' | 'dark' }> = ({ currentView, setView, theme }) => {
-  const isDark = theme === 'dark';
-  const tabs = [
-    { id: 'dealadmin_review_deals', label: 'Review', icon: CheckSquare },
-    { id: 'dealadmin_dashboard', label: 'Console', icon: LayoutDashboard },
-    { id: 'dealadmin_banners', label: 'Banners', icon: Image },
-    { id: 'dealadmin_analytics', label: 'Analytics', icon: TrendingUp },
-    { id: 'profile', label: 'Admin', icon: User },
-  ];
-
-  return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md pointer-events-none">
-       <nav className={`pointer-events-auto rounded-2xl px-1.5 py-1.5 flex items-center border ${
-         isDark
-           ? 'bg-slate-900 border-slate-800 shadow-lg shadow-black/30'
-           : 'bg-white border-slate-200 shadow-lg shadow-slate-200/60'
-       }`}>
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = currentView === tab.id;
-
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setView(tab.id as AppView)}
-                className={`flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl py-2 flex-1 ${
-                  isActive
-                    ? isDark
-                      ? 'text-white bg-slate-800'
-                      : 'text-slate-900 bg-slate-100'
-                    : isDark
-                      ? 'text-slate-500'
-                      : 'text-slate-400'
-                }`}
-              >
-                <Icon className="w-[18px] h-[18px]" />
-                <span className={`text-[8px] leading-tight ${isActive ? 'font-semibold' : 'font-medium'}`}>{tab.label}</span>
-              </button>
-            );
-          })}
-       </nav>
-    </div>
-  );
-};

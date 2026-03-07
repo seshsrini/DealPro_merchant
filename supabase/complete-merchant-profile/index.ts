@@ -51,12 +51,14 @@ Deno.serve(async (req: Request) => {
     } = body;
 
     // Validate required fields
-    if (!fullName || !storeName || !businessType) {
-      return new Response(JSON.stringify({ error: 'Missing required fields: fullName, storeName, businessType' }), {
+    if (!fullName || !storeName) {
+      return new Response(JSON.stringify({ error: 'Missing required fields: fullName, storeName' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,
       });
     }
+    // Default to 'none' if merchant has no formal registration
+    const effectiveBusinessType = businessType || 'none';
 
     if (!termsAccepted || !privacyAccepted) {
       return new Response(JSON.stringify({ error: 'Terms and Privacy Policy must be accepted' }), {
@@ -81,12 +83,12 @@ Deno.serve(async (req: Request) => {
         full_name: fullName,
         store_name: storeName,
         category: category || 'General',
-        business_type: businessType,
-        gstin: businessType === 'gstin' ? gstin : null,
-        pan: businessType === 'gstin' ? pan : null,
-        udyam_no: businessType === 'udyam' ? (udyamNo ? udyamNo.toUpperCase() : null) : null,
-        fssai_no: businessType === 'fssai' ? fssaiNo : null,
-        trade_license_no: businessType === 'trade_license' ? (tradeLicenseNo ? tradeLicenseNo.toUpperCase() : null) : null,
+        business_type: effectiveBusinessType,
+        gstin: effectiveBusinessType === 'gstin' ? gstin : null,
+        pan: effectiveBusinessType === 'gstin' ? pan : null,
+        udyam_no: effectiveBusinessType === 'udyam' ? (udyamNo ? udyamNo.toUpperCase() : null) : null,
+        fssai_no: effectiveBusinessType === 'fssai' ? fssaiNo : null,
+        trade_license_no: effectiveBusinessType === 'trade_license' ? (tradeLicenseNo ? tradeLicenseNo.toUpperCase() : null) : null,
         terms_accepted: true,
         privacy_accepted: true,
       })
@@ -102,19 +104,26 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Remove any existing stores for this merchant (handles re-onboarding)
+    await adminClient
+      .from('merchant_stores')
+      .delete()
+      .eq('merchant_id', user.id);
+
     // Insert stores into merchant_stores
     const storeInserts = stores.map((s: any) => ({
-      merchant_id: user.id,
-      store_name: s.store_name || storeName,
-      address: s.address,
-      landmark: s.landmark || null,
-      locality: s.locality || null,
-      city: s.city,
-      state: s.state,
-      latitude: s.latitude || 0,
-      longitude: s.longitude || 0,
-      store_hrs: s.store_hrs,
-      pincode: s.pincode,
+      merchant_id:    user.id,
+      store_name:     s.store_name || storeName,
+      address:        s.address,
+      landmark:       s.landmark       || null,
+      locality:       s.locality       || null,
+      city:           s.city,
+      state:          s.state,
+      store_category: s.store_category || null,
+      latitude:       s.latitude       || 0,
+      longitude:      s.longitude      || 0,
+      store_hrs:      s.store_hrs,
+      pincode:        s.pincode,
     }));
 
     const { error: storeError } = await adminClient

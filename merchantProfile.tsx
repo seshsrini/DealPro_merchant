@@ -14,6 +14,7 @@ import {
   Zap,
   PlayCircle,
   MapPin,
+  QrCode,
 } from 'lucide-react';
 import { AppView } from './types';
 import { useTranslation } from './contexts/LanguageContext';
@@ -115,6 +116,20 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
               <MapPin className="w-5 h-5 text-teal-500" />
             </div>
             <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>My Stores</span>
+          </div>
+          <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+        </button>
+
+        {/* Refer Consumers (QR Code) */}
+        <button onClick={() => setView('refer_consumer')} className={`w-full p-4 rounded-xl flex items-center justify-between active:scale-[0.98] transition-all border ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+          <div className="flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-orange-500/10' : 'bg-orange-50'}`}>
+              <QrCode className="w-5 h-5 text-orange-500" />
+            </div>
+            <div>
+              <span className={`block font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>Refer Consumers</span>
+              <span className={`block text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Print QR code for your store</span>
+            </div>
           </div>
           <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
         </button>

@@ -160,7 +160,7 @@ Deno.serve(async (req) => {
     // Fetch all redeemed interactions for the user
     const { data: interactions, error: interactionsError } = await supabase
       .from('campaign_interactions')
-      .select('*, campaigns (deal_heading, offer_value, image_url, long_description, localized_heading, localized_offer, end_date), user_profiles:merchant_id (store_name, localized_shop_name)') 
+      .select('*, campaigns (deal_heading, offer_value, image_url, long_description, localized_heading, localized_offer, end_date), user_profiles:merchant_id (store_name, localized_shop_name)')
       .eq('consumer_id', userId)
       .eq('is_redeemed', true)
       .order('interaction_id', { ascending: false });

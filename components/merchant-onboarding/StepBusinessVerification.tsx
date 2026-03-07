@@ -16,7 +16,7 @@ const isUdyamValid = (v: string) => UDYAM_REGEX.test(v.toUpperCase());
 const isFssaiValid = (v: string) => FSSAI_REGEX.test(v);
 const isTradeLicenseValid = (v: string) => TRADE_LICENSE_REGEX.test(v.toUpperCase());
 
-type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license';
+type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
 
 interface StepBusinessVerificationProps {
   businessType: BusinessType;
@@ -28,7 +28,7 @@ interface StepBusinessVerificationProps {
   onChangeType: (type: BusinessType) => void;
   onChangeField: (field: string, value: string) => void;
   onNext: () => void;
-  onBack: () => void;
+  onBack?: () => void;
   theme: 'light' | 'dark';
 }
 
@@ -138,6 +138,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   // Validation
   const isValid = (() => {
     if (!businessType) return false;
+    if (businessType === 'none') return true;
     if (businessType === 'gstin') {
       return isGstValid(gstinValue) && gstinTaken === false && isPanValid(panValue) && panTaken === false;
     }
@@ -152,6 +153,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
     { key: 'udyam' as BusinessType, label: 'Udyam (MSME)', desc: 'Micro/Small/Medium enterprise' },
     { key: 'fssai' as BusinessType, label: 'FSSAI', desc: 'Food license' },
     { key: 'trade_license' as BusinessType, label: 'Trade License', desc: 'Shop & establishment' },
+    { key: 'none' as BusinessType, label: 'None / Unregistered', desc: 'No formal registration yet' },
   ];
 
   return (
@@ -263,18 +265,20 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
       </div>
 
       <div style={floatIn(400, visible)} className="mt-auto pb-8 pt-4 flex gap-3">
-        <button
-          onClick={onBack}
-          className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
-            isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
-          }`}
-        >
-          Back
-        </button>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
+              isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            Back
+          </button>
+        )}
         <button
           onClick={onNext}
           disabled={!isValid}
-          className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex-1 h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Continue
         </button>

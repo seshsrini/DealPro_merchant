@@ -13,7 +13,7 @@ interface StepCategoryProps {
   value: string;
   onChange: (value: string) => void;
   onNext: () => void;
-  onBack: () => void;
+  onBack?: () => void;
   theme: 'light' | 'dark';
 }
 
@@ -72,18 +72,20 @@ export const StepCategory: React.FC<StepCategoryProps> = ({ value, onChange, onN
       )}
 
       <div style={floatIn(400, visible)} className="mt-auto pb-8 flex gap-3">
-        <button
-          onClick={onBack}
-          className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
-            isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
-          }`}
-        >
-          Back
-        </button>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
+              isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            Back
+          </button>
+        )}
         <button
           onClick={onNext}
           disabled={!value}
-          className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex-1 h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Continue
         </button>

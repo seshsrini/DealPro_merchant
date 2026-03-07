@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg version="1.1" viewBox="0 0 1024 1024" width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
 <path transform="translate(485,215)" d="m0 0h50l16 3 13 4 15 8 16 13 9 10 7 11 8 16 6 19 2 12h110l5 4 2 5v18l12 2 4 2 2 6 3 52 3 36 2 29 3 49 3 46 3 37 4 65 1 8 4 73v21l-6 12-7 6-8 3h-508l-9-4-8-7-4-7-1-6 1-32 2-43 10-165 3-49 3-63 3-41 1-23 4-5 14-2 1-21 3-5 3-1h107l2-11 5-17 7-16 6-10 7-7 7-8 8-7 15-9 13-6 14-4z" fill="#FACA1B"/>
-<path transform="translate(511,234)" d="m0 0 8 1 16 8 9 7v2l4 2 7 8 11 21 6 16 2 7v5h-126l1-9 5-16 11-21 8-10 10-8 14-8 11-4z" fill="#090908"/>
+<path transform="translate(511,234)" d="m0 0 8 1 16 8 9 7v2l4 2 7 8 11 21 6 16 2 7v5h-126l1-9 5-16 11-21 8-10 10-8 14-8 11-4z" fill="#FFFFFF"/>
 <path transform="translate(408,318)" d="m0 0h170l3 17 1 6-4 1-172-1v-11z" fill="#DF8F08"/>
 <path transform="translate(327,456)" d="m0 0h19l9 4 7 6 4 8 1 4v23l-4 11-6 8-8 5-8 2h-8l-9-2-9-6-6-7-4-12v-18l4-12 9-10z" fill="#090908"/>
 <path transform="translate(401,528)" d="m0 0h12l9 3 8 8 4 9 1 4v19l-4 13-6 8-6 5-8 3h-12l-9-3-7-7-4-9-1-6v-17l3-12 6-10 6-5z" fill="#090908"/>
