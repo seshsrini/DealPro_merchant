@@ -71,6 +71,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { merchantId } = await req.json();
+    console.log('[GetAiInsightsDashboard] Generating dashboard insights for merchant:', merchantId);
 
     if (!merchantId) {
       return new Response(

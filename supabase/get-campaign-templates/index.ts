@@ -37,6 +37,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { merchantId } = await req.json();
+    console.log('[GetCampaignTemplates] Fetching templates for merchant:', merchantId);
 
     if (!merchantId) {
       return new Response(
@@ -54,7 +55,8 @@ Deno.serve(async (req) => {
       .order('template_type', { ascending: false }) // System first
       .order('success_rate', { ascending: false }); // Then by success rate
 
-    if (error) throw error;
+    if (error) { console.error('[GetCampaignTemplates] Query failed:', error.message); throw error; }
+    console.log('[GetCampaignTemplates] Returned', templates?.length ?? 0, 'templates');
 
     // Transform to camelCase
     const formattedTemplates: CampaignTemplate[] = (templates || []).map((t: any) => ({

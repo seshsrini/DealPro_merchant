@@ -17,6 +17,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { templateId, merchantId } = await req.json();
+    console.log('[DeleteCampaignTemplate] Deleting template:', templateId, 'for merchant:', merchantId);
 
     if (!templateId || !merchantId) {
       return new Response(
@@ -61,7 +62,8 @@ Deno.serve(async (req) => {
       .delete()
       .eq('id', templateId);
 
-    if (deleteError) throw deleteError;
+    if (deleteError) { console.error('[DeleteCampaignTemplate] Delete failed:', deleteError.message); throw deleteError; }
+    console.log('[DeleteCampaignTemplate] Successfully deleted template:', templateId);
 
     return new Response(
       JSON.stringify({

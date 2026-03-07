@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
     // Safe JSON parsing
     const body = await req.json().catch(() => ({}));
     const { campaignIds, merchantId } = body;
+    console.log('[GetCampaignRedemptions] Fetching for merchant:', merchantId, 'campaigns:', campaignIds?.length ?? 0);
 
     // 5. VALIDATION
     if (!isArray(campaignIds) || !campaignIds.every(isString)) {
@@ -93,7 +94,7 @@ Deno.serve(async (req) => {
       .eq('is_redeemed', true)
       .in('campaign_id', campaignIds);
 
-    if (logError) throw logError;
+    if (logError) { console.error('[GetCampaignRedemptions] Query failed:', logError.message); throw logError; }
 
     // 7. PROCESSING
     const counts: Record<string, number> = {};

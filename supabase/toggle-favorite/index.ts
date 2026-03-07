@@ -141,6 +141,7 @@ Deno.serve(async (req) => {
     });
 
     const { userId, campaignId, merchantId } = await req.json();
+    console.log('[ToggleFavorite] User:', userId, 'campaign:', campaignId);
 
     // 1. Validate Input Data
     if (!isString(userId as string) || (userId as string).length < 1) {

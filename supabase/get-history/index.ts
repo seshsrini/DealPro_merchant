@@ -23,6 +23,7 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return new Response('Unauthorized', { status: 401, headers: corsHeaders });
 
+    console.log('[GetHistory] Fetching redemption history for user:', user.id);
     // 2. The Corrected Query
     // We move localized_shop_name into the campaigns join
     const { data, error } = await supabase
@@ -46,7 +47,8 @@ Deno.serve(async (req) => {
       .eq('is_redeemed', true)
       .order('redeemed_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) { console.error('[GetHistory] Query failed:', error.message); throw error; }
+    console.log('[GetHistory] Returned', data?.length ?? 0, 'redemptions');
 
     // 3. Transformation
     const history = (data || []).map((item: any) => ({

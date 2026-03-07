@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
     });
 
     const { interactionId, rating, comments = "" } = await req.json();
+    console.log('[UpdateFeedback] Rating:', rating, 'for interaction:', interactionId);
 
     // INPUT VALIDATION
     if (!isString(interactionId) || !isPositiveNumber(rating) || rating < 1 || rating > 5) {

@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { merchantId } = await req.json();
+    console.log('[GetRevenueForecast] Generating forecast for merchant:', merchantId);
 
     if (!merchantId) {
       return new Response(
@@ -76,7 +77,8 @@ Deno.serve(async (req) => {
       .eq('merchant_id', merchantId)
       .order('launch_date', { ascending: false });
 
-    if (campaignsError) throw campaignsError;
+    if (campaignsError) { console.error('[GetRevenueForecast] Campaign query failed:', campaignsError.message); throw campaignsError; }
+    console.log('[GetRevenueForecast] Analyzing', campaigns?.length ?? 0, 'campaigns');
 
     if (!campaigns || campaigns.length === 0) {
       return new Response(

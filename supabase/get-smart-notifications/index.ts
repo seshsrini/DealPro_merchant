@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { merchantId } = await req.json();
+    console.log('[GetSmartNotifications] Generating for merchant:', merchantId);
 
     if (!merchantId) {
       return new Response(
@@ -278,6 +279,7 @@ Deno.serve(async (req) => {
       .sort((a, b) => b.priority - a.priority)
       .slice(0, 5);
 
+    console.log('[GetSmartNotifications] Generated', sortedNotifications.length, 'notifications');
     return new Response(
       JSON.stringify({ notifications: sortedNotifications }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -44,6 +44,7 @@ Deno.serve(async (req) => {
 
   try {
     const { refereeId, refereePhoneNumber } = await req.json();
+    console.log('[OnSubscriptionActive] Processing referral for:', refereePhoneNumber);
 
     // 4. VALIDATION
     if (!isString(refereeId) || !isValidPhoneNumber(refereePhoneNumber)) {

@@ -17,6 +17,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { merchantId, templateName, templateDescription, campaignData } = await req.json();
+    console.log('[SaveCampaignTemplate] Saving template:', templateName, 'for merchant:', merchantId);
 
     if (!merchantId || !templateName || !campaignData) {
       return new Response(
@@ -68,7 +69,8 @@ Deno.serve(async (req) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) { console.error('[SaveCampaignTemplate] Insert failed:', error.message); throw error; }
+    console.log('[SaveCampaignTemplate] Saved template:', template.id);
 
     return new Response(
       JSON.stringify({

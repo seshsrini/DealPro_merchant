@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { merchantId } = await req.json();
+    console.log('[GetProductAnalytics] Fetching analytics for merchant:', merchantId);
 
     if (!merchantId) {
       return new Response(
@@ -44,7 +45,8 @@ Deno.serve(async (req) => {
       .eq('merchant_id', merchantId)
       .eq('is_active', true);
 
-    if (productsError) throw productsError;
+    if (productsError) { console.error('[GetProductAnalytics] Query failed:', productsError.message); throw productsError; }
+    console.log('[GetProductAnalytics] Found', products?.length ?? 0, 'products');
 
     // Calculate performance metrics (pseudo-random based on product ID)
     const productPerformances: ProductPerformance[] = (products || []).map(product => {

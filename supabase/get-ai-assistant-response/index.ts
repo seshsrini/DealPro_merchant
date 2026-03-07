@@ -28,6 +28,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { merchantId, query } = await req.json();
+    console.log('[GetAiAssistant] Query from merchant:', merchantId, '| query:', query?.substring(0, 80));
 
     if (!merchantId || !query) {
       return new Response(

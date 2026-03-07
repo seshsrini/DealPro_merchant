@@ -34,6 +34,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { merchantId } = await req.json();
+    console.log('[GetPerformanceScore] Calculating score for merchant:', merchantId);
 
     if (!merchantId) {
       return new Response(
@@ -344,6 +345,7 @@ Deno.serve(async (req) => {
     quickWins.sort((a, b) => b.points - a.points);
     const topQuickWins = quickWins.slice(0, 3);
 
+    console.log('[GetPerformanceScore] Score:', totalScore, 'Grade:', grade);
     const result: PerformanceScore = {
       totalScore,
       grade,

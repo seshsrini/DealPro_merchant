@@ -55,6 +55,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const { query, lang = 'en' } = body;
+    console.log('[SearchLocalities] Searching for:', query, 'lang:', lang);
 
     // 4. VALIDATION
     if (!isString(query) || query.trim().length < 2) {
@@ -82,7 +83,8 @@ Deno.serve(async (req) => {
       .order('pincode', { ascending: true })
       .limit(20);
     
-    if (dbError) throw dbError;
+    if (dbError) { console.error('[SearchLocalities] Query failed:', dbError.message); throw dbError; }
+    console.log('[SearchLocalities] Found', data?.length ?? 0, 'results');
 
     // 6. RESPONSE MAPPING
     // Injects a 'display_name' based on the requested language or English fallback

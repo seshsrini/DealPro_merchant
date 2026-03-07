@@ -36,6 +36,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { merchantId, campaignData } = await req.json();
+    console.log('[OptimizeCampaign] Optimizing campaign for merchant:', merchantId);
 
     if (!merchantId) {
       return new Response(

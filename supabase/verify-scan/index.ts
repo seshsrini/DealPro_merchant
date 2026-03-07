@@ -62,6 +62,7 @@ Deno.serve(async (req) => {
     });
 
     const { claimData, merchantId } = await req.json();
+    console.log('[VerifyScan] Merchant:', merchantId, 'scanning claim');
 
     // 4. AUTHORIZATION: Ensure the merchant is who they say they are
     if (!isString(merchantId) || merchantId !== user.id) {

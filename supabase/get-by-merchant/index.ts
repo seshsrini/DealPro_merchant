@@ -31,6 +31,8 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    console.log('[GetByMerchant] Fetching campaigns for merchant:', user.id);
+
     // 3. The Query
     // We filter by merchant_id to ensure the merchant only sees their own campaigns
     const { data, error: dbError } = await supabase
@@ -46,7 +48,8 @@ Deno.serve(async (req: Request) => {
       .eq('merchant_id', user.id) // SECURITY: Only fetch rows belonging to this user
       .order('created_at', { ascending: false });
 
-    if (dbError) throw dbError;
+    if (dbError) { console.error('[GetByMerchant] Query failed:', dbError.message); throw dbError; }
+    console.log('[GetByMerchant] Returned', data?.length ?? 0, 'campaigns');
 
     // 4. Success Response
     return new Response(JSON.stringify(data || []), {

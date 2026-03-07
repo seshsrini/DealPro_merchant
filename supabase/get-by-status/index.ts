@@ -56,6 +56,7 @@ Deno.serve(async (req) => {
 
     // 3. Parse Status from Body
     const { status } = await req.json().catch(() => ({ status: 'review' }));
+    console.log('[GetByStatus] Fetching campaigns with status:', status);
 
     // 4. Fetch Campaigns with store details
     const { data, error: dbError } = await supabase
@@ -71,7 +72,7 @@ Deno.serve(async (req) => {
       .eq('status', status)
       .order('created_at', { ascending: false });
 
-    if (dbError) throw dbError;
+    if (dbError) { console.error('[GetByStatus] Query failed:', dbError.message); throw dbError; }
 
     // 5. MAP THE DATA (Crucial for Image Display)
     // We provide both image_url (db name) and url (UI component name)
@@ -85,6 +86,7 @@ Deno.serve(async (req) => {
       city: item.merchant_stores?.city || ''
     }));
 
+    console.log('[GetByStatus] Returned', campaigns.length, 'campaigns for status:', status);
     return new Response(JSON.stringify(campaigns), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,

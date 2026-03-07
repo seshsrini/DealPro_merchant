@@ -65,6 +65,7 @@ Deno.serve(async (req) => {
     });
 
     const { id, role, data } = await req.json();
+    console.log('[UpdateFavorite] Updating profile for:', id, 'role:', role);
 
     // 4. AUTHORIZATION CHECK
     if (!isString(id) || id !== user.id) {

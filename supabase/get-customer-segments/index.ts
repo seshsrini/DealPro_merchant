@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { merchantId } = await req.json();
+    console.log('[GetCustomerSegments] Analyzing segments for merchant:', merchantId);
 
     if (!merchantId) {
       return new Response(
@@ -287,6 +288,7 @@ Deno.serve(async (req) => {
       recommendations.push(`Weekend promotions can convert ${mediumValueCount} medium-value customers to high-value`);
     }
 
+    console.log('[GetCustomerSegments] Segmented', totalCustomers, 'customers into', segments.length, 'segments');
     const result: SegmentationInsights = {
       totalCustomers,
       segments,

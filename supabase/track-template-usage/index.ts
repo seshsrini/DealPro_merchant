@@ -28,6 +28,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { templateId } = await req.json();
+    console.log('[TrackTemplateUsage] Tracking usage for template:', templateId);
 
     if (!templateId) {
       return new Response(

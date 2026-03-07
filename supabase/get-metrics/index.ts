@@ -58,6 +58,7 @@ Deno.serve(async (req) => {
 
     // 3. Parse Body
     const { merchantId, activeRoiTab } = await req.json();
+    console.log('[GetMetrics] Fetching metrics for merchant:', merchantId, 'tab:', activeRoiTab);
 
     // 4. Validation & Authorization
     if (!isString(merchantId) || merchantId !== user.id) {
@@ -126,6 +127,7 @@ Deno.serve(async (req) => {
     if (viewsError) throw viewsError;
     const totalReach = viewsCount || 0;
 
+    console.log('[GetMetrics] Campaigns:', campaignCount, 'Redemptions:', totalRedemptions, 'Clicks:', totalClicks, 'Reach:', totalReach);
     const result = {
       totalCampaigns: campaignCount || 0,
       totalRedemptions: totalRedemptions,

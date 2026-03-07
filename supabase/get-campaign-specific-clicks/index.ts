@@ -28,6 +28,7 @@ Deno.serve(async (req) => {
 
     // 4. Parse Body (expecting campaignIds)
     const { campaignIds } = await req.json();
+    console.log('[GetCampaignClicks] Fetching clicks for', campaignIds?.length ?? 0, 'campaigns');
 
     if (!Array.isArray(campaignIds)) {
        return new Response(JSON.stringify({ error: 'campaignIds must be an array' }), {
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
       .eq('event_type', 'click')
       .in('campaign_id', campaignIds);
 
-    if (dbError) throw dbError;
+    if (dbError) { console.error('[GetCampaignClicks] Query failed:', dbError.message); throw dbError; }
 
     // 6. Aggregate Counts
     const counts: Record<string, number> = {};

@@ -32,6 +32,7 @@ Deno.serve(async (req) => {
     
     // Parse search parameters
     const { latitude, longitude, radius, cityFilter } = await req.json();
+    console.log('[GetAll] Fetching campaigns — lat:', latitude, 'lng:', longitude, 'radius:', radius, 'city:', cityFilter);
 
     let data;
     let fetchError;
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
       fetchError = tableError;
     }
 
-    if (fetchError) throw fetchError;
+    if (fetchError) { console.error('[GetAll] Query failed:', fetchError.message); throw fetchError; }
 
     // 2.5. Fetch average ratings for all merchants
     const merchantIds = [...new Set((data || []).map((d: any) => d.merchant_id))];
@@ -144,13 +145,14 @@ Deno.serve(async (req) => {
       };
     });
 
+    console.log('[GetAll] Returned', deals.length, 'deals');
     return new Response(JSON.stringify(deals), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
 
   } catch (error: any) {
-    console.error('[get-all-campaigns] Error:', error.message);
+    console.error('[GetAll] Error:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
