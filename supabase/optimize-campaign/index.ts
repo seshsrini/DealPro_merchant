@@ -5,7 +5,11 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { corsHeaders } from '../_shared/cors.ts';
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+};
 
 interface OptimizationSuggestion {
   field: 'discount' | 'launch_date' | 'duration' | 'title' | 'category' | 'overall';
@@ -53,62 +57,27 @@ Deno.serve(async (req) => {
     if (campaignData.discount !== undefined && campaignData.discount !== null) {
       const discount = parseFloat(campaignData.discount);
 
-      if (discount < 5) {
-        score -= 30;
-        suggestions.push({
-          field: 'discount',
-          severity: 'error',
-          message: 'Discount too low',
-          suggestion: 'Discounts below 5% rarely attract customers. Try 15-25% for optimal engagement.',
-          impact: 'Low engagement expected',
-          currentValue: discount,
-          recommendedValue: '15-25%',
-        });
-        quickFixes.push('Increase discount to 15-25%');
-      } else if (discount < 10) {
-        score -= 20;
-        suggestions.push({
-          field: 'discount',
-          severity: 'warning',
-          message: 'Discount below optimal range',
-          suggestion: 'Consider 15-25% discount for 3.2x better engagement while maintaining healthy margins.',
-          impact: 'Moderate engagement',
-          currentValue: discount,
-          recommendedValue: '15-25%',
-        });
-        quickFixes.push('Increase discount to 15-25%');
-      } else if (discount >= 10 && discount <= 30) {
-        suggestions.push({
-          field: 'discount',
-          severity: 'success',
-          message: 'Optimal discount range',
-          suggestion: `${discount}% is in the sweet spot for maximum engagement and profitability.`,
-          impact: 'High engagement expected',
-          currentValue: discount,
-        });
-      } else if (discount > 30 && discount <= 50) {
-        score -= 15;
-        suggestions.push({
-          field: 'discount',
-          severity: 'warning',
-          message: 'Discount higher than necessary',
-          suggestion: 'While attractive, discounts above 30% may reduce margins without significant engagement gains. Consider 20-25%.',
-          impact: 'High engagement but lower margins',
-          currentValue: discount,
-          recommendedValue: '20-25%',
-        });
-      } else if (discount > 50) {
+      if (discount > 50) {
         score -= 25;
         suggestions.push({
           field: 'discount',
           severity: 'error',
           message: 'Discount too high',
-          suggestion: 'Discounts above 50% can hurt brand perception and profitability. Max recommended: 30%.',
+          suggestion: 'Discounts above 50% can hurt brand perception and profitability. Max recommended: 50%.',
           impact: 'Margin concerns',
           currentValue: discount,
-          recommendedValue: '15-30%',
+          recommendedValue: '10-50%',
         });
-        quickFixes.push('Reduce discount to 15-30%');
+        quickFixes.push('Reduce discount to 50% or below');
+      } else {
+        suggestions.push({
+          field: 'discount',
+          severity: 'success',
+          message: 'Good discount',
+          suggestion: `${discount}% discount looks good for engagement and profitability.`,
+          impact: 'High engagement expected',
+          currentValue: discount,
+        });
       }
     }
 
@@ -116,9 +85,6 @@ Deno.serve(async (req) => {
     if (campaignData.launch_date) {
       const launchDate = new Date(campaignData.launch_date);
       const now = new Date();
-      const dayOfWeek = launchDate.getDay(); // 0 = Sunday, 5 = Friday
-      const hour = launchDate.getHours();
-
       // Check if at least 2 days ahead
       const daysAhead = Math.ceil((launchDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -136,74 +102,8 @@ Deno.serve(async (req) => {
         quickFixes.push('Set launch date to at least 2 days ahead');
       }
 
-      // Check if Friday
-      if (dayOfWeek !== 5) {
-        score -= 20;
-        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        suggestions.push({
-          field: 'launch_date',
-          severity: 'warning',
-          message: 'Not launching on Friday',
-          suggestion: `You're launching on ${dayNames[dayOfWeek]}. Friday launches get 4.5x better engagement. Consider moving to next Friday.`,
-          impact: 'Lower visibility',
-          currentValue: dayNames[dayOfWeek],
-          recommendedValue: 'Friday',
-        });
-        quickFixes.push('Change launch to Friday evening');
-      } else {
-        // Check if evening time (6-8 PM)
-        if (hour < 18 || hour > 20) {
-          score -= 10;
-          suggestions.push({
-            field: 'launch_date',
-            severity: 'info',
-            message: 'Consider evening launch',
-            suggestion: 'Launching between 6-8 PM on Friday maximizes weekend visibility and engagement.',
-            impact: 'Can improve by 15-20%',
-            currentValue: `${hour}:00`,
-            recommendedValue: '18:00-20:00 (6-8 PM)',
-          });
-          quickFixes.push('Set launch time to 6-8 PM');
-        } else {
-          suggestions.push({
-            field: 'launch_date',
-            severity: 'success',
-            message: 'Perfect launch timing',
-            suggestion: 'Friday evening 6-8 PM is the optimal launch window for maximum engagement!',
-            impact: 'Maximum visibility expected',
-          });
-        }
-      }
     }
 
-    // ========== DURATION OPTIMIZATION ==========
-    if (campaignData.end_date && campaignData.launch_date) {
-      const startDate = new Date(campaignData.launch_date);
-      const endDate = new Date(campaignData.end_date);
-      const durationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      if (durationDays !== 15) {
-        score -= 20;
-        suggestions.push({
-          field: 'duration',
-          severity: 'error',
-          message: 'Duration must be 15 days',
-          suggestion: 'Campaigns must run for exactly 15 days from start date for maximum consumer benefit and platform policy.',
-          impact: 'May be rejected',
-          currentValue: `${durationDays} days`,
-          recommendedValue: '15 days',
-        });
-        quickFixes.push('Set duration to 15 days');
-      } else {
-        suggestions.push({
-          field: 'duration',
-          severity: 'success',
-          message: 'Optimal campaign duration',
-          suggestion: '15-day duration provides the best balance of visibility and urgency.',
-          impact: 'Maximum deal exposure',
-        });
-      }
-    }
 
     // ========== TITLE OPTIMIZATION ==========
     if (campaignData.title) {

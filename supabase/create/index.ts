@@ -162,6 +162,20 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Image name is required.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
     }
 
+    // Verify store exists and belongs to this merchant before inserting
+    const { data: storeCheck, error: storeError } = await supabase
+      .from('merchant_stores')
+      .select('id')
+      .eq('id', store_id)
+      .eq('merchant_id', merchant_id)
+      .maybeSingle();
+
+    if (storeError || !storeCheck) {
+      console.error(`[campaigns/create-campaign EF] Store ${store_id} not found for merchant ${merchant_id}`);
+      return new Response(JSON.stringify({ error: 'Selected store not found. Please go back and re-select your store.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
+      });
+    }
 
     const campaignPayload = {
       merchant_id,
@@ -210,9 +224,14 @@ Deno.serve(async (req) => {
         status = 405;
       } else if (error.message.includes('required') || error.message.includes('Invalid')) {
         status = 400; // Bad Request
+      } else if (error.message.includes('foreign key') || error.message.includes('fkey')) {
+        status = 400;
       }
     }
-    return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), {
+    const userMessage = (error.message?.includes('foreign key') || error.message?.includes('fkey'))
+      ? 'Selected store no longer exists. Please go back and re-select your store.'
+      : (error.message || 'Internal Server Error');
+    return new Response(JSON.stringify({ error: userMessage }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: status,
     });

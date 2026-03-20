@@ -228,23 +228,80 @@ const AppContent: React.FC = () => {
               expires_at: Date.now() + 3600 * 1000,
             });
             if (!sessionValid) {
-              console.warn('[App] Session refresh failed — redirecting to login');
-              await biometricService.clearSession();
-              setUser({ id: '', username: '', isLoggedIn: false, role: 'consumer', full_name: '', access_token: null, refresh_token: null, onboarding_complete: false, hasActiveSubscription: false } as User);
-              setView('login');
-              return;
+              console.warn('[App] Session refresh failed — attempting silent re-auth');
+              // Try silent re-auth using saved phone (same as consumer app pattern)
+              const phone = savedUser.phone;
+              const cc = savedUser.country_code || '+91';
+              if (phone) {
+                try {
+                  const { user: freshProfile, session } = await userService.merchantOtpLogin(phone, cc);
+                  if (freshProfile && session) {
+                    console.log('[App] Silent re-auth succeeded for:', freshProfile.id);
+                    const updatedUser = {
+                      ...savedUser,
+                      ...freshProfile,
+                      isLoggedIn: true,
+                      access_token: session.access_token,
+                      refresh_token: session.refresh_token,
+                    };
+                    setUser(updatedUser);
+                    await biometricService.saveSession(updatedUser);
+                    // Re-establish Supabase session with fresh tokens
+                    await updateSupabaseSession({
+                      access_token: session.access_token,
+                      refresh_token: session.refresh_token,
+                      user: { id: freshProfile.id, email: freshProfile.email, user_metadata: { role: freshProfile.role } } as any,
+                      token_type: 'bearer',
+                      expires_in: 3600,
+                      expires_at: Date.now() + 3600 * 1000,
+                    });
+                    // Continue to dashboard check below (don't return)
+                  } else {
+                    throw new Error('No session returned');
+                  }
+                } catch (reAuthErr) {
+                  console.warn('[App] Silent re-auth failed — redirecting to login:', reAuthErr);
+                  await biometricService.clearSession();
+                  setUser({ id: '', username: '', isLoggedIn: false, role: 'consumer', full_name: '', access_token: null, refresh_token: null, onboarding_complete: false, hasActiveSubscription: false } as User);
+                  setView('login');
+                  return;
+                }
+              } else {
+                console.warn('[App] No phone for re-auth — redirecting to login');
+                await biometricService.clearSession();
+                setUser({ id: '', username: '', isLoggedIn: false, role: 'consumer', full_name: '', access_token: null, refresh_token: null, onboarding_complete: false, hasActiveSubscription: false } as User);
+                setView('login');
+                return;
+              }
+            } else {
+              console.log('[App] Supabase session established for splash restore');
             }
-            console.log('[App] Supabase session established for splash restore');
           }
 
           const userRole = savedUser.role || 'merchant';
           if (userRole === 'merchant') {
-            // Always check subscription status fresh from DB on every app open
-            // The Edge Function also returns storeCount (bypasses RLS)
+            // Try to check subscription fresh, but if the saved user already has
+            // hasActiveSubscription set (e.g., just set by AuthStack login), trust it
+            // to avoid 401 errors when the Supabase session isn't ready yet.
             let subscriptionInfo: { hasActiveSubscription: boolean; subscription_status?: string; current_tier_id?: number; trialExpired?: boolean; storeCount?: number } = { hasActiveSubscription: false };
-            try {
-              subscriptionInfo = await merchantSubscriptionService.checkActiveSubscription(savedUser.id);
-            } catch { /* assume no subscription */ }
+
+            if (savedUser.hasActiveSubscription) {
+              // Trust the saved subscription status (set during login)
+              console.log('[App] Using saved subscription status: hasActiveSubscription =', savedUser.hasActiveSubscription);
+              subscriptionInfo = {
+                hasActiveSubscription: true,
+                subscription_status: savedUser.subscription_status,
+                current_tier_id: savedUser.current_tier_id,
+                trialExpired: savedUser.trialExpired || false,
+                storeCount: savedUser.storeCount,
+              };
+            } else {
+              try {
+                const { data: currentSession } = await supabase.auth.getSession();
+                const token = currentSession?.session?.access_token || savedUser.access_token;
+                subscriptionInfo = await merchantSubscriptionService.checkActiveSubscription(savedUser.id, token);
+              } catch { /* assume no subscription */ }
+            }
 
             const userWithSub = {
               ...savedUser,
@@ -256,17 +313,22 @@ const AppContent: React.FC = () => {
             setUser(userWithSub);
             await biometricService.saveSession(userWithSub);
 
-            // If no active subscription, force subscription selection
-            if (!subscriptionInfo.hasActiveSubscription) {
-              console.log('[App] No active subscription — forcing subscription selection, trialExpired:', subscriptionInfo.trialExpired);
+            // If no active subscription, check if profile is complete first
+            // (subscription check may have failed due to auth timing — don't block complete merchants)
+            const profileComplete = !!(savedUser.full_name && savedUser.store_name && savedUser.category && savedUser.business_type && savedUser.terms_accepted && savedUser.privacy_accepted);
+            if (!subscriptionInfo.hasActiveSubscription && !profileComplete) {
+              console.log('[App] No active subscription and profile incomplete — forcing onboarding');
               navigateTo('merchant_onboarding');
               return;
             }
+            if (!subscriptionInfo.hasActiveSubscription && profileComplete) {
+              console.log('[App] Subscription check failed but profile complete — going to dashboard');
+              userWithSub.hasActiveSubscription = true;
+            }
 
             const profileFieldsOk = !!(savedUser.full_name && savedUser.store_name && savedUser.category && savedUser.business_type && savedUser.terms_accepted && savedUser.privacy_accepted);
-            // Use storeCount from Edge Function (service_role, bypasses RLS)
-            // instead of querying merchant_stores directly through client
-            const hasStores = (subscriptionInfo.storeCount ?? 0) > 0;
+            // Use storeCount — from subscription info or from saved user
+            const hasStores = (subscriptionInfo.storeCount ?? savedUser.storeCount ?? 0) > 0;
 
             if (profileFieldsOk && hasStores) {
               navigateTo('merchant_dashboard');

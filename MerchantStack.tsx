@@ -18,6 +18,7 @@ import { SmartNotifications } from './SmartNotifications'; // Import SmartNotifi
 import { MerchantAIInsights } from './MerchantAIInsights'; // Import AI Insights Dashboard
 import { MerchantStores } from './MerchantStores';
 import { StoreQRPrint } from './components/StoreQRPrint';
+import { ReferralTracker } from './components/ReferralTracker';
 import { merchantService } from './services/merchantService';
 import { AIAssistantChat } from './AIAssistantChat'; // Import AI Assistant Chat
 import { FeatureTour } from './components/FeatureTour'; // Import Feature Tour
@@ -148,6 +149,7 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
     />
   );
   else if (view === 'refer_consumer') currentView = <StoreQRPrint user={user} setView={setView} theme={theme} />;
+  else if (view === 'referral_tracker') currentView = <ReferralTracker user={user} setView={setView} theme={theme} />;
   else if (view === 'merchant_analytics') currentView = <MerchantAnalytics user={user} theme={theme} setView={setView} />;
   else if (view === 'merchant_catalogue') currentView = (
     <MerchantCatalogue user={user} theme={theme} setView={setView} setEditProduct={setEditProduct} />

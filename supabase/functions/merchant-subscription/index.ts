@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
       // Check if merchant has active subscription
       const { data, error } = await supabaseAdmin
         .from('merchant_subscriptions')
-        .select('status, plan_name, current_period_end, trial_end')
+        .select('status, plan_name, current_period_end')
         .eq('merchant_id', user.id)
         .eq('status', 'active')
         .gte('current_period_end', new Date().toISOString())
@@ -77,24 +77,10 @@ Deno.serve(async (req) => {
         throw error;
       }
 
-      // Also fetch store count (bypasses RLS via service_role)
-      const { count: storeCount } = await supabaseAdmin
-        .from('merchant_stores')
-        .select('id', { count: 'exact', head: true })
-        .eq('merchant_id', user.id);
-
-      // Check if trial has expired
-      const trialEnd = data?.trial_end || data?.current_period_end;
-      const trialExpired = trialEnd ? new Date(trialEnd) < new Date() : false;
-
       return new Response(
         JSON.stringify({
           hasActiveSubscription: !!data,
           subscription_status: data?.status,
-          plan_name: data?.plan_name,
-          trial_end: data?.trial_end,
-          trialExpired,
-          storeCount: storeCount ?? 0,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );

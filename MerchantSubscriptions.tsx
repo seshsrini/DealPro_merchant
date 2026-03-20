@@ -1,12 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   AppView,
   SubscriptionTier,
   User
 } from './types';
+import { Capacitor } from '@capacitor/core';
 import { subscriptionService } from './services/subscriptionService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
+import { supabase } from './services/supabaseClient';
 import { useTranslation } from './contexts/LanguageContext';
 import {
   Loader2,
@@ -17,8 +19,11 @@ import {
   Gauge,
   Tags,
   BadgeDollarSign,
-  HelpCircle,
-  Clock
+  Clock,
+  Gift,
+  CalendarDays,
+  ExternalLink,
+  Shield,
 } from 'lucide-react';
 
 interface MerchantSubscriptionsProps {
@@ -28,9 +33,12 @@ interface MerchantSubscriptionsProps {
   theme?: 'light' | 'dark';
 }
 
+const GOOGLE_PLAY_SUBS_URL = 'https://play.google.com/store/account/subscriptions';
+
 export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ user, setView, setUser, theme = 'dark' }) => {
   const { t } = useTranslation();
   const isDark = theme === 'dark';
+  const isNative = Capacitor.isNativePlatform();
   const [tiers, setTiers] = useState<SubscriptionTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,32 +52,87 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
 
+  // ── Derived subscription info ──
+  const isTrialing = currentSubscription?.status === 'active' &&
+    currentSubscription?.current_period_end &&
+    new Date(currentSubscription.current_period_end) > new Date() &&
+    currentSubscription?.billing_type === 'google_play';
+  const trialEndDate = currentSubscription?.current_period_end
+    ? new Date(currentSubscription.current_period_end)
+    : null;
+  const daysRemaining = trialEndDate
+    ? Math.max(0, Math.ceil((trialEndDate.getTime() - Date.now()) / 86400000))
+    : null;
+  const currentTier = tiers.find(t => t.id === currentTierId);
+  const recurringAmount = currentSubscription?.total_recurring_amount
+    || currentTier?.subscription_fee
+    || null;
+
+  // ── Fetch data ──
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const fetchedTiers = await subscriptionService.getSubscriptionTiers();
+      setTiers(fetchedTiers);
+
+      const { tier_id, subscription } = await merchantSubscriptionService.fetchCurrentSubscription(user.id);
+      setCurrentTierId(tier_id);
+      setCurrentSubscription(subscription);
+    } catch (err: any) {
+      console.error('[MerchantSubscriptions] Fetch error:', err);
+      setError('Unable to load subscription plans. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [user.id]);
+
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const fetchedTiers = await subscriptionService.getSubscriptionTiers();
-        setTiers(fetchedTiers);
-
-        const { tier_id, subscription } = await merchantSubscriptionService.fetchCurrentSubscription(user.id);
-        setCurrentTierId(tier_id);
-        setCurrentSubscription(subscription);
-      } catch (err: any) {
-        console.error("Failed to fetch subscription tiers:", err);
-        setError("Unable to load subscription plans. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (user.isLoggedIn && user.role === 'merchant') {
       fetchData();
     } else {
-      setError("Unauthorized access. Please log in as a merchant.");
+      setError('Unauthorized access. Please log in as a merchant.');
       setLoading(false);
     }
-  }, [user.isLoggedIn, user.role]);
+  }, [user.isLoggedIn, user.role, fetchData]);
+
+  // ── Supabase Realtime: listen for subscription changes ──
+  useEffect(() => {
+    if (!user.id) return;
+
+    const channel = supabase
+      .channel(`merchant_sub_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'merchant_subscriptions',
+          filter: `merchant_id=eq.${user.id}`,
+        },
+        (payload: any) => {
+          console.log('[MerchantSubscriptions] Realtime update:', payload.eventType);
+          const row = payload.new;
+          if (row) {
+            setCurrentSubscription(row);
+            // Update user state if status changed
+            const isActive = row.status === 'active' &&
+              row.current_period_end &&
+              new Date(row.current_period_end) > new Date();
+            setUser((prev: any) => ({
+              ...prev,
+              hasActiveSubscription: isActive,
+              subscription_status: row.status,
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user.id, setUser]);
 
   const handleShowConfirmation = (tier: SubscriptionTier) => {
     setTierToConfirm(tier);
@@ -84,7 +147,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
 
   const handleConfirmSelection = async () => {
     if (!tierToConfirm || !user.id) {
-      setError("User not logged in");
+      setError('User not logged in');
       return;
     }
 
@@ -95,73 +158,200 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     setError(null);
 
     try {
-      console.log("[MerchantSubscriptions] Creating subscription for tier:", tier.tier_name);
-
       const result = await merchantSubscriptionService.createSubscription(
-        user.id,
-        tier.id,
-        tier.tier_key,
-        tier.tier_name
+        user.id, tier.id, tier.tier_key, tier.tier_name
       );
 
       if (result.success) {
-        console.log("[MerchantSubscriptions] Subscription created successfully");
-
         setCurrentTierId(tier.id);
         setCurrentSubscription(null);
         setSelecting(false);
         setSelectedTierId(null);
-
         setUser({
           ...user,
           hasActiveSubscription: true,
           subscription_status: 'active',
           current_tier_id: tier.id,
         });
+        // Re-fetch to get full subscription details
+        fetchData();
       } else {
-        setError(result.error || "Failed to activate subscription. Please try again.");
+        setError(result.error || 'Failed to activate subscription. Please try again.');
         setSelecting(false);
         setSelectedTierId(null);
       }
     } catch (err: any) {
-      console.error("[MerchantSubscriptions] Error selecting plan:", err);
-      setError("An unexpected error occurred. Please try again.");
+      setError('An unexpected error occurred. Please try again.');
       setSelecting(false);
       setSelectedTierId(null);
     }
   };
 
+  const handleManageSubscription = () => {
+    if (isNative) {
+      // Use Capacitor Browser to open Google Play subscriptions
+      import('@capacitor/browser').then(({ Browser }) => {
+        Browser.open({ url: GOOGLE_PLAY_SUBS_URL });
+      }).catch(() => {
+        window.open(GOOGLE_PLAY_SUBS_URL, '_blank');
+      });
+    } else {
+      window.open(GOOGLE_PLAY_SUBS_URL, '_blank');
+    }
+  };
+
   return (
-    <div className="px-6 pt-6 pb-32 space-y-6">
+    <div className="px-6 pt-6 pb-32 space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1">
         <div>
           <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Subscription Plans
+            My Subscription
           </h2>
-          <p className={`text-sm font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Empower your business</p>
+          <p className={`text-sm font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Manage your plan</p>
         </div>
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
           <CreditCard className="w-5 h-5 text-blue-500" />
         </div>
       </div>
 
-      {/* Trial info banner */}
-      {currentSubscription?.status === 'trialing' && currentSubscription?.trial_end && (
-        <div className={`p-3.5 rounded-xl flex items-start gap-2.5 ${isDark ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-blue-50 border border-blue-200'}`}>
-          <Clock className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-          <div>
-            <p className={`text-xs font-semibold mb-0.5 ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
-              Free trial active
-            </p>
-            <p className={`text-xs leading-relaxed ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Your trial ends on{' '}
-              <span className="font-semibold">
-                {new Date(currentSubscription.trial_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+      {/* ════════════════════════════════════════════
+          SUBSCRIPTION STATUS CARD
+         ════════════════════════════════════════════ */}
+      {currentSubscription && currentTierId && !loading && (
+        <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white border-slate-200'}`}>
+
+          {/* Free Trial Badge */}
+          {isTrialing && daysRemaining !== null && daysRemaining > 0 && (
+            <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Gift className="w-4 h-4 text-white" />
+                <span className="text-white text-xs font-bold tracking-wide uppercase">Free Trial</span>
+              </div>
+              <span className="text-white/90 text-xs font-semibold">
+                {daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining
               </span>
-              . You'll be charged after the trial period.
-            </p>
+            </div>
+          )}
+
+          {/* Active (non-trial) badge */}
+          {currentSubscription.status === 'active' && !isTrialing && (
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-2.5 flex items-center gap-2">
+              <Shield className="w-4 h-4 text-white" />
+              <span className="text-white text-xs font-bold tracking-wide uppercase">Active Subscription</span>
+            </div>
+          )}
+
+          {/* Plan details */}
+          <div className="p-4 space-y-4">
+            {/* Plan name + amount */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {currentTier?.tier_name || currentSubscription.plan_name} Plan
+                </p>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {currentTier?.billing_frequency || 'monthly'}
+                </p>
+              </div>
+              {recurringAmount && (
+                <div className="text-right">
+                  <p className="text-xl font-bold text-emerald-500">
+                    ₹{recurringAmount}
+                  </p>
+                  <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/month after trial</p>
+                </div>
+              )}
+            </div>
+
+            {/* Stats row */}
+            <div className={`grid grid-cols-2 gap-3`}>
+              {/* Days Remaining */}
+              {daysRemaining !== null && (
+                <div className={`rounded-xl p-3 ${isDark ? 'bg-slate-900/60' : 'bg-slate-50'}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Clock className={`w-3.5 h-3.5 ${daysRemaining <= 7 ? 'text-amber-500' : 'text-emerald-500'}`} />
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Days Remaining</p>
+                  </div>
+                  <p className={`text-2xl font-black ${
+                    daysRemaining <= 3 ? 'text-red-500' : daysRemaining <= 7 ? 'text-amber-500' : isDark ? 'text-white' : 'text-slate-900'
+                  }`}>
+                    {daysRemaining}
+                  </p>
+                </div>
+              )}
+
+              {/* Next Billing Date */}
+              {trialEndDate && (
+                <div className={`rounded-xl p-3 ${isDark ? 'bg-slate-900/60' : 'bg-slate-50'}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <CalendarDays className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Next Billing Date</p>
+                  </div>
+                  <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    {trialEndDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Features row */}
+            {currentTier && (
+              <div className={`flex items-center gap-4 px-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span className="flex items-center gap-1.5 text-xs">
+                  <Gauge className="w-3.5 h-3.5 text-blue-400" />
+                  {currentTier.max_campaigns_per_month} deals/mo
+                </span>
+                <span className="flex items-center gap-1.5 text-xs">
+                  <Tags className="w-3.5 h-3.5 text-amber-400" />
+                  {currentTier.max_dotd_per_month} DOTD/mo
+                </span>
+                {currentTier.is_multi_store && (
+                  <span className="flex items-center gap-1.5 text-xs">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    Multi-store
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Manage Subscription button */}
+            <button
+              onClick={handleManageSubscription}
+              className={`w-full h-11 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${
+                isDark ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              <ExternalLink className="w-4 h-4" />
+              Manage Subscription
+            </button>
+
+            {/* Cancel link */}
+            {!currentSubscription.cancel_at_period_end ? (
+              <button
+                onClick={() => { setCancelReason(''); setShowCancelModal(true); }}
+                className={`w-full text-center text-xs underline underline-offset-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}
+              >
+                Cancel my subscription
+              </button>
+            ) : (
+              <p className={`text-center text-xs ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                Your subscription will end on{' '}
+                {new Date(currentSubscription.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </p>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════
+          AVAILABLE PLANS TABLE
+         ════════════════════════════════════════════ */}
+      {!loading && (
+        <div>
+          <h3 className={`text-base font-semibold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            {currentTierId ? 'Switch Plan' : 'Choose a Plan'}
+          </h3>
         </div>
       )}
 
@@ -170,7 +360,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
           <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Loading plans...</p>
         </div>
-      ) : error ? (
+      ) : error && tiers.length === 0 ? (
         <div className={`text-center py-16 rounded-xl border ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
           <X className={`w-12 h-12 mx-auto mb-4 ${isDark ? 'text-red-400' : 'text-red-500'}`} />
           <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>Error Loading Plans</p>
@@ -179,8 +369,8 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       ) : tiers.length === 0 ? (
         <div className={`text-center py-16 rounded-xl border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
           <Info className={`w-12 h-12 mx-auto mb-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
-          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>No Subscription Plans Found</p>
-          <p className={`text-sm px-10 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Please check back later or contact support.</p>
+          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>No Plans Found</p>
+          <p className={`text-sm px-10 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Please check back later.</p>
         </div>
       ) : (
         <div className={`rounded-xl border overflow-visible ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
@@ -209,20 +399,15 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 index !== tiers.length - 1 ? (isDark ? 'border-b border-slate-800/50' : 'border-b border-slate-100') : ''
               }`}
             >
-              {/* Plan Name */}
               <div className="col-span-3">
                 <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{tier.tier_name}</p>
                 <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{tier.billing_frequency}</p>
               </div>
-
-              {/* Price */}
               <div className="col-span-2">
                 <p className="text-sm font-semibold text-emerald-500">
                   {tier.currency} {tier.subscription_fee}
                 </p>
               </div>
-
-              {/* Max Deals */}
               <div className="col-span-2">
                 <div className="flex items-center gap-1.5">
                   <Gauge className="w-4 h-4 text-blue-400" />
@@ -230,8 +415,6 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                   <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
                 </div>
               </div>
-
-              {/* Max DOTD */}
               <div className="col-span-2">
                 <div className="flex items-center gap-1.5">
                   <Tags className="w-4 h-4 text-amber-400" />
@@ -239,25 +422,21 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                   <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
                 </div>
               </div>
-
-              {/* Action Button */}
               <div className="col-span-3 flex justify-end">
                 {currentTierId === tier.id ? (
-                  <span className={`px-3 h-8 rounded-lg text-white font-semibold text-[11px] flex items-center ${
-                    currentSubscription?.status === 'trialing' ? 'bg-amber-500' : 'bg-blue-500'
-                  }`}>
-                    {currentSubscription?.status === 'trialing' ? 'Trial' : 'Active'}
+                  <span className="px-3 h-8 rounded-lg bg-emerald-500 text-white font-semibold text-[11px] flex items-center">
+                    Current
                   </span>
                 ) : (
                   <button
                     onClick={() => handleShowConfirmation(tier)}
                     disabled={selecting && selectedTierId === tier.id}
-                    className="px-4 h-8 rounded-lg font-semibold text-[11px] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-slate-900 text-white"
+                    className="px-4 h-8 rounded-lg font-semibold text-[11px] active:scale-[0.98] transition-all disabled:opacity-50 bg-slate-900 text-white"
                   >
                     {selecting && selectedTierId === tier.id ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
-                      "Select"
+                      'Select'
                     )}
                   </button>
                 )}
@@ -267,25 +446,14 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         </div>
       )}
 
-      {/* Cancel Subscription Link */}
-      {currentTierId && (
-        <div className="text-center pt-2 pb-4">
-          {currentSubscription?.cancel_at_period_end ? (
-            <p className={`text-xs ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-              Your subscription will end on {new Date(currentSubscription.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </p>
-          ) : (
-            <button
-              onClick={() => { setCancelReason(''); setShowCancelModal(true); }}
-              className="text-blue-500 text-xs underline underline-offset-2"
-            >
-              Cancel my subscription
-            </button>
-          )}
+      {/* Error banner (non-blocking) */}
+      {error && tiers.length > 0 && (
+        <div className={`p-3 rounded-xl text-sm text-center ${isDark ? 'bg-red-900/30 text-red-400' : 'bg-red-50 text-red-600'}`}>
+          {error}
         </div>
       )}
 
-      {/* Cancel Subscription Modal */}
+      {/* ═══ Cancel Subscription Modal ═══ */}
       {showCancelModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
           <div className={`max-w-sm w-full rounded-2xl p-6 space-y-4 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
@@ -312,9 +480,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 value={cancelReason}
                 onChange={e => setCancelReason(e.target.value)}
                 className={`w-full h-11 px-3 rounded-lg text-sm border outline-none ${
-                  isDark
-                    ? 'bg-slate-900 border-slate-700 text-white'
-                    : 'bg-slate-50 border-slate-200 text-slate-900'
+                  isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
                 }`}
               >
                 <option value="">Select a reason</option>
@@ -350,7 +516,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                       setError('Unable to cancel subscription. Please try again.');
                       setShowCancelModal(false);
                     }
-                  } catch (err: any) {
+                  } catch {
                     setError('Unable to cancel subscription. Please try again.');
                     setShowCancelModal(false);
                   } finally {
@@ -366,7 +532,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         </div>
       )}
 
-      {/* Confirmation Modal */}
+      {/* ═══ Confirmation Modal ═══ */}
       {showConfirmation && tierToConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
           <div className={`max-w-md w-full rounded-2xl p-6 space-y-5 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
@@ -378,7 +544,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 Confirm Subscription
               </h3>
               <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                You're about to subscribe to the following plan:
+                You're about to subscribe to:
               </p>
             </div>
 
@@ -400,7 +566,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 </div>
               </div>
               <div>
-                <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Key Features</p>
+                <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Features</p>
                 <ul className={`space-y-1.5 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />

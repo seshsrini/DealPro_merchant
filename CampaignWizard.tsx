@@ -100,6 +100,13 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
       try {
         const stores = await merchantService.getMerchantStores(user.id);
         setMerchantStores(stores || []);
+        // Validate draft's selectedStoreId against real stores
+        const storeIds = new Set((stores || []).map((s: any) => s.id).filter(Boolean));
+        if (state.selectedStoreId && !storeIds.has(state.selectedStoreId)) {
+          console.warn('[CampaignWizard] Draft store_id not found in current stores, clearing selection');
+          dispatch({ type: 'SET_FIELD', field: 'selectedStoreId', value: '' });
+          setCurrentStep(0); // Force back to store selection
+        }
       } catch (err) {
         console.error('[CampaignWizard] Failed to load stores:', err);
       }

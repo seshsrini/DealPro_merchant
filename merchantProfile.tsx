@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   User as UserIcon,
   Store,
@@ -15,11 +15,13 @@ import {
   PlayCircle,
   MapPin,
   QrCode,
+  Trophy,
 } from 'lucide-react';
 import { AppView } from './types';
 import { useTranslation } from './contexts/LanguageContext';
 import { userService } from './services/userService';
 import { MreferralService } from './services/MreferralService';
+import { supabase } from './services/supabaseClient';
 import { resetFeatureTour } from './components/FeatureTour';
 import { resetCampaignTour } from './components/CampaignTour';
 
@@ -36,9 +38,23 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
   const [isInviting, setIsInviting] = useState(false);
   const [showInviteSuccess, setShowInviteSuccess] = useState(false);
 
-  const merchantReferralCode = useMemo(() => {
-    return user.my_referral_code || `REF-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-  }, [user.my_referral_code]);
+  const [merchantReferralCode, setMerchantReferralCode] = useState(
+    user.merchant_referral_code || user.my_referral_code || ''
+  );
+
+  // Fetch from DB if not on user object
+  useEffect(() => {
+    if (!merchantReferralCode && user.id) {
+      supabase
+        .from('merchant_profiles')
+        .select('merchant_referral_code')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (data?.merchant_referral_code) setMerchantReferralCode(data.merchant_referral_code);
+        });
+    }
+  }, [user.id, merchantReferralCode]);
 
   const handleInviteViaWhatsApp = async () => {
     setIsInviting(true);
@@ -129,6 +145,20 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             <div>
               <span className={`block font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>Refer Consumers</span>
               <span className={`block text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Print QR code for your store</span>
+            </div>
+          </div>
+          <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+        </button>
+
+        {/* Referral Progress */}
+        <button onClick={() => setView('referral_tracker')} className={`w-full p-4 rounded-xl flex items-center justify-between active:scale-[0.98] transition-all border ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+          <div className="flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
+              <Trophy className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <span className={`block font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>Referral Progress</span>
+              <span className={`block text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Track referrals & earn free months</span>
             </div>
           </div>
           <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />

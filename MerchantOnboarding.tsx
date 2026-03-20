@@ -18,6 +18,7 @@ import { StepTermsOfService } from './components/merchant-onboarding/StepTermsOf
 import { StepPrivacyPolicy } from './components/merchant-onboarding/StepPrivacyPolicy';
 import { StepReviewDetails } from './components/merchant-onboarding/StepReviewDetails';
 import { StepSubscription } from './components/merchant-onboarding/StepSubscription';
+import { StepLoyaltyAddon } from './components/merchant-onboarding/StepLoyaltyAddon';
 import { StepCongrats } from './components/merchant-onboarding/StepCongrats';
 
 // --- Types ---
@@ -79,7 +80,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
 // --- Step Definitions ---
 const STEP_LABELS = [
   'Welcome', 'Name', 'Store', '', 'Address', 'Stores',
-  'Verification', 'Review', 'Terms', 'Privacy', 'Plan', 'Done',
+  'Verification', 'Review', 'Terms', 'Privacy', 'Plan', 'Loyalty', 'Done',
 ];
 const TOTAL_STEPS = STEP_LABELS.length;
 
@@ -104,6 +105,8 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [returnToReview, setReturnToReview] = useState(false);
   const [hasExistingStores, setHasExistingStores] = useState(false);
+  const [lastSubscriptionFee, setLastSubscriptionFee] = useState(0);
+  const [lastSubscriptionId, setLastSubscriptionId] = useState<number | null>(null);
 
   const DRAFT_KEY = `merchant_onboarding_draft_${user.id}`;
 
@@ -192,7 +195,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       case 2: return !!state.storeName;
       case 3: return true; // Category step removed — always skipped
       case 4: return hasExistingStores || state.stores.some(s => !!(s.city || s.street || s.pincode));
-      case 5: return hasExistingStores || state.stores.some(s => !!(s.city || s.street || s.pincode));
+      case 5: return hasExistingStores; // Only skip if stores already exist in DB; always show for new signups
       case 6: return !!state.businessType;
       // Steps 7+ (Review, Terms, Privacy, Plan, Done) are never skipped
       default: return false;
@@ -372,7 +375,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
 
       // Skip subscription step if merchant already has an active subscription
       if (user.hasActiveSubscription) {
-        goToStep(11); // Congrats
+        goToStep(12); // Congrats
       } else {
         goToStep(10); // Subscription selection
       }
@@ -403,9 +406,15 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   // still references the pre-setUser value. The useEffect([user]) in App.tsx
   // auto-saves the latest user to biometric session, so we don't need to
   // save here (which would overwrite with stale data).
-  const handleSubscriptionComplete = async () => {
+  const handleSubscriptionComplete = async (subscriptionFee?: number, subscriptionId?: number) => {
+    setLastSubscriptionFee(subscriptionFee || 0);
+    setLastSubscriptionId(subscriptionId || null);
+    goToStep(11); // Loyalty add-on step
+  };
+
+  const handleLoyaltyComplete = () => {
     localStorage.removeItem(DRAFT_KEY);
-    goToStep(11);
+    goToStep(12); // Congrats
   };
 
   // Congrats → go to dashboard
@@ -546,6 +555,17 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
           />
         );
       case 11:
+        return (
+          <StepLoyaltyAddon
+            user={user}
+            subscriptionFee={lastSubscriptionFee}
+            subscriptionId={lastSubscriptionId}
+            onComplete={handleLoyaltyComplete}
+            onSkip={handleLoyaltyComplete}
+            theme={theme}
+          />
+        );
+      case 12:
         return (
           <StepCongrats
             storeName={state.storeName}

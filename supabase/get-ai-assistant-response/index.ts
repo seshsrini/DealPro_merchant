@@ -66,12 +66,12 @@ Deno.serve(async (req) => {
 
       let suggestion = '';
       if (dayOfWeek === 5 && hour < 18) {
-        suggestion = 'Perfect timing! Launch a deal this Friday evening (6-8 PM) for maximum weekend visibility. Weekend deals get 3.8x more views.';
+        suggestion = 'Perfect timing! Launch a deal this Friday for maximum weekend visibility. Weekend deals get 3.8x more views.';
       } else if (dayOfWeek >= 1 && dayOfWeek <= 4) {
         const daysUntil = 5 - dayOfWeek;
-        suggestion = `I recommend launching your next deal on Friday evening (6-8 PM), which is ${daysUntil} day${daysUntil > 1 ? 's' : ''} away. This timing achieves 4.5x higher engagement.`;
+        suggestion = `I recommend launching your next deal on Friday, which is ${daysUntil} day${daysUntil > 1 ? 's' : ''} away. This timing achieves 4.5x higher engagement.`;
       } else {
-        suggestion = 'Launch your next deal on the upcoming Friday evening (6-8 PM) for optimal results. Our data shows this timing gets the best engagement.';
+        suggestion = 'Launch your next deal on the upcoming Friday for optimal results. Our data shows this timing gets the best engagement.';
       }
 
       response = {
@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
         tips.push('🎯 **Create active deals** - Launch 2-3 deals per month for optimal visibility');
       }
       if (productCount > 0) {
-        tips.push('⏰ **Time it right** - Launch deals on Friday evenings (6-8 PM) for 4.5x higher engagement');
+        tips.push('⏰ **Time it right** - Launch deals on Fridays for 4.5x higher engagement');
       }
       if (productCount > 0) {
         const categories = new Set(products?.map(p => p.category));

@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { CreditCard, Loader2, CheckCircle2, Gauge, Tags, Gift, AlertTriangle } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { SubscriptionTier, User } from '../../types';
 import { subscriptionService } from '../../services/subscriptionService';
 import { merchantSubscriptionService } from '../../services/merchantSubscriptionService';
+import { billingService } from '../../services/BillingService';
+import { localSubscriptionStore } from '../../services/LocalSubscriptionStore';
 import { floatIn } from './floatIn';
 
 interface StepSubscriptionProps {
   user: User;
   setUser: (user: User) => void;
-  onComplete: () => void;
+  onComplete: (subscriptionFee?: number, subscriptionId?: number) => void;
   onBack: () => void;
   theme: 'light' | 'dark';
   trialExpired?: boolean; // true when shown because trial period ended
@@ -26,12 +29,15 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
   const [selectedTierId, setSelectedTierId] = useState<number | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);
+  const [billingReady, setBillingReady] = useState(false);
+  const isNative = Capacitor.isNativePlatform();
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
     return () => clearTimeout(t);
   }, []);
 
+  // Fetch tiers from Supabase
   useEffect(() => {
     subscriptionService.getSubscriptionTiers()
       .then((data) => setTiers(data))
@@ -39,32 +45,106 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
       .finally(() => setLoading(false));
   }, []);
 
+  // Initialize Google Play Billing on native
+  useEffect(() => {
+    if (!isNative) return;
+    billingService.setMerchantId(user.id);
+    billingService.initialize().then((ok) => {
+      setBillingReady(ok);
+      if (ok) console.log('[StepSubscription] Google Play Billing initialized');
+    });
+  }, [isNative, user.id]);
+
   const handleSelect = (tier: SubscriptionTier) => {
     setTierToConfirm(tier);
     setShowConfirm(true);
     setError(null);
   };
 
-  const handleConfirm = async () => {
+  /**
+   * Complete subscription via Google Play Billing (native) or Supabase (web).
+   */
+  const handleConfirm = useCallback(async () => {
     if (!tierToConfirm || !user.id) return;
     setShowConfirm(false);
     setSelecting(true);
     setSelectedTierId(tierToConfirm.id);
     setError(null);
 
+    // ─── Native: Google Play Billing ───
+    if (isNative && billingReady) {
+      const productId = billingService.tierKeyToProductId(tierToConfirm.tier_key);
+      if (!productId) {
+        setError('Plan not available for in-app purchase.');
+        setSelecting(false);
+        setSelectedTierId(null);
+        return;
+      }
+
+      // Set the fee so the verified handler can store it
+      billingService.setPendingFee(tierToConfirm.subscription_fee);
+
+      // Register callback for when purchase completes
+      billingService.onPurchaseCompleted(async (success, planName, purchaseToken) => {
+        if (success) {
+          // Also create the server-side subscription record
+          const result = await merchantSubscriptionService.createSubscription(
+            user.id, tierToConfirm.id, tierToConfirm.tier_key, tierToConfirm.tier_name
+          );
+
+          setUser({
+            ...user,
+            hasActiveSubscription: true,
+            subscription_status: 'active',
+            current_tier_id: tierToConfirm.id,
+          });
+          onComplete(tierToConfirm.subscription_fee, result.subscriptionId);
+        } else {
+          setError('Purchase was not completed. Please try again.');
+          setSelecting(false);
+          setSelectedTierId(null);
+        }
+      });
+
+      // Launch the Google Play purchase flow (prefers free trial offer)
+      const purchaseResult = await billingService.purchase(productId);
+      if (!purchaseResult.success) {
+        setError(purchaseResult.error || 'Purchase failed. Please try again.');
+        setSelecting(false);
+        setSelectedTierId(null);
+      }
+      // If success, the verified handler callback above will fire asynchronously
+      return;
+    }
+
+    // ─── Web fallback: Supabase only ───
     try {
       const result = await merchantSubscriptionService.createSubscription(
         user.id, tierToConfirm.id, tierToConfirm.tier_key, tierToConfirm.tier_name
       );
 
       if (result.success) {
+        // Save to local IndexedDB for offline access
+        await localSubscriptionStore.upsert({
+          remoteId: result.subscriptionId || null,
+          merchantId: user.id,
+          planName: tierToConfirm.tier_name,
+          status: result.isTrialing ? 'trialing' : 'active',
+          purchaseToken: null,
+          productId: null,
+          trialEnd: result.trial_end || null,
+          currentPeriodStart: new Date().toISOString(),
+          currentPeriodEnd: null,
+          totalRecurringAmount: tierToConfirm.subscription_fee,
+        });
+
         setUser({
           ...user,
           hasActiveSubscription: true,
           subscription_status: result.isTrialing ? 'trialing' : 'active',
           current_tier_id: tierToConfirm.id,
         });
-        onComplete();
+        onComplete(tierToConfirm.subscription_fee, result.subscriptionId);
       } else {
         setError(result.error || 'Failed to activate subscription.');
         setSelecting(false);
@@ -75,7 +155,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
       setSelecting(false);
       setSelectedTierId(null);
     }
-  };
+  }, [tierToConfirm, user, isNative, billingReady, setUser, onComplete]);
 
   return (
     <div className="flex flex-col min-h-full px-6 pt-5">
@@ -97,7 +177,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
       {trialExpired ? (
         <div style={floatIn(50, visible)} className={`p-3.5 rounded-xl mb-4 ${isDark ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50 border border-amber-200'}`}>
           <p className={`text-xs leading-relaxed ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
-            Your 60-day free trial has ended. To continue creating deals, managing your store, and reaching customers, please select a paid plan below.
+            Your free trial has ended. To continue creating deals, managing your store, and reaching customers, please select a paid plan below.
           </p>
         </div>
       ) : (
@@ -105,7 +185,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
           <Gift className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
           <div>
             <p className={`text-xs font-semibold mb-0.5 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
-              First 60 days free!
+              First 120 days free!
             </p>
             <p className={`text-[11px] leading-relaxed ${isDark ? 'text-emerald-400/80' : 'text-emerald-600'}`}>
               Enjoy all features at no cost. You'll only be charged after your trial ends.
@@ -208,7 +288,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
             </p>
             {!trialExpired && (
               <p className={`text-xs mb-3 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                Your first 60 days are free. Billing starts after the trial.
+                Your first 120 days are free. Billing starts after the trial.
               </p>
             )}
             <div className={`space-y-2 mb-6 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>

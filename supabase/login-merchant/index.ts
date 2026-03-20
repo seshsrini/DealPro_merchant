@@ -190,6 +190,23 @@ Deno.serve(async (req: Request) => {
       merchantProfile.invite_code = invite_code;
     }
 
+    // Backfill referral codes for existing merchants missing them
+    const backfillUpdates: Record<string, string> = {};
+    if (!merchantProfile.consumer_referral_code) {
+      backfillUpdates.consumer_referral_code = await generateUniqueCode('consumer_referral_code');
+    }
+    if (!merchantProfile.merchant_referral_code) {
+      backfillUpdates.merchant_referral_code = await generateUniqueCode('merchant_referral_code');
+    }
+    if (Object.keys(backfillUpdates).length > 0) {
+      console.log('[MerchantOtpLogin] Backfilling referral codes for:', merchantProfile.id, backfillUpdates);
+      await adminClient
+        .from('merchant_profiles')
+        .update(backfillUpdates)
+        .eq('id', merchantProfile.id);
+      Object.assign(merchantProfile, backfillUpdates);
+    }
+
     // Look up the merchant's actual stored auth email — handles both
     // legacy (@internal.dealpro.app) and new (@internal.dealpro.merchant) formats
     const { data: authUserData } = await adminClient.auth.admin.getUserById(merchantProfile.id);
@@ -239,9 +256,38 @@ Deno.serve(async (req: Request) => {
 
     merchantProfile.last_logged_in = new Date().toISOString();
 
+    // Fetch subscription status and store count (using adminClient to bypass RLS)
+    // This avoids the client needing a separate authenticated call during login
+    const now = new Date().toISOString();
+    const { data: activeSub } = await adminClient
+      .from('merchant_subscriptions')
+      .select('id, status, plan_name, current_period_end, trial_end')
+      .eq('merchant_id', merchantProfile.id)
+      .eq('status', 'active')
+      .gte('current_period_end', now)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { count: storeCount } = await adminClient
+      .from('merchant_stores')
+      .select('id', { count: 'exact', head: true })
+      .eq('merchant_id', merchantProfile.id);
+
+    const trialEnd = activeSub?.trial_end || activeSub?.current_period_end;
+    const trialExpired = trialEnd ? new Date(trialEnd) < new Date() : false;
+
     return new Response(JSON.stringify({
       user: merchantProfile,
       token_hash: tokenHash,
+      subscription: {
+        hasActiveSubscription: !!activeSub,
+        subscription_status: activeSub?.status,
+        plan_name: activeSub?.plan_name,
+        trial_end: activeSub?.trial_end,
+        trialExpired,
+        storeCount: storeCount ?? 0,
+      },
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200

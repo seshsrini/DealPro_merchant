@@ -136,7 +136,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     }
   };
 
-  const handlePostLoginNavigation = async (userProfile: any, session: any) => {
+  const handlePostLoginNavigation = async (userProfile: any, session: any, loginSubscription?: any) => {
     await updateSupabaseSession(session);
     const userRole = userProfile.role || 'merchant';
 
@@ -154,8 +154,21 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
       hasActiveSubscription: false
     };
     if (userRole === 'merchant') {
-      subscriptionInfo = await merchantSubscriptionService.checkActiveSubscription(userProfile.id);
+      // Use subscription data from login response if available (avoids auth timing issues)
+      if (loginSubscription?.hasActiveSubscription !== undefined) {
+        console.log('[AuthStack] Using subscription info from login response:', JSON.stringify(loginSubscription));
+        subscriptionInfo = loginSubscription;
+      } else {
+        console.log('[AuthStack] No subscription in login response, trying edge function...');
+        try {
+          subscriptionInfo = await merchantSubscriptionService.checkActiveSubscription(userProfile.id, session.access_token);
+        } catch {
+          console.warn('[AuthStack] Edge function check failed');
+        }
+      }
     }
+
+    const profileOk = !!(userProfile.full_name && userProfile.store_name && userProfile.category && userProfile.business_type && userProfile.terms_accepted && userProfile.privacy_accepted);
 
     const updatedUser = {
       ...userProfile,
@@ -166,23 +179,27 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
       subscription_status: subscriptionInfo.subscription_status,
       current_tier_id: subscriptionInfo.current_tier_id,
       trialExpired: subscriptionInfo.trialExpired || false,
+      storeCount: subscriptionInfo.storeCount,
     };
 
-    // Determine target view: if merchant profile is incomplete, show onboarding wizard
-    // Subscription selection is part of onboarding, so complete profile → dashboard
+    // Determine target view
     let targetView: string;
     if (userRole === 'merchant') {
-      // If no active subscription, force subscription selection via onboarding
       if (!subscriptionInfo.hasActiveSubscription) {
-        console.log('[AuthStack] No active subscription — forcing subscription selection, trialExpired:', subscriptionInfo.trialExpired);
-        targetView = 'merchant_onboarding';
+        // If profile is complete, subscription check likely failed due to auth timing
+        // — go to dashboard and let it retry when session is established
+        if (profileOk) {
+          console.log('[AuthStack] Subscription check failed but profile is complete — going to dashboard');
+          updatedUser.hasActiveSubscription = true; // assume active, dashboard will verify
+          targetView = 'merchant_dashboard';
+        } else {
+          console.log('[AuthStack] No active subscription — forcing subscription selection');
+          targetView = 'merchant_onboarding';
+        }
       } else {
-        // Use storeCount from Edge Function (service_role, bypasses RLS)
-        const profileOk = !!(userProfile.full_name && userProfile.store_name && userProfile.category && userProfile.business_type && userProfile.terms_accepted && userProfile.privacy_accepted);
         const hasStores = (subscriptionInfo.storeCount ?? 0) > 0;
         if (!profileOk || !hasStores) {
           targetView = 'merchant_onboarding';
-          // Clear any stale onboarding draft so merchant starts fresh
           localStorage.removeItem(`merchant_onboarding_draft_${userProfile.id}`);
         } else {
           targetView = 'merchant_dashboard';
@@ -269,10 +286,10 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
   }, [isPhoneVerifiedForLogin, phoneNumber]);
 
   const doOtpLogin = async (phone: string) => {
-    const { user: userProfile, session } = await userService.merchantOtpLogin(phone, selectedCountry.code, inviteCode ?? undefined);
+    const { user: userProfile, session, subscription } = await userService.merchantOtpLogin(phone, selectedCountry.code, inviteCode ?? undefined);
     if (!userProfile) throw new Error('Unable to load your account. Please try again.');
     if (!session) throw new Error('Login could not be completed. Please try again.');
-    await handlePostLoginNavigation(userProfile, session);
+    await handlePostLoginNavigation(userProfile, session, subscription);
   };
 
   const completeAuth = async () => {

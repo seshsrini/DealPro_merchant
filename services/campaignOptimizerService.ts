@@ -38,8 +38,9 @@ export const campaignOptimizerService = {
    */
   async optimize(merchantId: string, campaignData: CampaignData): Promise<OptimizationResult | null> {
     try {
+      const { campaign_type, ...restData } = campaignData;
       const { data, error } = await supabase.functions.invoke('optimize-campaign', {
-        body: { merchantId, campaignData },
+        body: { merchantId, campaignData: restData, campaign_type },
       });
 
       if (error) {

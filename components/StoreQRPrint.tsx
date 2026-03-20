@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { ArrowLeft, Printer, Download } from 'lucide-react';
 import { AppView } from '../types';
+import { supabase } from '../services/supabaseClient';
 
 interface StoreQRPrintProps {
   user: any;
@@ -14,8 +15,22 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
-  const referralCode = user.consumer_referral_code || '------';
+  const [referralCode, setReferralCode] = useState(user.consumer_referral_code || '------');
   const storeName = user.store_name || user.full_name || 'DealPro Merchant';
+
+  // Fetch from DB if not on user object
+  useEffect(() => {
+    if (referralCode === '------' && user.id) {
+      supabase
+        .from('merchant_profiles')
+        .select('consumer_referral_code')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (data?.consumer_referral_code) setReferralCode(data.consumer_referral_code);
+        });
+    }
+  }, [user.id, referralCode]);
 
   useEffect(() => {
     if (canvasRef.current && referralCode !== '------') {

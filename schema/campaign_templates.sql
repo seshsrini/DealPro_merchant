@@ -111,7 +111,7 @@ VALUES
     5, -- Friday
     18, -- 6 PM
     15,
-    '["Launch Friday 6 PM for 4.5x better engagement", "25% discount is the sweet spot", "Create urgency with weekend timing"]'::jsonb,
+    '["Launch on Friday for 4.5x better engagement", "25% discount is the sweet spot", "Create urgency with weekend timing"]'::jsonb,
     92.00,
     145
   ),

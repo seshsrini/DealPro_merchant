@@ -73,16 +73,20 @@ const originalInvoke = supabase.functions.invoke.bind(supabase.functions);
 const unauthFunctions = ['validate-identifier', 'register-user', 'login-merchant', 'search-localities-by-city', 'get-states', 'get-cities'];
 supabase.functions.invoke = async (functionName: string, options?: any) => {
   if (!unauthFunctions.includes(functionName)) {
-    try {
-      const freshToken = await ensureFreshToken();
-      options = options || {};
-      options.headers = {
-        ...(options.headers || {}),
-        'Authorization': `Bearer ${freshToken}`,
-      };
-    } catch (err: any) {
-      console.error('[SupabaseClient] Token refresh failed for', functionName, ':', err?.message);
-      throw new Error('Session expired. Please log in again.');
+    // If caller already provided an Authorization header, use it as-is (e.g., during fresh login)
+    const hasAuthHeader = options?.headers?.Authorization || options?.headers?.authorization;
+    if (!hasAuthHeader) {
+      try {
+        const freshToken = await ensureFreshToken();
+        options = options || {};
+        options.headers = {
+          ...(options.headers || {}),
+          'Authorization': `Bearer ${freshToken}`,
+        };
+      } catch (err: any) {
+        console.error('[SupabaseClient] Token refresh failed for', functionName, ':', err?.message);
+        throw new Error('Session expired. Please log in again.');
+      }
     }
   }
   return originalInvoke(functionName, options);

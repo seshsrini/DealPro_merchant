@@ -5,7 +5,7 @@ export const merchantSubscriptionService = {
   /**
    * Check if a merchant has an active subscription
    */
-  checkActiveSubscription: async (merchantId: string): Promise<{
+  checkActiveSubscription: async (merchantId: string, accessToken?: string): Promise<{
     hasActiveSubscription: boolean;
     subscription_status?: string;
     current_tier_id?: number;
@@ -16,27 +16,64 @@ export const merchantSubscriptionService = {
   }> => {
     console.log("[merchantSubscriptionService] Checking active subscription for merchant:", merchantId);
 
+    // Try edge function first, fall back to direct DB query if it fails (e.g., during fresh login when session isn't ready)
     try {
-      const { data, error } = await supabase.functions.invoke('merchant-subscription', {
+      const options: any = {
         body: { action: 'check', merchantId },
-      });
-
-      if (error) {
-        console.error("[merchantSubscriptionService] Error checking subscription:", error);
-        return { hasActiveSubscription: false };
-      }
-
-      console.log("[merchantSubscriptionService] Subscription check result:", data);
-      return {
-        hasActiveSubscription: data?.hasActiveSubscription || false,
-        subscription_status: data?.subscription_status,
-        plan_name: data?.plan_name,
-        trial_end: data?.trial_end,
-        trialExpired: data?.trialExpired || false,
-        storeCount: data?.storeCount ?? 0,
       };
+      if (accessToken) {
+        options.headers = { Authorization: `Bearer ${accessToken}` };
+      }
+      const { data, error } = await supabase.functions.invoke('merchant-subscription', options);
+
+      if (!error && data) {
+        console.log("[merchantSubscriptionService] Subscription check result:", data);
+        return {
+          hasActiveSubscription: data?.hasActiveSubscription || false,
+          subscription_status: data?.subscription_status,
+          plan_name: data?.plan_name,
+          trial_end: data?.trial_end,
+          trialExpired: data?.trialExpired || false,
+          storeCount: data?.storeCount ?? 0,
+        };
+      }
+      console.warn("[merchantSubscriptionService] Edge function failed, falling back to direct query:", error);
     } catch (err: any) {
-      console.error("[merchantSubscriptionService] Exception checking subscription:", err.message);
+      console.warn("[merchantSubscriptionService] Edge function exception, falling back to direct query:", err.message);
+    }
+
+    // Fallback: query tables directly
+    try {
+      const now = new Date().toISOString();
+      const { data: sub } = await supabase
+        .from('merchant_subscriptions')
+        .select('id, status, plan_name, current_period_end, trial_end')
+        .eq('merchant_id', merchantId)
+        .eq('status', 'active')
+        .gte('current_period_end', now)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const { count: storeCount } = await supabase
+        .from('merchant_stores')
+        .select('id', { count: 'exact', head: true })
+        .eq('merchant_id', merchantId);
+
+      const trialEnd = sub?.trial_end || sub?.current_period_end;
+      const trialExpired = trialEnd ? new Date(trialEnd) < new Date() : false;
+
+      console.log("[merchantSubscriptionService] Fallback result — active:", !!sub, "stores:", storeCount);
+      return {
+        hasActiveSubscription: !!sub,
+        subscription_status: sub?.status,
+        plan_name: sub?.plan_name,
+        trial_end: sub?.trial_end,
+        trialExpired,
+        storeCount: storeCount ?? 0,
+      };
+    } catch (fallbackErr: any) {
+      console.error("[merchantSubscriptionService] Fallback query also failed:", fallbackErr.message);
       return { hasActiveSubscription: false };
     }
   },
@@ -79,7 +116,7 @@ export const merchantSubscriptionService = {
     tierId: number,
     tierKey: string,
     tierName: string
-  ): Promise<{ success: boolean; error?: string; isTrialing?: boolean; trial_end?: string }> => {
+  ): Promise<{ success: boolean; error?: string; isTrialing?: boolean; trial_end?: string; subscriptionId?: number }> => {
     console.log("[merchantSubscriptionService] Creating subscription for merchant:", merchantId, "tier:", tierName);
 
     try {
@@ -99,7 +136,7 @@ export const merchantSubscriptionService = {
 
       if (data?.success) {
         console.log("[merchantSubscriptionService] Subscription created successfully:", data.subscription, "trialing:", data.isTrialing);
-        return { success: true, isTrialing: data.isTrialing, trial_end: data.subscription?.trial_end };
+        return { success: true, isTrialing: data.isTrialing, trial_end: data.subscription?.trial_end, subscriptionId: data.subscriptionId };
       } else {
         console.error("[merchantSubscriptionService] Subscription creation failed:", data?.error);
         return { success: false, error: data?.error || 'Unknown error' };
@@ -161,6 +198,42 @@ export const merchantSubscriptionService = {
         dotd_limit: 0,
         has_subscription: false,
       };
+    }
+  },
+
+  /**
+   * Add loyalty redemption addon to an existing subscription
+   */
+  addLoyaltyAddon: async (
+    merchantId: string,
+    subscriptionId: number,
+    subscriptionFee: number
+  ): Promise<{ success: boolean; error?: string }> => {
+    console.log("[merchantSubscriptionService] Adding loyalty addon for merchant:", merchantId);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('merchant-subscription', {
+        body: {
+          action: 'add_loyalty_addon',
+          merchantId,
+          subscription_id: subscriptionId,
+          subscription_fee: subscriptionFee,
+        },
+      });
+
+      if (error) {
+        console.error("[merchantSubscriptionService] Error adding loyalty addon:", error);
+        return { success: false, error: 'Unable to enroll in loyalty program. Please try again.' };
+      }
+
+      if (data?.success) {
+        console.log("[merchantSubscriptionService] Loyalty addon added, total:", data.total_recurring_amount);
+        return { success: true };
+      }
+      return { success: false, error: data?.error || 'Enrollment failed' };
+    } catch (err: any) {
+      console.error("[merchantSubscriptionService] Loyalty addon exception:", err.message);
+      return { success: false, error: 'Unable to enroll in loyalty program. Please try again.' };
     }
   },
 

@@ -100,7 +100,7 @@ export const userService = {
   },
 
   /** Shared helper: verify magic-link token and create session */
-  _completeLogin: async (data: { user: any; token_hash: string }) => {
+  _completeLogin: async (data: { user: any; token_hash: string; subscription?: any }) => {
     console.log('[userService] Magic link token received, verifying OTP...');
 
     const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
@@ -116,7 +116,7 @@ export const userService = {
     await updateSupabaseSession(otpData.session);
 
     console.log('[userService] Merchant login successful for:', data.user.id);
-    return { user: data.user, session: otpData.session };
+    return { user: data.user, session: otpData.session, subscription: data.subscription };
   },
 
   /**

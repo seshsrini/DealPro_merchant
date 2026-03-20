@@ -4,6 +4,7 @@ import { floatIn } from '../campaign-wizard/floatIn';
 import { addCampaignService } from '../../services/addCampaignService';
 import { dealOfDayService } from '../../services/dealOfDayService';
 import { campaignOptimizerService, OptimizationResult } from '../../services/campaignOptimizerService';
+import { perfTimer } from '../../services/perfLogger';
 
 interface MerchantStore {
   id?: string;
@@ -85,6 +86,7 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
           launch_date: wizardState.dealDate,
           end_date: wizardState.dealDate, // Same day
           category: user.category,
+          campaign_type: 'dotd',
         });
         setOptimization(result);
       } catch {
@@ -100,44 +102,50 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
   const imageUrl = previewUrl || wizardState.existingThumbnail;
 
   const handlePublish = async () => {
+    const timer = perfTimer('save_dotd_campaign', 'deal_of_day');
     setPublishing(true);
     try {
-      // Phase 1: Content + Image moderation
+      // Phase 1: Content moderation + Image upload in parallel
+      // (image moderation runs alongside content moderation, then upload starts)
       setProgress({ step: 1, label: 'Checking content...' });
+      timer.mark('moderation_start');
       const plainDesc = stripHtml(wizardState.description);
-      const moderationPromises: Promise<{ flagged: boolean; reason: string }>[] = [
-        addCampaignService.moderateContent(wizardState.dealHeading, wizardState.offerValue, plainDesc),
-      ];
-      if (wizardState.selectedImageFile) {
-        moderationPromises.push(addCampaignService.moderateImage(wizardState.selectedImageFile));
-      }
-      const results = await Promise.all(moderationPromises);
-      if (results[0].flagged) throw new Error(results[0].reason);
-      if (wizardState.selectedImageFile && results[1]?.flagged) throw new Error(results[1].reason);
 
-      // Phase 2: Image upload
-      setProgress({ step: 2, label: 'Uploading image...' });
       let finalImageUrl = wizardState.existingThumbnail;
       let finalImageName = wizardState.existingImageName;
+
+      // Run content moderation, image moderation, and image upload concurrently
+      const contentModP = addCampaignService.moderateContent(wizardState.dealHeading, wizardState.offerValue, plainDesc);
+
+      let imageUploadP: Promise<{ publicUrl: string; imageName: string } | null> = Promise.resolve(null);
+      let imageModerationP: Promise<{ flagged: boolean; reason: string } | null> = Promise.resolve(null);
+
       if (wizardState.selectedImageFile) {
-        const upload = await dealOfDayService.uploadDealImage(user.id, wizardState.selectedImageFile);
-        finalImageUrl = upload.publicUrl;
-        finalImageName = upload.imageName;
+        imageModerationP = addCampaignService.moderateImage(wizardState.selectedImageFile);
+        // Start upload in parallel — if moderation fails we discard the result
+        imageUploadP = dealOfDayService.uploadDealImage(user.id, wizardState.selectedImageFile);
+      }
+
+      const [contentResult, imageModResult, imageUploadResult] = await Promise.all([
+        contentModP, imageModerationP, imageUploadP,
+      ]);
+
+      if (contentResult.flagged) throw new Error(contentResult.reason);
+      if (imageModResult?.flagged) throw new Error(imageModResult.reason);
+
+      if (imageUploadResult) {
+        setProgress({ step: 2, label: 'Uploading image...' });
+        finalImageUrl = imageUploadResult.publicUrl;
+        finalImageName = imageUploadResult.imageName;
       }
 
       if (!finalImageUrl || !finalImageName) {
         throw new Error('Image is required for Deal of the Day');
       }
 
-      // Phase 3: Translate + Create DOTD
+      // Phase 2: Create DOTD campaign (without waiting for translations)
       setProgress({ step: 3, label: 'Publishing Deal of the Day...' });
-
-      const translations = await addCampaignService.translateCampaignData(
-        wizardState.dealHeading,
-        wizardState.offerValue,
-        wizardState.description,
-        user.store_name
-      );
+      timer.mark('campaign_create');
 
       const payload = {
         shop_name: user.store_name,
@@ -151,15 +159,30 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
         image_url: finalImageUrl,
         image_name: finalImageName,
         latlong: store ? `${store.latitude}, ${store.longitude}` : '0.0, 0.0',
-        localized_heading: translations.heading,
-        localized_offer: translations.offer,
-        localized_description: translations.description,
-        localized_shop_name: translations.shop_name,
       };
 
-      await dealOfDayService.createDealOfDay(user.id, payload);
+      const result = await dealOfDayService.createDealOfDay(user.id, payload);
+      const campaignId = result?.campaign?.campaign_id;
+
+      // Background translation (fire-and-forget) — same pattern as regular campaigns
+      addCampaignService.translateCampaignData(
+        wizardState.dealHeading, wizardState.offerValue,
+        wizardState.description, user.store_name
+      ).then(translations => {
+        if (translations && campaignId) {
+          addCampaignService.updateCampaign(campaignId, {
+            localized_heading: translations.heading,
+            localized_offer: translations.offer,
+            localized_description: translations.description,
+            localized_shop_name: translations.shop_name,
+          });
+        }
+      }).catch(err => console.error('[DotdWizard] Background translation failed:', err));
+
+      timer.end('publish_success');
       onPublishSuccess();
     } catch (err: any) {
+      timer.end('error');
       if (err.isModerationBlock && err.moderationField) {
         onModerationBlock(err.moderationField, err.message || 'This field contains content that violates our guidelines.');
       } else {

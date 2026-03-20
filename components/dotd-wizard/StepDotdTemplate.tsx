@@ -30,7 +30,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     tagline: 'Midday crowd puller',
     heading: 'Lunch Rush Deal',
     offer: 'Buy 1 Get 1 FREE on <Your Item>',
-    description: '🍽️ Lunch Rush Special!\n\nBeat the afternoon slump with an unbeatable deal.\n\n🕐 Valid 11 AM – 3 PM today\n🎁 Buy 1, Get 1 FREE\n📍 Dine-in & takeaway\n\n💡 Perfect for lunch with colleagues or friends!',
+    description: '🍽️ Lunch Rush Special!\n\nShake off the afternoon slump with an unbeatable deal.\n\n🕐 Valid 11 AM – 3 PM today\n🎁 Buy 1, Get 1 FREE\n📍 Dine-in & takeaway\n\n💡 Perfect for lunch with colleagues or friends!',
     category: 'lunch',
     discount: 50,
   },
