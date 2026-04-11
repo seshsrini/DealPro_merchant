@@ -81,7 +81,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
     try {
       const response = await fetch(`https://ifsc.razorpay.com/${ifsc}`);
       if (!response.ok) {
-        throw new Error('Invalid IFSC Code or Bank not found.');
+        throw new Error(t('m_ifsc_invalid'));
       }
       const data = await response.json();
       if (data.BANK && data.BRANCH) {
@@ -89,11 +89,11 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
         setBranchName(data.BRANCH);
         setIfscError(null);
       } else {
-        throw new Error('Bank details incomplete for this IFSC.');
+        throw new Error(t('m_bank_incomplete'));
       }
     } catch (err: any) {
       console.error("Razorpay IFSC API Error:", err);
-      setIfscError('Unable to fetch bank details. Please try again.');
+      setIfscError(t('m_ifsc_fetch_fail'));
       setBankName('');
       setBranchName('');
     } finally {
@@ -105,7 +105,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
     if (ifscCode.length === 11 && isIfscValid) {
       fetchBankDetails(ifscCode);
     } else if (ifscCode.length > 0 && ifscCode.length < 11 || (ifscCode.length === 11 && !isIfscValid)) {
-      setIfscError('Invalid IFSC format.');
+      setIfscError(t('m_ifsc_format'));
       setBankName('');
       setBranchName('');
     } else if (ifscCode.length === 0) {
@@ -117,7 +117,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
 
   const handleVerifyAccount = async () => {
     if (!user.id || !isIfscValid || !bankName || !branchName || accountNumber !== confirmAccountNumber || accountNumber.length < 9) {
-      setAccountError('Please fill all bank details correctly.');
+      setAccountError(t('m_fill_details'));
       return;
     }
 
@@ -139,19 +139,19 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
 
       if (response.success) {
         setPennyDropStatus('initiated');
-        setPennyDropFeedback('Penny drop initiated successfully! Check your account.');
+        setPennyDropFeedback(t('m_penny_success'));
         setTimeout(() => {
           setPennyDropStatus('verified');
-          setPennyDropFeedback('Account verified! ₹1 credit received.');
+          setPennyDropFeedback(t('m_penny_credit'));
         }, 5000);
       } else {
         setPennyDropStatus('failed');
-        setPennyDropFeedback(response.message || 'Penny drop failed. Please re-check details.');
+        setPennyDropFeedback(response.message || t('m_penny_fail'));
       }
     } catch (err: any) {
       console.error("Penny drop initiation failed:", err);
       setPennyDropStatus('failed');
-      setPennyDropFeedback('Unable to initiate verification. Please try again.');
+      setPennyDropFeedback(t('m_penny_error'));
     } finally {
       setIsVerifyingAccount(false);
     }
@@ -170,7 +170,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
     }
 
     if (!isIfscValid || !bankName || !branchName || pennyDropStatus !== 'verified') {
-        setSaveError("Bank account must be verified via penny drop.");
+        setSaveError(t('m_bank_must_verify'));
         setIsSaving(false);
         return;
     }
@@ -201,11 +201,11 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
           ...updateData
         }));
 
-        setSaveSuccess('Bank & KYC details saved successfully!');
+        setSaveSuccess(t('m_bank_saved'));
         setTimeout(() => setView('profile'), 2000);
     } catch (err: any) {
         console.error("Failed to save bank/KYC details:", err);
-        setSaveError("Unable to save details. Please try again.");
+        setSaveError(t('m_bank_save_fail'));
     } finally {
         setIsSaving(false);
     }
@@ -234,8 +234,8 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
           <ArrowLeft className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
         </button>
         <div className="flex-1">
-          <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Bank Verification</h2>
-          <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Secure payout gateway</p>
+          <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_bank_verification')}</h2>
+          <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{t('m_secure_payout')}</p>
         </div>
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
           <Banknote className="w-5 h-5 text-emerald-500" />
@@ -264,8 +264,8 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
               <Building className="w-4 h-4 text-blue-500" />
             </div>
             <div>
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Bank Account Details</h3>
-              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>For secure payouts and transactions</p>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_bank_details')}</h3>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_bank_details_sub')}</p>
             </div>
           </div>
 
@@ -274,7 +274,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
               <Building className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
               <input
                 type="text"
-                placeholder="IFSC Code (e.g., HDFC0000001)"
+                placeholder={t('m_ifsc_code')}
                 className={`${inputClass} pl-11 ${ifscError ? (isDark ? 'border-red-500/50' : 'border-red-400') : ''}`}
                 value={ifscCode}
                 onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
@@ -289,7 +289,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
 
             <input
               type="text"
-              placeholder="Bank Name"
+              placeholder={t('m_bank_name')}
               className={`${inputClass} opacity-60 cursor-not-allowed`}
               value={bankName}
               readOnly
@@ -297,7 +297,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
             />
             <input
               type="text"
-              placeholder="Branch Name"
+              placeholder={t('m_branch_name')}
               className={`${inputClass} opacity-60 cursor-not-allowed`}
               value={branchName}
               readOnly
@@ -308,7 +308,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
               <DollarSign className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
               <input
                 type="text"
-                placeholder="Account Number"
+                placeholder={t('m_acc_number')}
                 className={`${inputClass} pl-11`}
                 value={accountNumber}
                 onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
@@ -320,7 +320,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
               <DollarSign className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
               <input
                 type="text"
-                placeholder="Confirm Account Number"
+                placeholder={t('m_confirm_acc')}
                 className={`${inputClass} pl-11`}
                 value={confirmAccountNumber}
                 onChange={(e) => setConfirmAccountNumber(e.target.value.replace(/\D/g, ''))}
@@ -329,7 +329,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
               />
             </div>
             {accountNumber.length > 0 && confirmAccountNumber.length > 0 && accountNumber !== confirmAccountNumber && (
-              <p className="text-red-500 text-xs">Account numbers do not match.</p>
+              <p className="text-red-500 text-xs">{t('m_acc_mismatch')}</p>
             )}
 
             <div className="relative">
@@ -340,15 +340,15 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
                 onChange={(e) => setAccountType(e.target.value as 'savings' | 'current' | 'other')}
                 required
               >
-                <option value="current">Current Account (Default)</option>
-                <option value="savings">Savings Account</option>
+                <option value="current">{t('m_current_acc')}</option>
+                <option value="savings">{t('m_savings_acc')}</option>
                 <option value="other">Other</option>
               </select>
             </div>
           </div>
 
           <p className={`text-[10px] italic text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-            Account number is encrypted before being sent to the database.
+            {t('m_acc_encrypted')}
           </p>
 
           <button
@@ -369,7 +369,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
               <Fingerprint className="w-4 h-4" />
             )}
             <span>
-              {pennyDropStatus === 'verified' ? 'Account Verified' : (isVerifyingAccount ? 'Initiating Penny Drop...' : 'Verify Account')}
+              {pennyDropStatus === 'verified' ? t('m_account_verified') : (isVerifyingAccount ? t('m_penny_drop') : t('m_verify_account'))}
             </span>
           </button>
           {pennyDropFeedback && (
@@ -384,8 +384,8 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
               <UserIcon className="w-4 h-4 text-purple-500" />
             </div>
             <div>
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>KYC Details</h3>
-              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Additional compliance for merchants</p>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_kyc_details')}</h3>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_kyc_sub')}</p>
             </div>
           </div>
 
@@ -394,7 +394,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
               <UserIcon className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
               <input
                 type="text"
-                placeholder="PAN Number"
+                placeholder={t('m_pan_number')}
                 className={`${inputClass} pl-11 ${panNumber.length > 0 && !isPanValid ? (isDark ? 'border-red-500/50' : 'border-red-400') : ''}`}
                 value={panNumber}
                 onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
@@ -403,7 +403,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
               {panNumber.length > 0 && !isPanValid && <AlertTriangle className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-red-500" />}
               {panNumber.length === 10 && isPanValid && <CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />}
             </div>
-            {panNumber.length > 0 && !isPanValid && <p className="text-red-500 text-xs">Invalid PAN format.</p>}
+            {panNumber.length > 0 && !isPanValid && <p className="text-red-500 text-xs">{t('m_pan_invalid')}</p>}
 
             <div className="relative">
               <Info className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
@@ -413,7 +413,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
                 onChange={(e) => setGstRegistrationType(e.target.value as 'Registered' | 'Unregistered' | 'Composition')}
                 required
               >
-                <option value="Unregistered">GST Registration Type</option>
+                <option value="Unregistered">{t('m_gst_type')}</option>
                 {GST_REGISTRATION_TYPES.map(type => (
                   <option key={type} value={type}>{type}</option>
                 ))}
@@ -432,7 +432,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
           ) : (
             <>
               <ShieldCheck className="w-4 h-4" />
-              <span>Save Bank & KYC Details</span>
+              <span>{t('m_save_bank_kyc')}</span>
             </>
           )}
         </button>
@@ -440,15 +440,15 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
 
       {/* Trust Badges */}
       <div className="text-center space-y-3">
-        <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Your security is our priority</p>
+        <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_security_priority')}</p>
         <div className="flex items-center justify-center gap-6">
           <div className="flex items-center gap-1.5 text-emerald-500">
             <ShieldCheck className="w-4 h-4" />
-            <span className="text-xs font-medium">SSL Secured</span>
+            <span className="text-xs font-medium">{t('m_ssl_secured')}</span>
           </div>
           <div className="flex items-center gap-1.5 text-emerald-500">
             <Lock className="w-4 h-4" />
-            <span className="text-xs font-medium">PCI-DSS Compliant</span>
+            <span className="text-xs font-medium">{t('m_pci_compliant')}</span>
           </div>
         </div>
       </div>

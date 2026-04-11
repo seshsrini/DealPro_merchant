@@ -56,10 +56,10 @@ export function isValidPassword(password: string): boolean {
 }
 // End of inlined validation.ts
 
-// Inlined content of authenticateRequest
-export async function authenticateRequest(req: Request, corsHeaders: HeadersInit): Promise<Response | any> { // Using 'any' for User type in EF context for simplicity
+// Inlined content of authenticateRequest (uses service role for reliable token verification)
+export async function authenticateRequest(req: Request, corsHeaders: HeadersInit): Promise<Response | any> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
   const authHeader = req.headers.get('Authorization');
   const jwt = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
@@ -71,18 +71,8 @@ export async function authenticateRequest(req: Request, corsHeaders: HeadersInit
     });
   }
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-    global: {
-      headers: { Authorization: `Bearer ${jwt}` },
-    },
-  });
-
-  const { data: { user }, error } = await supabase.auth.getUser(jwt);
+  const admin = createClient(supabaseUrl, serviceKey);
+  const { data: { user }, error } = await admin.auth.getUser(jwt);
 
   if (error || !user) {
     console.error('[authenticateRequest] JWT authentication failed:', error?.message);

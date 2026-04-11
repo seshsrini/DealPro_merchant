@@ -283,8 +283,12 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
 
   const handleBack = () => {
     if (returnToReview && currentStep !== 7) {
-      setReturnToReview(false); // Cancel return-to-review if user navigates back
+      // When editing from review, "Back" returns to review instead of previous step
+      setReturnToReview(false);
+      goToStep(7);
+      return;
     }
+    if (currentStep <= 0) return; // Don't go before welcome
     goToStep(currentStep - 1);
   };
 

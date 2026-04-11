@@ -5,6 +5,7 @@ import { AuthStack } from './AuthStack';
 import { MemberJoin } from './memberJoin';
 import { MerchantStack } from './MerchantStack';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { PermissionsProvider } from './contexts/PermissionsContext';
 import { LanguageSelection } from './components/LanguageSelection';
 import { LocationPermission } from './components/LocationPermission';
 import { InviteCodeScreen } from './components/InviteCodeScreen';
@@ -313,28 +314,30 @@ const AppContent: React.FC = () => {
             setUser(userWithSub);
             await biometricService.saveSession(userWithSub);
 
-            // If no active subscription, check if profile is complete first
-            // (subscription check may have failed due to auth timing — don't block complete merchants)
-            const profileComplete = !!(savedUser.full_name && savedUser.store_name && savedUser.category && savedUser.business_type && savedUser.terms_accepted && savedUser.privacy_accepted);
-            if (!subscriptionInfo.hasActiveSubscription && !profileComplete) {
-              console.log('[App] No active subscription and profile incomplete — forcing onboarding');
-              navigateTo('merchant_onboarding');
-              return;
-            }
-            if (!subscriptionInfo.hasActiveSubscription && profileComplete) {
-              console.log('[App] Subscription check failed but profile complete — going to dashboard');
+            // Check if this is a staff member — they skip onboarding entirely
+            const isStaffMember = savedUser.staff_role && savedUser.staff_role !== 'owner';
+
+            // Existing merchant = has store_name + full_name from original signup
+            // Don't force onboarding for missing optional fields (terms, privacy, category, etc.)
+            const profileComplete = !!(savedUser.full_name && savedUser.store_name);
+
+            if (isStaffMember) {
+              // Staff members always go to dashboard — no onboarding
+              console.log('[App] Staff member session restored — skipping onboarding → dashboard');
               userWithSub.hasActiveSubscription = true;
-            }
-
-            const profileFieldsOk = !!(savedUser.full_name && savedUser.store_name && savedUser.category && savedUser.business_type && savedUser.terms_accepted && savedUser.privacy_accepted);
-            // Use storeCount — from subscription info or from saved user
-            const hasStores = (subscriptionInfo.storeCount ?? savedUser.storeCount ?? 0) > 0;
-
-            if (profileFieldsOk && hasStores) {
+              navigateTo('merchant_dashboard');
+            } else if (profileComplete) {
+              if (!subscriptionInfo.hasActiveSubscription) {
+                console.log('[App] Subscription check failed but profile complete — trusting saved session → dashboard');
+                userWithSub.hasActiveSubscription = savedUser.hasActiveSubscription ?? true;
+              }
               navigateTo('merchant_dashboard');
             } else {
-              console.log('[App] Profile incomplete — profileFieldsOk:', profileFieldsOk, 'hasStores:', hasStores, 'storeCount:', subscriptionInfo.storeCount);
-              // Clear any stale onboarding draft so merchant starts fresh
+              if (!subscriptionInfo.hasActiveSubscription) {
+                console.log('[App] No subscription and profile incomplete — onboarding');
+              } else {
+                console.log('[App] Has subscription but profile incomplete — onboarding');
+              }
               localStorage.removeItem(`merchant_onboarding_draft_${savedUser.id}`);
               navigateTo('merchant_onboarding');
             }
@@ -502,7 +505,7 @@ const AppContent: React.FC = () => {
           <Header
             currentView={view}
             setView={navigateTo}
-            showBack={['detail', 'register', 'forgot_password', 'merchant_deals', 'edit_profile', 'merchant_stores', 'help_feedback', 'my_redemptions', 'verify_phone', 'onboarding', 'merchant_onboarding', 'merchant_subscriptions', 'payment_plans', 'bank_verification', 'store_search', 'notifications'].includes(view)}
+            showBack={['detail', 'register', 'forgot_password', 'merchant_deals', 'edit_profile', 'merchant_stores', 'help_feedback', 'my_redemptions', 'verify_phone', 'onboarding', 'merchant_subscriptions', 'payment_plans', 'bank_verification', 'store_search', 'notifications'].includes(view)}
             onBack={handleBackNavigation}
             theme={theme}
             toggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
@@ -573,6 +576,7 @@ const AppContent: React.FC = () => {
                 theme={theme}
               />
             ) : user.role === 'merchant' ? ( // Check for 'merchant' role
+              <PermissionsProvider userId={user.id}>
               <MerchantStack
                 view={view}
                 setView={navigateTo}
@@ -591,6 +595,7 @@ const AppContent: React.FC = () => {
                 preSelectedTab={preSelectedTab}
                 setPreSelectedTab={setPreSelectedTab}
               />
+              </PermissionsProvider>
             ) : null}
           </main>
           {user.isLoggedIn && user.role === 'merchant' && !['verify_phone', 'merchant_onboarding'].includes(view) && (

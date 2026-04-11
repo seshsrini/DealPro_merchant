@@ -15,21 +15,17 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
-// --- HELPER: Authenticate User ---
+// --- HELPER: Authenticate User (uses service role for reliable token verification) ---
 async function authenticateRequest(req: Request) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const authHeader = req.headers.get('Authorization');
   const jwt = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
 
   if (!jwt) throw new Error('Unauthorized: No access token provided.');
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: false },
-    global: { headers: { Authorization: `Bearer ${jwt}` } },
-  });
-
-  const { data: { user }, error } = await supabase.auth.getUser(jwt);
+  const admin = createClient(supabaseUrl, serviceKey);
+  const { data: { user }, error } = await admin.auth.getUser(jwt);
   if (error || !user) throw new Error('Unauthorized: Invalid token.');
   return { user, jwt };
 }
@@ -47,53 +43,47 @@ Deno.serve(async (req) => {
   try {
     // 2. Authenticate
     const { user, jwt } = await authenticateRequest(req);
-    const { merchantId } = await req.json();
+    const body = await req.json();
 
-    console.log(`[get-stores] Request for Merchant: ${merchantId} by User: ${user.id}`);
-
-    // 3. Security Check: Payload ID must match Token ID
-    if (merchantId !== user.id) {
-      return new Response(JSON.stringify({ error: 'Forbidden: ID Mismatch' }), { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-        status: 403 
-      });
-    }
-
-    // 4. Create Admin Client to verify role (bypasses RLS to see if profile exists)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { data: merchantProfile, error: profileError } = await supabaseAdmin
+    // 3. Resolve effective merchant ID — supports owners and staff members
+    let effectiveMerchantId = body.merchantId || user.id;
+
+    // Check merchant_staff to find the real merchant ID
+    const { data: staffRows } = await supabaseAdmin
+      .from('merchant_staff')
+      .select('merchant_id, role')
+      .eq('user_id', user.id)
+      .eq('status', 'active');
+
+    if (staffRows && staffRows.length > 0) {
+      const staffEntry = staffRows.find(r => r.merchant_id !== user.id) || staffRows[0];
+      effectiveMerchantId = staffEntry.merchant_id;
+    }
+
+    // Verify the resolved merchant exists
+    const { data: merchantProfile } = await supabaseAdmin
       .from('merchant_profiles')
       .select('role')
-      .eq('id', user.id)
+      .eq('id', effectiveMerchantId)
       .maybeSingle();
 
-    if (profileError) throw new Error(`DB Error: ${profileError.message}`);
-
-    if (!merchantProfile) {
-      console.error(`[get-stores] Profile row missing in merchant_profiles for UUID: ${user.id}`);
-      return new Response(JSON.stringify({ error: 'Merchant profile row does not exist.' }), {
+    if (!merchantProfile || merchantProfile.role !== 'merchant') {
+      console.error(`[get-stores] No valid merchant profile for ID: ${effectiveMerchantId} (userId: ${user.id})`);
+      return new Response(JSON.stringify({ error: 'Merchant profile not found.' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 404
+        status: 404,
       });
     }
 
-    if (merchantProfile.role !== 'merchant') {
-      return new Response(JSON.stringify({ error: 'Unauthorized: Not a merchant account.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 403
-      });
-    }
+    console.log(`[get-stores] Fetching stores for merchant: ${effectiveMerchantId} (userId: ${user.id})`);
 
-    // 5. Fetch Stores using the USER'S JWT (Respects RLS on the stores table)
-    const supabaseUser = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
-        global: { headers: { Authorization: `Bearer ${jwt}` } }
-    });
-
-    const { data: stores, error: storeError } = await supabaseUser
+    // 4. Fetch Stores using admin client (service role bypasses RLS)
+    const { data: stores, error: storeError } = await supabaseAdmin
       .from('merchant_stores')
       .select('*')
-      .eq('merchant_id', merchantId)
+      .eq('merchant_id', effectiveMerchantId)
       .order('id', { ascending: true });
 
     if (storeError) throw storeError;

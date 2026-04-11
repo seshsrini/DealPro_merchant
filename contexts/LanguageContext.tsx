@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Locale } from '../types';
+import { MERCHANT_TRANSLATIONS } from './merchantTranslations';
 
 interface Dictionary {
   [key: string]: {
@@ -1451,6 +1452,15 @@ const DICTIONARY: Dictionary = {
     store_search_adjust_query: 'તમારી શોધ ક્વેરીને સમાયોજિત કરવાનો પ્રયાસ કરો.', // NEW
   }
 };
+
+// Merge merchant-specific translations into DICTIONARY
+for (const [lang, translations] of Object.entries(MERCHANT_TRANSLATIONS)) {
+  if (DICTIONARY[lang]) {
+    Object.assign(DICTIONARY[lang], translations);
+  } else {
+    DICTIONARY[lang] = translations;
+  }
+}
 
 interface LanguageContextType {
   locale: Locale;

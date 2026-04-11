@@ -15,21 +15,13 @@ const corsHeaders = {
 
 async function authenticateRequest(req: Request) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const authHeader = req.headers.get('Authorization');
   const jwt = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
   if (!jwt) throw new Error('Unauthorized: No access token provided.');
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-    global: { headers: { Authorization: `Bearer ${jwt}` } },
-  });
-
-  const { data: { user }, error } = await supabase.auth.getUser(jwt);
+  const admin = createClient(supabaseUrl, serviceKey);
+  const { data: { user }, error } = await admin.auth.getUser(jwt);
   if (error || !user) {
     console.error('[manage-stores] Auth failed:', error?.message);
     throw new Error('Unauthorized: Invalid or expired token.');
@@ -48,10 +40,35 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // Use authenticated user ID — don't trust merchantId from body
-    const merchantId = user.id;
-
     const admin = createClient(supabaseUrl, serviceKey);
+
+    // Resolve effective merchant ID — supports both owners and staff members
+    // Staff members operate under the owner's merchant_id
+    let merchantId = user.id;
+    const { data: staffRow } = await admin
+      .from('merchant_staff')
+      .select('merchant_id, role')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .order('role', { ascending: true })
+      .limit(5);
+
+    if (staffRow && staffRow.length > 0) {
+      // Prefer the row where this user is staff/manager of another merchant
+      const staffEntry = staffRow.find(r => r.merchant_id !== user.id) || staffRow[0];
+      merchantId = staffEntry.merchant_id;
+    } else {
+      // No merchant_staff row — check merchant_profiles directly
+      const { data: profile } = await admin
+        .from('merchant_profiles')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (profile) {
+        merchantId = profile.id;
+      }
+    }
+    console.log('[manage-stores] Resolved merchantId:', merchantId, 'from userId:', user.id);
 
     // ── UPDATE STORE ──
     if (action === 'update') {
@@ -63,8 +80,8 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Only allow updating address fields, not store_name
       const allowed: Record<string, unknown> = {};
+      if (typeof data.store_name === 'string') allowed.store_name = data.store_name;
       if (typeof data.address === 'string') allowed.address = data.address;
       if (typeof data.landmark === 'string') allowed.landmark = data.landmark;
       if (typeof data.locality === 'string') allowed.locality = data.locality;

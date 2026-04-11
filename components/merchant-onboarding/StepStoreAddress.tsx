@@ -340,10 +340,10 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
           <label className={labelClass}>Locality / Area</label>
           <input
             value={localitySearch}
-            onChange={(e) => handleLocalitySearch(e.target.value)}
-            onFocus={() => localityResults.length > 0 && setShowLocalityDropdown(true)}
-            placeholder="Search locality"
-            className={inputClass}
+            readOnly
+            tabIndex={-1}
+            placeholder="Auto-filled from pincode"
+            className={`${inputClass} cursor-default ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'}`}
           />
           {showLocalityDropdown && (
             <div className={`absolute top-full left-0 right-0 z-20 mt-1 rounded-xl border max-h-40 overflow-y-auto ${

@@ -1,13 +1,7 @@
 /**
  * productLookupService.ts
- * All product lookups via SerpApi Google Shopping.
- *
- * Dev (browser): requests go through the Vite proxy (/serpapi → serpapi.com)
- *                to avoid browser CORS restrictions.
- * Prod (Capacitor native): direct call to serpapi.com — CORS doesn't apply to
- *                          native HTTP requests.
- *
- * Requires: VITE_SERPAPI_KEY in .env.local
+ * Product lookups via the product-search edge function (SerpApi Google Shopping).
+ * All requests go through Supabase edge function — API key stays server-side.
  */
 
 export interface ProductData {
@@ -20,13 +14,10 @@ export interface ProductData {
   sourceApi: string;
 }
 
-const SERPAPI_KEY = import.meta.env.VITE_SERPAPI_KEY as string;
+import { supabase } from './supabaseClient';
 
-// In dev the Vite proxy strips /serpapi and forwards to serpapi.com (no CORS).
-// In prod the native Capacitor runtime calls serpapi.com directly (no CORS).
-const SERPAPI_BASE = import.meta.env.DEV
-  ? '/serpapi/search.json'
-  : 'https://serpapi.com/search.json';
+const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_KEY;
 
 // ── Normalizer ────────────────────────────────────────────────────────────────
 
@@ -45,37 +36,48 @@ function normalizeSerpResult(result: any, schemaId: string): ProductData {
   };
 }
 
-// ── Core search ───────────────────────────────────────────────────────────────
+// ── Core search (via edge function — works uniformly across all devices) ──────
 
 async function searchGoogleShopping(
   query: string,
   schemaId: string,
   limit = 6
 ): Promise<ProductData[]> {
-  if (!SERPAPI_KEY) {
-    console.warn('[productLookupService] VITE_SERPAPI_KEY is not set');
-    return [];
-  }
   try {
-    const params = new URLSearchParams({
-      engine:  'google_shopping',
-      q:       query,
-      num:     String(limit),
-      api_key: SERPAPI_KEY,
-      gl:      'in',   // India results
-      hl:      'en',   // English
-    });
-    const res = await fetch(`${SERPAPI_BASE}?${params.toString()}`, {
-      signal: AbortSignal.timeout(12000),
-    });
-    if (!res.ok) return [];
-    const json = await res.json();
-    const results: any[] = json.shopping_results ?? [];
+    // Try supabase.functions.invoke first (uses user session)
+    let data: any = null;
+    try {
+      const resp = await supabase.functions.invoke('product-search', {
+        body: { query, limit },
+      });
+      if (!resp.error) data = resp.data;
+    } catch {}
+
+    // Fallback: direct fetch with anon key only (no JWT required — function has no auth)
+    if (!data && SUPABASE_URL && SUPABASE_ANON_KEY) {
+      console.log('[productLookupService] Trying direct fetch fallback...');
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/product-search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ query, limit }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (res.ok) data = await res.json();
+    }
+
+    if (!data) return [];
+
+    const results: any[] = data?.shopping_results ?? [];
     return results
       .slice(0, limit)
       .map(r => normalizeSerpResult(r, schemaId))
       .filter(p => p.name.trim() !== '');
-  } catch {
+  } catch (err) {
+    console.warn('[productLookupService] Search failed:', err);
     return [];
   }
 }

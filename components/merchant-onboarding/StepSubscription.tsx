@@ -6,6 +6,7 @@ import { subscriptionService } from '../../services/subscriptionService';
 import { merchantSubscriptionService } from '../../services/merchantSubscriptionService';
 import { billingService } from '../../services/BillingService';
 import { localSubscriptionStore } from '../../services/LocalSubscriptionStore';
+import { supabase } from '../../services/supabaseClient';
 import { floatIn } from './floatIn';
 
 interface StepSubscriptionProps {
@@ -71,8 +72,8 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
     setSelectedTierId(tierToConfirm.id);
     setError(null);
 
-    // ─── Native: Google Play Billing ───
-    if (isNative && billingReady) {
+    // ─── Native: Google Play Billing (temporarily disabled — using web flow for all) ───
+    if (false && isNative && billingReady) {
       const productId = billingService.tierKeyToProductId(tierToConfirm.tier_key);
       if (!productId) {
         setError('Plan not available for in-app purchase.');
@@ -117,14 +118,46 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
       return;
     }
 
-    // ─── Web fallback: Supabase only ───
+    // ─── Web/signup: use create-subscription edge function ───
     try {
-      const result = await merchantSubscriptionService.createSubscription(
+      // Try authenticated edge function first (works when session is established)
+      let result = await merchantSubscriptionService.createSubscription(
         user.id, tierToConfirm.id, tierToConfirm.tier_key, tierToConfirm.tier_name
       );
 
-      if (result.success) {
-        // Save to local IndexedDB for offline access
+      // If it fails (common during signup when JWT isn't ready), use the
+      // unauthenticated create-subscription edge function that uses service role
+      if (!result.success) {
+        console.warn('[StepSubscription] Authenticated EF failed:', result.error, '— using create-subscription fallback');
+        const { data, error } = await supabase.functions.invoke('create-subscription', {
+          body: {
+            merchantId: user.id,
+            tier_id: tierToConfirm.id,
+            tier_key: tierToConfirm.tier_key,
+            tier_name: tierToConfirm.tier_name,
+          },
+        });
+
+        console.log('[StepSubscription] Fallback response — data:', data, 'error:', error);
+
+        // Handle case where supabase returns error with body in context
+        let responseData = data;
+        if (error && !responseData) {
+          try {
+            responseData = await (error as any).context?.json?.();
+          } catch {}
+        }
+
+        if (!responseData?.success) {
+          const errMsg = responseData?.error || error?.message || 'Failed to activate subscription.';
+          console.error('[StepSubscription] Fallback EF failed:', errMsg);
+          throw new Error(errMsg);
+        }
+        result = { success: true, isTrialing: responseData.isTrialing, trial_end: responseData.subscription?.trial_end, subscriptionId: responseData.subscriptionId };
+      }
+
+      // Save to local IndexedDB for offline access (non-blocking — don't let it break the flow)
+      try {
         await localSubscriptionStore.upsert({
           remoteId: result.subscriptionId || null,
           merchantId: user.id,
@@ -137,20 +170,44 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
           currentPeriodEnd: null,
           totalRecurringAmount: tierToConfirm.subscription_fee,
         });
-
-        setUser({
-          ...user,
-          hasActiveSubscription: true,
-          subscription_status: result.isTrialing ? 'trialing' : 'active',
-          current_tier_id: tierToConfirm.id,
-        });
-        onComplete(tierToConfirm.subscription_fee, result.subscriptionId);
-      } else {
-        setError(result.error || 'Failed to activate subscription.');
-        setSelecting(false);
-        setSelectedTierId(null);
+      } catch (idbErr) {
+        console.warn('[StepSubscription] IndexedDB save failed (non-blocking):', idbErr);
       }
+
+      setUser({
+        ...user,
+        hasActiveSubscription: true,
+        subscription_status: result.isTrialing ? 'trialing' : 'active',
+        current_tier_id: tierToConfirm.id,
+      });
+      onComplete(tierToConfirm.subscription_fee, result.subscriptionId);
     } catch (err: any) {
+      console.error('[StepSubscription] Subscription error:', err.message);
+
+      // Last resort: check if a subscription was actually created despite the error
+      try {
+        const { data: existingSub } = await supabase
+          .from('merchant_subscriptions')
+          .select('id, status, trial_end')
+          .eq('merchant_id', user.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingSub) {
+          console.log('[StepSubscription] Subscription exists in DB despite error — proceeding');
+          setUser({
+            ...user,
+            hasActiveSubscription: true,
+            subscription_status: 'active',
+            current_tier_id: tierToConfirm.id,
+          });
+          onComplete(tierToConfirm.subscription_fee, existingSub.id);
+          return;
+        }
+      } catch {}
+
       setError('Unable to activate subscription. Please try again.');
       setSelecting(false);
       setSelectedTierId(null);

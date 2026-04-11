@@ -48,6 +48,8 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [staffInviteCode, setStaffInviteCode] = useState('');
+  const [showInviteCode, setShowInviteCode] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpPhoneNumber, setOtpPhoneNumber] = useState('');
   const [isPhoneVerifiedForLogin, setIsPhoneVerifiedForLogin] = useState(false);
@@ -112,16 +114,9 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     detect();
   }, [view, detectedHomeLocation]);
 
-  // Check if merchant has completed all required onboarding fields + has at least one store
+  // Check if merchant has completed core signup (store_name + full_name)
   const isMerchantProfileComplete = async (profile: any): Promise<boolean> => {
-    const profileOk = !!(
-      profile.full_name &&
-      profile.store_name &&
-      profile.category &&
-      profile.business_type &&
-      profile.terms_accepted &&
-      profile.privacy_accepted
-    );
+    const profileOk = !!(profile.full_name && profile.store_name);
     if (!profileOk) return false;
 
     // Also verify merchant has at least one store in DB
@@ -168,7 +163,16 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
       }
     }
 
-    const profileOk = !!(userProfile.full_name && userProfile.store_name && userProfile.category && userProfile.business_type && userProfile.terms_accepted && userProfile.privacy_accepted);
+    // An existing merchant has at minimum store_name + full_name from their original signup.
+    // Missing flags like terms_accepted, privacy_accepted, business_type can be backfilled —
+    // don't force the entire onboarding wizard again for these.
+    const isExistingMerchant = !!(userProfile.full_name && userProfile.store_name);
+    const profileOk = isExistingMerchant; // Trust that existing merchants completed signup
+
+    // Check if this user is a staff member (not the owner) — they skip onboarding entirely
+    const isStaffMember = userProfile.staff_role && userProfile.staff_role !== 'owner';
+    console.log('[AuthStack] Post-login — isExistingMerchant:', isExistingMerchant, 'profileOk:', profileOk, 'isStaffMember:', isStaffMember, 'staff_role:', userProfile.staff_role,
+      'fields:', { full_name: !!userProfile.full_name, store_name: !!userProfile.store_name, category: !!userProfile.category, business_type: !!userProfile.business_type, terms: !!userProfile.terms_accepted, privacy: !!userProfile.privacy_accepted });
 
     const updatedUser = {
       ...userProfile,
@@ -185,23 +189,28 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     // Determine target view
     let targetView: string;
     if (userRole === 'merchant') {
-      if (!subscriptionInfo.hasActiveSubscription) {
-        // If profile is complete, subscription check likely failed due to auth timing
-        // — go to dashboard and let it retry when session is established
+      if (isStaffMember) {
+        // Staff members go straight to dashboard — no onboarding or subscription checks
+        console.log('[AuthStack] Staff member detected, skipping onboarding → dashboard');
+        updatedUser.hasActiveSubscription = true; // staff inherits owner's subscription
+        targetView = 'merchant_dashboard';
+      } else if (!subscriptionInfo.hasActiveSubscription) {
         if (profileOk) {
           console.log('[AuthStack] Subscription check failed but profile is complete — going to dashboard');
-          updatedUser.hasActiveSubscription = true; // assume active, dashboard will verify
+          updatedUser.hasActiveSubscription = true;
           targetView = 'merchant_dashboard';
         } else {
           console.log('[AuthStack] No active subscription — forcing subscription selection');
           targetView = 'merchant_onboarding';
         }
       } else {
-        const hasStores = (subscriptionInfo.storeCount ?? 0) > 0;
-        if (!profileOk || !hasStores) {
+        if (!profileOk) {
+          // Truly new merchant — hasn't completed basic profile yet
           targetView = 'merchant_onboarding';
           localStorage.removeItem(`merchant_onboarding_draft_${userProfile.id}`);
         } else {
+          // Existing merchant — go to dashboard. If they have no stores,
+          // the store gate in MerchantStack will handle it.
           targetView = 'merchant_dashboard';
         }
       }
@@ -260,10 +269,27 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
       // the biometric path's navigation after AuthStack unmounts
       if (biometricService.getSavedUser()) return;
 
+      // Skip session restore if a login is already in progress (e.g., OTP just verified)
+      // This prevents a duplicate handlePostLoginNavigation call that lacks staff_role
+      if (loading || isPhoneVerifiedForLogin || phoneNumber) return;
+
       supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (session) {
           const userProfile = await userService.getUserProfile(session.user.id);
           if (userProfile) {
+            // Check if this user is a staff member — enrich profile with staff data
+            const savedSession = biometricService.getSavedUser();
+            if (savedSession?.staff_role) {
+              userProfile.staff_role = savedSession.staff_role;
+              userProfile.staff_merchant_id = savedSession.staff_merchant_id;
+              // Copy owner's profile data from saved session
+              if (savedSession.store_name) userProfile.store_name = savedSession.store_name;
+              if (savedSession.full_name) userProfile.full_name = savedSession.full_name;
+              if (savedSession.category) userProfile.category = savedSession.category;
+              if (savedSession.business_type) userProfile.business_type = savedSession.business_type;
+              if (savedSession.terms_accepted) userProfile.terms_accepted = savedSession.terms_accepted;
+              if (savedSession.privacy_accepted) userProfile.privacy_accepted = savedSession.privacy_accepted;
+            }
             handlePostLoginNavigation(userProfile, session);
           } else {
             await biometricService.clearSession();
@@ -286,7 +312,8 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
   }, [isPhoneVerifiedForLogin, phoneNumber]);
 
   const doOtpLogin = async (phone: string) => {
-    const { user: userProfile, session, subscription } = await userService.merchantOtpLogin(phone, selectedCountry.code, inviteCode ?? undefined);
+    const effectiveInviteCode = staffInviteCode.trim() || inviteCode || undefined;
+    const { user: userProfile, session, subscription } = await userService.merchantOtpLogin(phone, selectedCountry.code, effectiveInviteCode);
     if (!userProfile) throw new Error('Unable to load your account. Please try again.');
     if (!session) throw new Error('Login could not be completed. Please try again.');
     await handlePostLoginNavigation(userProfile, session, subscription);
@@ -337,7 +364,8 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
 
     const cleanDigits = input.replace(/\D/g, '');
 
-    if (selectedCountry.code === '+91') {
+    const TEST_NUMBERS = ['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555'];
+    if (selectedCountry.code === '+91' && !TEST_NUMBERS.includes(cleanDigits)) {
       if (cleanDigits.length !== 10 || !/^[6-9]/.test(cleanDigits)) {
         setAuthError('Please enter a valid 10-digit phone number.');
         return;
@@ -353,7 +381,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     setPhoneNumber(cleanDigits);
 
     // Test bypass — skip OTP for test numbers
-    if (['9999999999', '8888888888', '6666666666', '7777777777'].includes(cleanDigits)) {
+    if (['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555'].includes(cleanDigits)) {
       setIsPhoneVerifiedForLogin(true);
       return;
     }

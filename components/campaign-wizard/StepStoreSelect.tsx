@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MapPin, Check } from 'lucide-react';
 import { floatIn } from './floatIn';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 interface MerchantStore {
   id?: string;
@@ -26,6 +27,7 @@ export const StepStoreSelect: React.FC<StepStoreSelectProps> = ({
   stores, selectedStoreId, onChange, onNext, onBack, theme,
 }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
   const isValid = !!selectedStoreId;
   const [visible, setVisible] = useState(false);
 
@@ -47,10 +49,10 @@ export const StepStoreSelect: React.FC<StepStoreSelectProps> = ({
         <MapPin className="w-8 h-8 text-rose-500" />
       </div>
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Select store location
+        {t('m_select_store')}
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        Choose which store this deal applies to.
+        {t('m_choose_store')}
       </p>
 
       <div style={floatIn(300, visible)} className="space-y-3 flex-1 overflow-y-auto max-h-[50vh]">
@@ -103,7 +105,7 @@ export const StepStoreSelect: React.FC<StepStoreSelectProps> = ({
 
         {stores.length === 0 && (
           <div className={`text-center py-8 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-            <p className="text-sm">No stores found. Please add a store first.</p>
+            <p className="text-sm">{t('m_no_stores')}</p>
           </div>
         )}
       </div>
@@ -115,14 +117,14 @@ export const StepStoreSelect: React.FC<StepStoreSelectProps> = ({
             isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
           }`}
         >
-          Back
+          {t('m_back')}
         </button>
         <button
           onClick={onNext}
           disabled={!isValid}
           className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Continue
+          {t('m_continue')}
         </button>
       </div>
     </div>

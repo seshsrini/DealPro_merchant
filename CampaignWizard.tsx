@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useReducer, useCallback } from 'react';
 import { AppView, Deal, User } from './types';
-import { X, CheckCircle2, Loader2, RotateCcw } from 'lucide-react';
+import { X, CheckCircle2, Loader2, RotateCcw, Bookmark } from 'lucide-react';
 import { addCampaignService } from './services/addCampaignService';
 import { merchantService } from './services/merchantService';
 import { campaignTemplatesService, CampaignTemplate } from './services/campaignTemplatesService';
+import { useTranslation } from './contexts/LanguageContext';
 
 // Step components
 import { StepTemplate } from './components/campaign-wizard/StepTemplate';
@@ -27,6 +28,12 @@ interface WizardState {
   selectedImageFile: File | null;
   existingThumbnail: string | null;
   existingImageName: string | null;
+  // Multi-media: up to 5 images + 1 video
+  additionalImageFiles: File[];
+  additionalImageUrls: string[];
+  selectedVideoFile: File | null;
+  existingVideoUrl: string | null;
+  imagePriceOverlays: Record<number, { discountPct: string; offerPrice: string }>;
 }
 
 type WizardAction =
@@ -44,6 +51,11 @@ const initialState: WizardState = {
   selectedImageFile: null,
   existingThumbnail: null,
   existingImageName: null,
+  additionalImageFiles: [],
+  additionalImageUrls: [],
+  selectedVideoFile: null,
+  existingVideoUrl: null,
+  imagePriceOverlays: {},
 };
 
 function wizardReducer(state: WizardState, action: WizardAction): WizardState {
@@ -51,7 +63,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
     case 'SET_FIELD':
       return { ...state, [action.field]: action.value };
     case 'RESTORE_DRAFT':
-      return { ...state, ...action.draft, selectedImageFile: null }; // File can't be serialized
+      return { ...state, ...action.draft, selectedImageFile: null, additionalImageFiles: [], selectedVideoFile: null }; // Files can't be serialized
     case 'RESET':
       return initialState;
     default:
@@ -77,6 +89,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
   user, deals, editDealId, setView, refreshDeals, theme,
 }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
   const [state, dispatch] = useReducer(wizardReducer, initialState);
   const [currentStep, setCurrentStep] = useState(0);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('left');
@@ -91,6 +104,12 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
   const [showSuccess, setShowSuccess] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // Save-as-template flow
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateSaved, setTemplateSaved] = useState(false);
 
   const DRAFT_KEY = `campaign_wizard_draft_${user.id}`;
 
@@ -147,6 +166,9 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             selectedStoreId: deal.store_id || '',
             existingThumbnail: deal.thumbnail || (deal as any).image_url || null,
             existingImageName: deal.image_name || null,
+            additionalImageUrls: deal.media_urls || [],
+            existingVideoUrl: deal.video_url || null,
+            imagePriceOverlays: ((deal as any).image_price_overlays || {}) as Record<number, { discountPct: string; offerPrice: string }>,
           },
         });
         console.log('[CampaignWizard] Pre-populated from deal:', editDealId);
@@ -178,7 +200,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
   const saveDraft = useCallback(() => {
     if (editDealId) return; // Don't save draft when editing
     try {
-      const { selectedImageFile, ...serializable } = state;
+      const { selectedImageFile, additionalImageFiles, selectedVideoFile, ...serializable } = state;
       localStorage.setItem(DRAFT_KEY, JSON.stringify(serializable));
       localStorage.setItem(DRAFT_KEY + '_step', String(currentStep));
     } catch {}
@@ -216,8 +238,57 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     // Clear draft
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
-    setShowSuccess(true);
     await refreshDeals();
+
+    // For new campaigns, ask if they want to save as template
+    if (!editDealId) {
+      setTemplateName(state.dealHeading || '');
+      setShowSaveTemplate(true);
+    } else {
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        setView('merchant_deals');
+      }, 3000);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim()) return;
+    setSavingTemplate(true);
+    try {
+      await campaignTemplatesService.saveTemplate({
+        merchantId: user.id,
+        templateName: templateName.trim(),
+        campaignData: {
+          title: state.dealHeading,
+          deal_offer: state.offerValue,
+          launch_date: state.startDate,
+          end_date: state.endDate,
+          category: user.category,
+        },
+      });
+      setTemplateSaved(true);
+    } catch {
+      // Non-blocking — template save failure shouldn't block success flow
+    } finally {
+      setSavingTemplate(false);
+    }
+    // Show success after a brief moment
+    setTimeout(() => {
+      setShowSaveTemplate(false);
+      setTemplateSaved(false);
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        setView('merchant_deals');
+      }, 3000);
+    }, 1500);
+  };
+
+  const handleSkipTemplate = () => {
+    setShowSaveTemplate(false);
+    setShowSuccess(true);
     setTimeout(() => {
       setShowSuccess(false);
       setView('merchant_deals');
@@ -285,6 +356,10 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
           <StepImage
             selectedFile={state.selectedImageFile}
             existingThumbnail={state.existingThumbnail}
+            additionalImageFiles={state.additionalImageFiles}
+            additionalImageUrls={state.additionalImageUrls}
+            selectedVideoFile={state.selectedVideoFile}
+            existingVideoUrl={state.existingVideoUrl}
             imageLibrary={imageLibrary}
             isLibraryLoading={isLibraryLoading}
             onFileSelected={(file) => dispatch({ type: 'SET_FIELD', field: 'selectedImageFile', value: file })}
@@ -292,6 +367,16 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
               dispatch({ type: 'SET_FIELD', field: 'existingThumbnail', value: url || null });
               dispatch({ type: 'SET_FIELD', field: 'existingImageName', value: name });
             }}
+            onAdditionalImagesChange={(files, urls) => {
+              dispatch({ type: 'SET_FIELD', field: 'additionalImageFiles', value: files });
+              dispatch({ type: 'SET_FIELD', field: 'additionalImageUrls', value: urls });
+            }}
+            onVideoChange={(file, url) => {
+              dispatch({ type: 'SET_FIELD', field: 'selectedVideoFile', value: file });
+              dispatch({ type: 'SET_FIELD', field: 'existingVideoUrl', value: url });
+            }}
+            imagePriceOverlays={state.imagePriceOverlays}
+            onPriceOverlayChange={(overlays) => dispatch({ type: 'SET_FIELD', field: 'imagePriceOverlays', value: overlays })}
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
@@ -379,7 +464,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
           <X className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
         </button>
         <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>
-          {editDealId ? 'Edit Campaign' : 'New Campaign'}
+          {editDealId ? t('m_edit_campaign') : t('m_new_campaign')}
         </span>
         <button
           onClick={() => setShowDiscardConfirm(true)}
@@ -431,10 +516,10 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
         <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center px-8">
           <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
             <h3 className={`text-lg font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Start over?
+              {t('m_start_over')}
             </h3>
             <p className={`text-sm mb-5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-              This will clear all your progress and start from scratch.
+              {t('m_start_over_desc')}
             </p>
             <div className="flex gap-3">
               <button
@@ -443,15 +528,81 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
                   isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
                 }`}
               >
-                Cancel
+                {t('m_cancel')}
               </button>
               <button
                 onClick={handleDiscard}
                 className="flex-1 h-11 rounded-xl bg-red-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
               >
-                Discard
+                {t('m_discard')}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save as Template Prompt */}
+      {showSaveTemplate && (
+        <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center px-8">
+          <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+            {templateSaved ? (
+              <div className="text-center py-2">
+                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle2 className="w-7 h-7 text-emerald-500" />
+                </div>
+                <h3 className={`text-lg font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {t('m_template_saved')}
+                </h3>
+                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {t('m_template_reuse')}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isDark ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
+                    <Bookmark className="w-6 h-6 text-indigo-500" />
+                  </div>
+                  <div>
+                    <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {t('m_save_as_template')}
+                    </h3>
+                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {t('m_reuse_format')}
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder={t('m_template_name')}
+                  maxLength={50}
+                  className={`w-full h-12 px-4 rounded-xl text-sm font-medium mb-4 outline-none transition-all ${
+                    isDark
+                      ? 'bg-slate-800 text-white border border-slate-700 focus:border-indigo-500'
+                      : 'bg-slate-50 text-slate-900 border border-slate-200 focus:border-indigo-500'
+                  }`}
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSkipTemplate}
+                    className={`flex-1 h-11 rounded-xl text-sm font-semibold active:scale-[0.98] transition-all ${
+                      isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {t('m_no_thanks')}
+                  </button>
+                  <button
+                    onClick={handleSaveTemplate}
+                    disabled={!templateName.trim() || savingTemplate}
+                    className="flex-1 h-11 rounded-xl bg-indigo-600 text-white text-sm font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {savingTemplate ? <Loader2 className="w-4 h-4 animate-spin" /> : t('m_save')}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -464,10 +615,10 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
               <CheckCircle2 className="w-8 h-8 text-emerald-500" />
             </div>
             <h3 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              {editDealId ? 'Campaign Updated!' : 'Campaign Published!'}
+              {editDealId ? t('m_campaign_updated') : t('m_campaign_published')}
             </h3>
             <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Your deal is now live and visible to customers.
+              {t('m_deal_live')}
             </p>
           </div>
         </div>
@@ -478,7 +629,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
         <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center px-8">
           <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
             <h3 className={`text-lg font-bold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Publication Error
+              {t('m_pub_error')}
             </h3>
             <p className={`text-sm mb-5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
               {publishError}
@@ -487,7 +638,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
               onClick={() => setPublishError(null)}
               className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all"
             >
-              OK, I'll Fix It
+              {t('m_ok_fix')}
             </button>
           </div>
         </div>

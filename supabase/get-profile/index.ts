@@ -58,7 +58,7 @@ export function isValidPassword(password: string): boolean {
 // Inlined content of authenticateRequest
 export async function authenticateRequest(req: Request) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
   const authHeader = req.headers.get('Authorization');
   const jwt = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
@@ -67,18 +67,8 @@ export async function authenticateRequest(req: Request) {
     throw new Error('Unauthorized: No access token provided.');
   }
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-    global: {
-      headers: { Authorization: `Bearer ${jwt}` },
-    },
-  });
-
-  const { data: { user }, error } = await supabase.auth.getUser(jwt);
+  const admin = createClient(supabaseUrl, serviceKey);
+  const { data: { user }, error } = await admin.auth.getUser(jwt);
 
   if (error || !user) {
     console.error('[authenticateRequest] JWT authentication failed:', error?.message);
@@ -109,24 +99,12 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
     const authenticatedUser = await authenticateRequest(req);
-    const authHeader = req.headers.get('Authorization');
-    const jwt = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    const admin = createClient(supabaseUrl, serviceKey);
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-      global: {
-        headers: { Authorization: `Bearer ${jwt}` },
-      },
-    });
-
-    const { userId } = await req.json(); // Only userId is needed now, role is on the profile
+    const { userId } = await req.json();
 
     // 1. Validate Input Data
     if (!isString(userId) || !isValidUUID(userId)) {
@@ -144,18 +122,58 @@ Deno.serve(async (req) => {
       ? 'merchant_profiles'
       : 'user_profiles';
 
-    const { data: profileData, error: profileError } = await supabase
+    const { data: profileData, error: profileError } = await admin
       .from(profileTable)
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
     if (profileError) {
       console.error(`[user/get-profile EF] Error fetching profile from ${profileTable}:`, profileError.message);
       return new Response(JSON.stringify({ error: 'Profile data incomplete or not found.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 });
     }
 
-    return new Response(JSON.stringify({ ...profileData }), { // profileData already contains 'role'
+    if (!profileData) {
+      console.error(`[user/get-profile EF] No profile found in ${profileTable} for: ${userId}`);
+      return new Response(JSON.stringify({ error: 'Profile not found.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 });
+    }
+
+    // If this user is a staff member, enrich with staff role info
+    if (profileTable === 'merchant_profiles') {
+      const { data: staffRow } = await admin
+        .from('merchant_staff')
+        .select('merchant_id, role')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .neq('role', 'owner');
+
+      const staffEntry = (staffRow || []).find(r => r.merchant_id !== userId);
+      if (staffEntry) {
+        // Load owner's profile and merge
+        const { data: ownerProfile } = await admin
+          .from('merchant_profiles')
+          .select('*')
+          .eq('id', staffEntry.merchant_id)
+          .maybeSingle();
+
+        if (ownerProfile) {
+          const staffUserId = profileData.id;
+          const staffPhone = profileData.phone;
+          return new Response(JSON.stringify({
+            ...ownerProfile,
+            id: staffUserId,
+            phone: staffPhone,
+            staff_role: staffEntry.role,
+            staff_merchant_id: staffEntry.merchant_id,
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          });
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ ...profileData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });

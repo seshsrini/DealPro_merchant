@@ -4,6 +4,7 @@ import React from 'react';
 import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Ticket, Languages, ChevronDown, Search, Bell, LayoutGrid } from 'lucide-react';
 import { AppView, Locale, User as UserType } from '../types';
 import { useTranslation } from '../contexts/LanguageContext';
+import { usePermissions } from '../contexts/PermissionsContext';
 
 interface NavProps {
   currentView: AppView;
@@ -158,14 +159,19 @@ export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView
 
 export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view: AppView) => void; theme: 'light' | 'dark' }> = ({ currentView, setView, theme }) => {
   const isDark = theme === 'dark';
-  const tabs = [
-    { id: 'merchant_dashboard', label: 'Console', icon: LayoutDashboard, tourId: 'tour-nav-console' },
-    { id: 'merchant_deals', label: 'Campaigns', icon: List, tourId: 'tour-nav-campaigns' },
-    { id: 'merchant_catalogue', label: 'Catalogue', icon: LayoutGrid, tourId: 'tour-nav-catalogue' },
-    { id: 'merchant_deal_of_day', label: 'Deal of Day', icon: Zap, tourId: 'tour-nav-dotd' },
-    { id: 'merchant_analytics', label: 'Intel', icon: BarChart3, tourId: 'tour-nav-intel' },
-    { id: 'profile', label: 'Hub', icon: User, tourId: 'tour-nav-hub' },
+  const { can } = usePermissions();
+
+  // Map tab IDs to required permissions
+  const allTabs = [
+    { id: 'merchant_dashboard', label: 'Console', icon: LayoutDashboard, tourId: 'tour-nav-console', permission: null }, // always visible
+    { id: 'merchant_deals', label: 'Campaigns', icon: List, tourId: 'tour-nav-campaigns', permission: 'campaign.create' },
+    { id: 'merchant_catalogue', label: 'Catalogue', icon: LayoutGrid, tourId: 'tour-nav-catalogue', permission: 'catalogue.manage' },
+    { id: 'merchant_deal_of_day', label: 'Deal of Day', icon: Zap, tourId: 'tour-nav-dotd', permission: 'dotd.create' },
+    { id: 'merchant_analytics', label: 'Intel', icon: BarChart3, tourId: 'tour-nav-intel', permission: 'analytics.view' },
+    { id: 'profile', label: 'Hub', icon: User, tourId: 'tour-nav-hub', permission: null }, // always visible
   ];
+
+  const tabs = allTabs.filter(tab => !tab.permission || can(tab.permission));
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md pointer-events-none">

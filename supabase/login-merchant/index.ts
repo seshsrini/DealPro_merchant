@@ -145,41 +145,163 @@ Deno.serve(async (req: Request) => {
         console.log('[MerchantOtpLogin] Created new auth user:', authUserId);
       }
 
-      // Generate unique referral codes for this merchant
-      const consumerRefCode = await generateUniqueCode('consumer_referral_code');
-      const merchantRefCode = await generateUniqueCode('merchant_referral_code');
-      console.log('[MerchantOtpLogin] Generated referral codes — consumer:', consumerRefCode, 'merchant:', merchantRefCode);
-
-      // Create minimal merchant_profiles row — onboarding wizard fills the rest
-      const { data: newProfile, error: profileError } = await adminClient
+      // Check if a profile already exists for this auth user (phone lookup may have missed it)
+      const { data: existingProfile } = await adminClient
         .from('merchant_profiles')
-        .insert({
-          id: authUserId,
-          phone: normalizedPhone,
-          country_code: `+${cc}`,
-          role: 'merchant',
-          active_status: true,
-          consumer_referral_code: consumerRefCode,
-          merchant_referral_code: merchantRefCode,
-          ...(invite_code ? { invite_code } : {}),
-        })
-        .select()
-        .single();
+        .select('*')
+        .eq('id', authUserId)
+        .maybeSingle();
 
-      if (profileError) {
-        console.error('[MerchantOtpLogin] Failed to create profile:', profileError);
-        // Rollback: delete the auth user we just created
-        if (authUserId) await adminClient.auth.admin.deleteUser(authUserId);
-        return new Response(JSON.stringify({ error: 'Registration failed. Please try again.' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500
-        });
+      if (existingProfile) {
+        console.log('[MerchantOtpLogin] Profile already exists for auth user:', authUserId, '— using it');
+        merchantProfile = existingProfile;
+      } else {
+        // Generate unique referral codes for this merchant
+        const consumerRefCode = await generateUniqueCode('consumer_referral_code');
+        const merchantRefCode = await generateUniqueCode('merchant_referral_code');
+        console.log('[MerchantOtpLogin] Generated referral codes — consumer:', consumerRefCode, 'merchant:', merchantRefCode);
+
+        // Create minimal merchant_profiles row — onboarding wizard fills the rest
+        const { data: newProfile, error: profileError } = await adminClient
+          .from('merchant_profiles')
+          .insert({
+            id: authUserId,
+            phone: normalizedPhone,
+            country_code: `+${cc}`,
+            role: 'merchant',
+            active_status: true,
+            consumer_referral_code: consumerRefCode,
+            merchant_referral_code: merchantRefCode,
+            ...(invite_code ? { invite_code } : {}),
+          })
+          .select()
+          .single();
+
+        if (profileError) {
+          console.error('[MerchantOtpLogin] Failed to create profile:', profileError);
+          if (authUserId) await adminClient.auth.admin.deleteUser(authUserId);
+          return new Response(JSON.stringify({ error: 'Registration failed. Please try again.' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500
+          });
+        }
+        merchantProfile = newProfile;
+        console.log('[MerchantOtpLogin] New merchant registered:', merchantProfile.id);
       }
-      merchantProfile = newProfile;
-      console.log('[MerchantOtpLogin] New merchant registered:', merchantProfile.id);
     }
 
-    console.log('[MerchantOtpLogin] Merchant found:', merchantProfile.id, 'role:', merchantProfile.role);
+    // Check if this user is a staff member (not the owner)
+    let staffRole: string | null = null;
+    let ownerMerchantId: string | null = null;
+
+    // First check if already an accepted staff member
+    // Query ALL active rows for this user, then pick the staff/manager one
+    const { data: allStaffRows, error: staffLookupErr } = await adminClient
+      .from('merchant_staff')
+      .select('merchant_id, role')
+      .eq('user_id', merchantProfile.id)
+      .eq('status', 'active');
+
+    console.log('[MerchantOtpLogin] Staff lookup for user', merchantProfile.id, '→ rows:', JSON.stringify(allStaffRows), 'err:', staffLookupErr?.message);
+
+    // Prefer the staff/manager row (where they're NOT the owner of their own bare profile)
+    const staffRecord = (allStaffRows || []).find(r => r.role !== 'owner' && r.merchant_id !== merchantProfile.id)
+      || (allStaffRows || []).find(r => r.role !== 'owner')
+      || null;
+
+    if (staffRecord) {
+      staffRole = staffRecord.role;
+      ownerMerchantId = staffRecord.merchant_id;
+      console.log('[MerchantOtpLogin] Found existing staff record — role:', staffRole, 'owner:', ownerMerchantId);
+    }
+
+    // If not yet a staff member, check for a pending invite by code OR phone
+    if (!staffRecord) {
+      let pendingInvite = null;
+
+      // Priority 1: match by invite code (if provided)
+      if (invite_code) {
+        const { data } = await adminClient
+          .from('merchant_staff_invites')
+          .select('*')
+          .eq('invite_code', invite_code.trim().toUpperCase())
+          .eq('status', 'pending')
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
+        if (data) pendingInvite = data;
+        console.log('[MerchantOtpLogin] Invite code lookup:', invite_code, '→', pendingInvite ? 'FOUND' : 'NOT FOUND');
+      }
+
+      // Priority 2: match by phone number
+      if (!pendingInvite && normalizedPhone) {
+        const { data } = await adminClient
+          .from('merchant_staff_invites')
+          .select('*')
+          .eq('phone', normalizedPhone)
+          .eq('status', 'pending')
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data) pendingInvite = data;
+      }
+
+      if (pendingInvite) {
+        console.log('[MerchantOtpLogin] Found pending invite for phone:', normalizedPhone, 'code:', pendingInvite.invite_code);
+
+        // Auto-accept: create merchant_staff row (upsert to handle duplicates)
+        const { error: staffErr } = await adminClient
+          .from('merchant_staff')
+          .upsert({
+            merchant_id: pendingInvite.merchant_id,
+            user_id: merchantProfile.id,
+            role: pendingInvite.role,
+            display_name: pendingInvite.display_name,
+            phone: normalizedPhone,
+            invited_by: pendingInvite.invited_by,
+            status: 'active',
+          }, { onConflict: 'merchant_id,user_id' });
+
+        if (!staffErr) {
+          // Mark invite as accepted
+          await adminClient
+            .from('merchant_staff_invites')
+            .update({ status: 'accepted' })
+            .eq('id', pendingInvite.id);
+
+          staffRole = pendingInvite.role;
+          ownerMerchantId = pendingInvite.merchant_id;
+          console.log('[MerchantOtpLogin] Auto-accepted invite — role:', staffRole, 'owner:', ownerMerchantId);
+        } else {
+          console.error('[MerchantOtpLogin] Failed to auto-accept invite:', staffErr.message);
+        }
+      }
+    }
+
+    // If staff member (accepted or just auto-accepted), load owner's profile
+    if (staffRole && ownerMerchantId) {
+      console.log('[MerchantOtpLogin] Staff member detected — role:', staffRole, 'owner:', ownerMerchantId);
+
+      const { data: ownerProfile } = await adminClient
+        .from('merchant_profiles')
+        .select('*')
+        .eq('id', ownerMerchantId)
+        .single();
+
+      if (ownerProfile) {
+        const staffUserId = merchantProfile.id;
+        const staffPhone = merchantProfile.phone;
+        merchantProfile = {
+          ...ownerProfile,
+          id: staffUserId,
+          phone: staffPhone,
+          staff_role: staffRole,
+          staff_merchant_id: ownerMerchantId,
+        };
+      }
+    }
+
+    console.log('[MerchantOtpLogin] Merchant found:', merchantProfile.id, 'role:', merchantProfile.role, 'staff_role:', staffRole);
 
     // Store invite_code on existing merchant if provided and not already set
     if (invite_code && !merchantProfile.invite_code) {
@@ -256,13 +378,14 @@ Deno.serve(async (req: Request) => {
 
     merchantProfile.last_logged_in = new Date().toISOString();
 
-    // Fetch subscription status and store count (using adminClient to bypass RLS)
-    // This avoids the client needing a separate authenticated call during login
+    // Fetch subscription status and store count for the actual merchant owner
+    // Staff members inherit the owner's subscription and stores
+    const effectiveMerchantId = ownerMerchantId || merchantProfile.id;
     const now = new Date().toISOString();
     const { data: activeSub } = await adminClient
       .from('merchant_subscriptions')
       .select('id, status, plan_name, current_period_end, trial_end')
-      .eq('merchant_id', merchantProfile.id)
+      .eq('merchant_id', effectiveMerchantId)
       .eq('status', 'active')
       .gte('current_period_end', now)
       .order('created_at', { ascending: false })
@@ -272,7 +395,7 @@ Deno.serve(async (req: Request) => {
     const { count: storeCount } = await adminClient
       .from('merchant_stores')
       .select('id', { count: 'exact', head: true })
-      .eq('merchant_id', merchantProfile.id);
+      .eq('merchant_id', effectiveMerchantId);
 
     const trialEnd = activeSub?.trial_end || activeSub?.current_period_end;
     const trialExpired = trialEnd ? new Date(trialEnd) < new Date() : false;

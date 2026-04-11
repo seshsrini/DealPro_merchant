@@ -208,7 +208,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
             My Subscription
           </h2>
-          <p className={`text-sm font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Manage your plan</p>
+          <p className={`text-sm font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{t('m_manage_plan')}</p>
         </div>
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
           <CreditCard className="w-5 h-5 text-blue-500" />
@@ -226,7 +226,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
             <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2.5 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Gift className="w-4 h-4 text-white" />
-                <span className="text-white text-xs font-bold tracking-wide uppercase">Free Trial</span>
+                <span className="text-white text-xs font-bold tracking-wide uppercase">{t('m_free_trial')}</span>
               </div>
               <span className="text-white/90 text-xs font-semibold">
                 {daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining
@@ -238,7 +238,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           {currentSubscription.status === 'active' && !isTrialing && (
             <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-2.5 flex items-center gap-2">
               <Shield className="w-4 h-4 text-white" />
-              <span className="text-white text-xs font-bold tracking-wide uppercase">Active Subscription</span>
+              <span className="text-white text-xs font-bold tracking-wide uppercase">{t('m_active_subscription')}</span>
             </div>
           )}
 
@@ -271,7 +271,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 <div className={`rounded-xl p-3 ${isDark ? 'bg-slate-900/60' : 'bg-slate-50'}`}>
                   <div className="flex items-center gap-1.5 mb-1">
                     <Clock className={`w-3.5 h-3.5 ${daysRemaining <= 7 ? 'text-amber-500' : 'text-emerald-500'}`} />
-                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Days Remaining</p>
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_days_remaining')}</p>
                   </div>
                   <p className={`text-2xl font-black ${
                     daysRemaining <= 3 ? 'text-red-500' : daysRemaining <= 7 ? 'text-amber-500' : isDark ? 'text-white' : 'text-slate-900'
@@ -286,7 +286,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 <div className={`rounded-xl p-3 ${isDark ? 'bg-slate-900/60' : 'bg-slate-50'}`}>
                   <div className="flex items-center gap-1.5 mb-1">
                     <CalendarDays className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Next Billing Date</p>
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_next_billing')}</p>
                   </div>
                   <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {trialEndDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -350,7 +350,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       {!loading && (
         <div>
           <h3 className={`text-base font-semibold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            {currentTierId ? 'Switch Plan' : 'Choose a Plan'}
+            {currentTierId ? t('m_switch_plan') : t('m_choose_plan')}
           </h3>
         </div>
       )}
@@ -363,13 +363,13 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       ) : error && tiers.length === 0 ? (
         <div className={`text-center py-16 rounded-xl border ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
           <X className={`w-12 h-12 mx-auto mb-4 ${isDark ? 'text-red-400' : 'text-red-500'}`} />
-          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>Error Loading Plans</p>
+          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_error_loading')}</p>
           <p className={`text-sm px-10 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{error}</p>
         </div>
       ) : tiers.length === 0 ? (
         <div className={`text-center py-16 rounded-xl border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
           <Info className={`w-12 h-12 mx-auto mb-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
-          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>No Plans Found</p>
+          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_no_plans')}</p>
           <p className={`text-sm px-10 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Please check back later.</p>
         </div>
       ) : (
@@ -377,16 +377,16 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           {/* Table Header */}
           <div className={`grid grid-cols-12 gap-3 px-4 py-3 border-b ${isDark ? 'bg-slate-800/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
             <div className="col-span-3">
-              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Plan</p>
+              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_plan')}</p>
             </div>
             <div className="col-span-2">
-              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Price</p>
+              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_price')}</p>
             </div>
             <div className="col-span-2">
-              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Deals</p>
+              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_deals')}</p>
             </div>
             <div className="col-span-2">
-              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>DOTD</p>
+              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_dotd_short')}</p>
             </div>
             <div className="col-span-3"></div>
           </div>
@@ -436,7 +436,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                     {selecting && selectedTierId === tier.id ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
-                      'Select'
+                      t('m_select')
                     )}
                   </button>
                 )}
@@ -457,7 +457,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       {showCancelModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
           <div className={`max-w-sm w-full rounded-2xl p-6 space-y-4 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
-            <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Cancel Subscription</h3>
+            <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_cancel_sub')}</h3>
 
             <div className={`rounded-xl p-4 border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
               <p className={`text-xs leading-relaxed ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
@@ -483,14 +483,14 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                   isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
                 }`}
               >
-                <option value="">Select a reason</option>
-                <option value="too_expensive">Too expensive</option>
-                <option value="not_enough_features">Not enough features</option>
+                <option value="">{t('m_select_reason')}</option>
+                <option value="too_expensive">{t('m_reason_expensive')}</option>
+                <option value="not_enough_features">{t('m_reason_features')}</option>
                 <option value="business_closed">Business closed / seasonal</option>
-                <option value="switching_platform">Switching to another platform</option>
-                <option value="not_seeing_results">Not seeing results</option>
-                <option value="technical_issues">Technical issues</option>
-                <option value="other">Other</option>
+                <option value="switching_platform">{t('m_reason_switching')}</option>
+                <option value="not_seeing_results">{t('m_reason_results')}</option>
+                <option value="technical_issues">{t('m_reason_technical')}</option>
+                <option value="other">{t('m_subj_other')}</option>
               </select>
             </div>
 
@@ -525,7 +525,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 }}
                 className="flex-1 h-11 rounded-xl bg-rose-600 text-white text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40"
               >
-                {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Cancel Subscription'}
+                {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : t('m_cancel_sub')}
               </button>
             </div>
           </div>
@@ -550,23 +550,23 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
 
             <div className={`rounded-xl border p-5 space-y-4 ${isDark ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
               <div>
-                <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Plan</p>
+                <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_plan')}</p>
                 <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{tierToConfirm.tier_name}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Price</p>
+                  <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_price')}</p>
                   <p className="text-lg font-semibold text-emerald-500">
                     {tierToConfirm.currency} {tierToConfirm.subscription_fee}
                   </p>
                 </div>
                 <div>
-                  <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Billing</p>
+                  <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_billing')}</p>
                   <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{tierToConfirm.billing_frequency}</p>
                 </div>
               </div>
               <div>
-                <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Features</p>
+                <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_features')}</p>
                 <ul className={`space-y-1.5 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -600,7 +600,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 className="flex-1 h-12 rounded-xl bg-slate-900 text-white text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Confirm</span>
+                <span>{t('m_confirm')}</span>
               </button>
             </div>
           </div>

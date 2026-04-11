@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useReducer, useCallback } from 'react';
 import { AppView, User } from './types';
-import { X, CheckCircle2, Loader2, RotateCcw, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle2, Loader2, RotateCcw, AlertTriangle, Bookmark } from 'lucide-react';
 import { addCampaignService } from './services/addCampaignService';
 import { merchantService } from './services/merchantService';
+import { campaignTemplatesService } from './services/campaignTemplatesService';
+import { useTranslation } from './contexts/LanguageContext';
 
 // Reused step components from campaign-wizard
 import { StepImage } from './components/campaign-wizard/StepImage';
@@ -26,6 +28,12 @@ interface DotdWizardState {
   selectedImageFile: File | null;
   existingThumbnail: string | null;
   existingImageName: string | null;
+  // Multi-media: up to 5 images + 1 video
+  additionalImageFiles: File[];
+  additionalImageUrls: string[];
+  selectedVideoFile: File | null;
+  existingVideoUrl: string | null;
+  imagePriceOverlays: Record<number, { discountPct: string; offerPrice: string }>;
 }
 
 type DotdAction =
@@ -42,6 +50,11 @@ const initialState: DotdWizardState = {
   selectedImageFile: null,
   existingThumbnail: null,
   existingImageName: null,
+  additionalImageFiles: [],
+  additionalImageUrls: [],
+  selectedVideoFile: null,
+  existingVideoUrl: null,
+  imagePriceOverlays: {},
 };
 
 function dotdReducer(state: DotdWizardState, action: DotdAction): DotdWizardState {
@@ -49,7 +62,7 @@ function dotdReducer(state: DotdWizardState, action: DotdAction): DotdWizardStat
     case 'SET_FIELD':
       return { ...state, [action.field]: action.value };
     case 'RESTORE_DRAFT':
-      return { ...state, ...action.draft, selectedImageFile: null };
+      return { ...state, ...action.draft, selectedImageFile: null, additionalImageFiles: [], selectedVideoFile: null };
     case 'RESET':
       return initialState;
     default:
@@ -70,6 +83,7 @@ interface DotdWizardProps {
 
 export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
   const [state, dispatch] = useReducer(dotdReducer, initialState);
   const [currentStep, setCurrentStep] = useState(0);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('left');
@@ -85,6 +99,12 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   const [publishError, setPublishError] = useState<string | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [moderationAlert, setModerationAlert] = useState<string | null>(null);
+
+  // Save-as-template flow
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateSaved, setTemplateSaved] = useState(false);
 
   // Field name → wizard step index
   const FIELD_TO_STEP: Record<string, number> = {
@@ -153,7 +173,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   // Save draft
   const saveDraft = useCallback(() => {
     try {
-      const { selectedImageFile, ...serializable } = state;
+      const { selectedImageFile, additionalImageFiles, selectedVideoFile, ...serializable } = state;
       localStorage.setItem(DRAFT_KEY, JSON.stringify(serializable));
       localStorage.setItem(DRAFT_KEY + '_step', String(currentStep));
     } catch {}
@@ -188,6 +208,45 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   const handlePublishSuccess = () => {
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
+    // Ask if they want to save as template
+    setTemplateName(state.dealHeading || '');
+    setShowSaveTemplate(true);
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim()) return;
+    setSavingTemplate(true);
+    try {
+      await campaignTemplatesService.saveTemplate({
+        merchantId: user.id,
+        templateName: templateName.trim(),
+        campaignData: {
+          title: state.dealHeading,
+          deal_offer: state.offerValue,
+          launch_date: state.dealDate,
+          end_date: state.dealDate,
+          category: user.category,
+        },
+      });
+      setTemplateSaved(true);
+    } catch {
+      // Non-blocking
+    } finally {
+      setSavingTemplate(false);
+    }
+    setTimeout(() => {
+      setShowSaveTemplate(false);
+      setTemplateSaved(false);
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        setView('merchant_dashboard');
+      }, 3000);
+    }, 1500);
+  };
+
+  const handleSkipTemplate = () => {
+    setShowSaveTemplate(false);
     setShowSuccess(true);
     setTimeout(() => {
       setShowSuccess(false);
@@ -259,6 +318,10 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
           <StepImage
             selectedFile={state.selectedImageFile}
             existingThumbnail={state.existingThumbnail}
+            additionalImageFiles={state.additionalImageFiles}
+            additionalImageUrls={state.additionalImageUrls}
+            selectedVideoFile={state.selectedVideoFile}
+            existingVideoUrl={state.existingVideoUrl}
             imageLibrary={imageLibrary}
             isLibraryLoading={isLibraryLoading}
             onFileSelected={(file) => dispatch({ type: 'SET_FIELD', field: 'selectedImageFile', value: file })}
@@ -266,6 +329,16 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
               dispatch({ type: 'SET_FIELD', field: 'existingThumbnail', value: url || null });
               dispatch({ type: 'SET_FIELD', field: 'existingImageName', value: name });
             }}
+            onAdditionalImagesChange={(files, urls) => {
+              dispatch({ type: 'SET_FIELD', field: 'additionalImageFiles', value: files });
+              dispatch({ type: 'SET_FIELD', field: 'additionalImageUrls', value: urls });
+            }}
+            onVideoChange={(file, url) => {
+              dispatch({ type: 'SET_FIELD', field: 'selectedVideoFile', value: file });
+              dispatch({ type: 'SET_FIELD', field: 'existingVideoUrl', value: url });
+            }}
+            imagePriceOverlays={state.imagePriceOverlays}
+            onPriceOverlayChange={(overlays) => dispatch({ type: 'SET_FIELD', field: 'imagePriceOverlays', value: overlays })}
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
@@ -342,7 +415,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
           <X className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
         </button>
         <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-          Deal of the Day
+          {t('m_dotd_wizard_title')}
         </span>
         <button
           onClick={() => setShowDiscardConfirm(true)}
@@ -381,7 +454,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
         {moderationAlert && (
           <div className="mx-4 mt-3 flex items-start gap-2.5 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
             <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-xs text-red-700 flex-1">{moderationAlert} Please edit the highlighted field below.</p>
+            <p className="text-xs text-red-700 flex-1">{moderationAlert} {t('m_edit_field_hint')}</p>
             <button onClick={() => setModerationAlert(null)} className="text-red-400 hover:text-red-600 text-lg leading-none -mt-0.5">×</button>
           </div>
         )}
@@ -403,10 +476,10 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
         <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center px-8">
           <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
             <h3 className={`text-lg font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Start over?
+              {t('m_start_over')}
             </h3>
             <p className={`text-sm mb-5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-              This will clear all your progress and start from scratch.
+              {t('m_start_over_desc')}
             </p>
             <div className="flex gap-3">
               <button
@@ -415,15 +488,81 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
                   isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
                 }`}
               >
-                Cancel
+                {t('m_cancel')}
               </button>
               <button
                 onClick={handleDiscard}
                 className="flex-1 h-11 rounded-xl bg-red-500 text-white text-sm font-semibold active:scale-[0.98] transition-all"
               >
-                Discard
+                {t('m_discard')}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save as Template Prompt */}
+      {showSaveTemplate && (
+        <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center px-8">
+          <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+            {templateSaved ? (
+              <div className="text-center py-2">
+                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle2 className="w-7 h-7 text-emerald-500" />
+                </div>
+                <h3 className={`text-lg font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {t('m_template_saved')}
+                </h3>
+                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {t('m_template_reuse')}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isDark ? 'bg-yellow-500/10' : 'bg-yellow-50'}`}>
+                    <Bookmark className="w-6 h-6 text-yellow-500" />
+                  </div>
+                  <div>
+                    <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {t('m_save_as_template')}
+                    </h3>
+                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {t('m_reuse_format')}
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder={t('m_template_name')}
+                  maxLength={50}
+                  className={`w-full h-12 px-4 rounded-xl text-sm font-medium mb-4 outline-none transition-all ${
+                    isDark
+                      ? 'bg-slate-800 text-white border border-slate-700 focus:border-yellow-500'
+                      : 'bg-slate-50 text-slate-900 border border-slate-200 focus:border-yellow-500'
+                  }`}
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSkipTemplate}
+                    className={`flex-1 h-11 rounded-xl text-sm font-semibold active:scale-[0.98] transition-all ${
+                      isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {t('m_no_thanks')}
+                  </button>
+                  <button
+                    onClick={handleSaveTemplate}
+                    disabled={!templateName.trim() || savingTemplate}
+                    className="flex-1 h-11 rounded-xl bg-yellow-500 text-white text-sm font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {savingTemplate ? <Loader2 className="w-4 h-4 animate-spin" /> : t('m_save')}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -436,10 +575,10 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
               <CheckCircle2 className="w-8 h-8 text-yellow-500" />
             </div>
             <h3 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Deal of the Day Created!
+              {t('m_dotd_created')}
             </h3>
             <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Your deal will be featured once approved by admin.
+              {t('m_dotd_featured')}
             </p>
           </div>
         </div>
@@ -450,7 +589,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
         <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center px-8">
           <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
             <h3 className={`text-lg font-bold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Publication Error
+              {t('m_pub_error')}
             </h3>
             <p className={`text-sm mb-5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
               {publishError}
@@ -459,7 +598,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
               onClick={() => setPublishError(null)}
               className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all"
             >
-              OK, I'll Fix It
+              {t('m_ok_fix')}
             </button>
           </div>
         </div>

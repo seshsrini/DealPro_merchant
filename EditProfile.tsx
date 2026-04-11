@@ -18,6 +18,7 @@ import { biometricService } from './services/biometricService';
 import { fcmService } from './services/fcmService';
 import { AppView } from './types';
 import { editProfileService } from './services/editProfileService';
+import { useTranslation } from './contexts/LanguageContext';
 
 const BUSINESS_TYPES = ['GSTIN + PAN', 'Udyam', 'FSSAI', 'Trade License'];
 const LANGUAGES = [
@@ -40,6 +41,7 @@ interface EditProfileProps {
 }
 
 export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView, theme = 'dark' }) => {
+  const { t } = useTranslation();
   const isDark = theme === 'dark';
   const topRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
@@ -95,14 +97,14 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
       topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
-      setError("Unable to save changes. Please try again.");
+      setError(t('m_save_failed'));
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    if (confirm("Are you sure you want to sign out?")) {
+    if (confirm(t('m_sign_out_confirm'))) {
       try {
         await fcmService.unregisterToken();
         await fcmService.cleanup();
@@ -167,9 +169,9 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
           </button>
           <div>
             <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Edit Profile
+              {t('m_edit_profile')}
             </h2>
-            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Manage your account details</p>
+            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_manage_account_details')}</p>
           </div>
         </div>
         <button
@@ -184,7 +186,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
       {success && (
         <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${isDark ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-200'}`}>
           <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-          <span className="text-xs font-medium text-emerald-500">Profile updated successfully</span>
+          <span className="text-xs font-medium text-emerald-500">{t('m_profile_updated')}</span>
         </div>
       )}
 
@@ -201,13 +203,13 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         <div className="space-y-3">
           {sectionHeader(
             <UserIcon className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
-            'Personal Information'
+            t('m_personal_info')
           )}
 
           <input
             value={fullName}
             onChange={e => setFullName(e.target.value)}
-            placeholder="Full Name"
+            placeholder={t('m_full_name')}
             className={inputClass}
             required
           />
@@ -218,7 +220,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="Email Address"
+              placeholder={t('m_email_address')}
               className={`${inputClass} pl-11`}
             />
           </div>
@@ -238,7 +240,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
           <div className="space-y-3">
             {sectionHeader(
               <Store className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
-              'Store Information'
+              t('m_store_info')
             )}
 
             <input
@@ -254,52 +256,52 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
           <div className="space-y-3">
             {sectionHeader(
               <Briefcase className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
-              'Business Verification'
+              t('m_business_verification')
             )}
 
             <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
               <div className="flex items-center justify-between">
-                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Business Type</span>
+                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_business_type')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{businessType}</span>
               </div>
 
               {gstin && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>GSTIN</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_gstin')}</span>
                   <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(gstin)}</span>
                 </div>
               )}
 
               {pan && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>PAN</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_pan')}</span>
                   <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(pan)}</span>
                 </div>
               )}
 
               {udyamNo && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Udyam No</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_udyam')}</span>
                   <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(udyamNo)}</span>
                 </div>
               )}
 
               {fssaiNo && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>FSSAI No</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_fssai')}</span>
                   <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(fssaiNo)}</span>
                 </div>
               )}
 
               {tradeLicenseNo && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Trade License</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_trade_license')}</span>
                   <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(tradeLicenseNo)}</span>
                 </div>
               )}
 
               <p className={`text-[10px] text-center pt-1 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-                Contact support to update business verification details
+                {t('m_contact_support_biz')}
               </p>
             </div>
           </div>
@@ -309,7 +311,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         <div className="space-y-3">
           {sectionHeader(
             <Globe className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
-            'Language'
+            t('m_language')
           )}
           <select
             value={langPreference}
@@ -326,13 +328,13 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         <div className="space-y-3">
           {sectionHeader(
             <Bell className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
-            'Notifications'
+            t('m_notifications')
           )}
 
           <div className={`p-4 rounded-xl border space-y-4 ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-            {toggleSwitch(pushNotification, setPushNotification, 'Push Notifications')}
-            {toggleSwitch(emailNotification, setEmailNotification, 'Email Notifications')}
-            {toggleSwitch(textNotification, setTextNotification, 'SMS Notifications')}
+            {toggleSwitch(pushNotification, setPushNotification, t('m_push_notif'))}
+            {toggleSwitch(emailNotification, setEmailNotification, t('m_email_notif'))}
+            {toggleSwitch(textNotification, setTextNotification, t('m_sms_notif'))}
           </div>
         </div>
 
@@ -340,32 +342,32 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         <div className="space-y-3">
           {sectionHeader(
             <ShieldAlert className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
-            'Account'
+            t('m_account')
           )}
           <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
             <div className="flex items-center justify-between">
-              <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Role</span>
+              <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_role')}</span>
               <span className={`text-sm font-medium capitalize ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{user.role}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Referral Code</span>
+              <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_referral_code')}</span>
               <span className={`text-sm font-mono font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{user.my_referral_code || '—'}</span>
             </div>
             {user.terms_accepted && (
               <div className="flex items-center justify-between">
-                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Terms Accepted</span>
+                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_terms_accepted')}</span>
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               </div>
             )}
             {user.privacy_accepted && (
               <div className="flex items-center justify-between">
-                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Privacy Accepted</span>
+                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_privacy_accepted')}</span>
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               </div>
             )}
             {user.created_at && (
               <div className="flex items-center justify-between">
-                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Member Since</span>
+                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_member_since')}</span>
                 <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                   {new Date(user.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
                 </span>
@@ -383,7 +385,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
           {loading ? (
             <Loader2 className="w-5 h-5 animate-spin" />
           ) : (
-            'Save Changes'
+            t('m_save_changes')
           )}
         </button>
       </form>

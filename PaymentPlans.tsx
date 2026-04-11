@@ -108,8 +108,8 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView, theme
           <ArrowLeft className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`} />
         </button>
         <div className="flex-1">
-          <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Secure Payments</h2>
-          <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Payment gateway</p>
+          <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_secure_payments')}</h2>
+          <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{t('m_payment_gateway')}</p>
         </div>
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
           <CreditCard className="w-5 h-5 text-emerald-500" />
@@ -119,26 +119,26 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView, theme
       {paymentSuccess ? (
         <div className={`text-center py-16 rounded-xl border ${isDark ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
           <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
-          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>Payment Successful!</p>
-          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Your transaction has been securely processed. Redirecting...</p>
+          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_payment_success')}</p>
+          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{t('m_payment_success_desc')}</p>
         </div>
       ) : paymentError ? (
         <div className={`text-center py-16 rounded-xl border ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>Payment Failed</p>
-          <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{paymentError} Please try again.</p>
+          <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_payment_failed')}</p>
+          <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{paymentError} {t('m_try_again')}</p>
           <button
             onClick={() => { setPaymentError(null); setIsProcessing(false); setTransactionId(generateTransactionId()); }}
             className="h-12 rounded-xl bg-slate-900 text-white text-sm font-medium px-8 active:scale-[0.98] transition-all"
           >
-            Retry Payment
+            {t('m_retry_payment')}
           </button>
         </div>
       ) : (
         <div className="space-y-6">
           <div className={`p-6 rounded-xl border space-y-6 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-slate-200'}`}>
             <div className={`flex items-center justify-between pb-4 border-b ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-              <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Amount Due</p>
+              <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{t('m_amount_due')}</p>
               <div className="flex items-center gap-2">
                 <IndianRupee className={`w-6 h-6 ${isDark ? 'text-white' : 'text-slate-900'}`} />
                 <span className={`text-3xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{paymentAmount.toFixed(2)}</span>
@@ -146,12 +146,12 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView, theme
             </div>
 
             <p className={`text-xs text-center ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Choose your secure payment method
+              {t('m_choose_payment')}
             </p>
 
             {isMobile && (
               <div className="space-y-4">
-                <h3 className={`text-sm font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>Pay with UPI Apps</h3>
+                <h3 className={`text-sm font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_pay_upi')}</h3>
                 <div className="grid grid-cols-3 gap-3">
                   {UPI_APPS.map(app => (
                     <button
@@ -169,25 +169,25 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView, theme
                 </div>
                 <div className={`flex items-center justify-center gap-2 mt-4 text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                   <Lock className="w-3 h-3" />
-                  <span>Encrypted transaction</span>
+                  <span>{t('m_encrypted')}</span>
                 </div>
               </div>
             )}
 
             <div className={`space-y-4 border-t pt-6 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-              <h3 className={`text-sm font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>Scan to Pay (Any UPI App)</h3>
+              <h3 className={`text-sm font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_scan_pay')}</h3>
               <div className="flex items-center justify-center">
                 <QRCanvas value={upiQrData} />
               </div>
               <div className={`text-center text-xs mt-4 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                <p>Scan this QR code using any UPI-enabled mobile application (e.g., Google Pay, PhonePe, Paytm, BHIM) to complete your payment.</p>
+                <p>{t('m_scan_desc')}</p>
                 <div className={`flex items-center justify-center gap-2 mt-4 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                   <ScanLine className="w-3 h-3" />
-                  <span>Transaction ID: {transactionId}</span>
+                  <span>{t('m_transaction_id')} {transactionId}</span>
                 </div>
                 <div className={`flex items-center justify-center gap-2 mt-2 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                   <ShieldCheck className="w-3 h-3" />
-                  <span>Payee UPI ID: {upiId}</span>
+                  <span>{t('m_payee_upi')} {upiId}</span>
                 </div>
               </div>
             </div>
@@ -195,22 +195,22 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView, theme
             {isProcessing && (
               <div className="flex flex-col items-center justify-center py-4 gap-3 text-center">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Processing secure payment...</p>
+                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_processing')}</p>
               </div>
             )}
           </div>
 
           {/* Trust Badges */}
           <div className="text-center space-y-3">
-            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Your security is our priority</p>
+            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_security_priority')}</p>
             <div className="flex items-center justify-center gap-6">
               <div className="flex items-center gap-1.5 text-emerald-500">
                 <ShieldCheck className="w-4 h-4" />
-                <span className="text-xs font-medium">SSL Secured</span>
+                <span className="text-xs font-medium">{t('m_ssl_secured')}</span>
               </div>
               <div className="flex items-center gap-1.5 text-emerald-500">
                 <Lock className="w-4 h-4" />
-                <span className="text-xs font-medium">PCI-DSS Compliant</span>
+                <span className="text-xs font-medium">{t('m_pci_compliant')}</span>
               </div>
             </div>
           </div>

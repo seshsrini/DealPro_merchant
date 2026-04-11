@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { useTranslation } from './contexts/LanguageContext';
 import { AppView, Deal } from './types';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { merchantService } from './services/merchantService';
@@ -22,6 +23,11 @@ import {
   Clock,
   MousePointer2,
   TicketCheck,
+  X,
+  Film,
+  Calendar,
+  MapPin,
+  Edit2,
 } from 'lucide-react';
 
 type CampaignTab = 'active' | 'expired';
@@ -59,11 +65,11 @@ const getBannerThemeClasses = (themeKey: string, isDark: boolean) => {
   }
 };
 
-const getGreeting = () => {
+const getGreetingKey = () => {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 12) return 'm_greet_morning';
+  if (hour < 17) return 'm_greet_afternoon';
+  return 'm_greet_evening';
 };
 
 
@@ -113,6 +119,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   setPreSelectedTab
 }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
 
   const [campaignUsage, setCampaignUsage] = useState({
@@ -128,6 +135,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   // Per-deal click & redemption counts
   const [clickCounts, setClickCounts] = useState<Record<string, number>>({});
   const [redeemCounts, setRedeemCounts] = useState<Record<string, number>>({});
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+
+  const getDealImage = (deal: Deal) => (deal as any).image_url || deal.thumbnail || '';
 
   const activeDeals = useMemo(() => {
     return deals
@@ -194,7 +204,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     });
   }, [user?.id]);
 
-  const greeting = getGreeting();
+  const greeting = t(getGreetingKey());
 
   // Float-in helper
   const fi = (delay: number): React.CSSProperties => ({
@@ -232,7 +242,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
               }`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {totalActiveDeals} live {totalActiveDeals === 1 ? 'deal' : 'deals'}
+                {totalActiveDeals} {t('m_live_deals')}
               </div>
               {user.store_name && (
                 <span className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -272,7 +282,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     </div>
                   </div>
                   <div>
-                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Campaigns</p>
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_campaigns')}</p>
                     <p className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {campaignUsage.campaigns_used}
                       <span className={`text-sm font-normal ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>
@@ -284,7 +294,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 {campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
                   <div className={`mt-2 flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>
                     <AlertCircle className="w-3 h-3" />
-                    Limit reached
+                    {t('m_limit_reached')}
                   </div>
                 )}
               </div>
@@ -306,7 +316,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     </div>
                   </div>
                   <div>
-                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Deal of Day</p>
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_deal_of_day')}</p>
                     <p className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {campaignUsage.dotd_used}
                       <span className={`text-sm font-normal ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>
@@ -318,7 +328,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 {campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
                   <div className={`mt-2 flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>
                     <AlertCircle className="w-3 h-3" />
-                    Limit reached
+                    {t('m_limit_reached')}
                   </div>
                 )}
               </div>
@@ -332,7 +342,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-amber-50 text-amber-700 border border-amber-200'
                 }`}
               >
-                <span>Upgrade plan for more campaigns</span>
+                <span>{t('m_upgrade_plan')}</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -352,8 +362,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
               <Plus className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="text-sm font-bold text-white">New Deal</p>
-              <p className="text-[10px] mt-0.5 text-blue-100">Launch campaign</p>
+              <p className="text-sm font-bold text-white">{t('m_new_deal')}</p>
+              <p className="text-[10px] mt-0.5 text-blue-100">{t('m_launch_campaign')}</p>
             </div>
           </button>
 
@@ -372,8 +382,8 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
               <QrCode className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="text-sm font-bold text-white">Scan & Verify</p>
-              <p className="text-[10px] mt-0.5 text-slate-300">Redeem voucher</p>
+              <p className="text-sm font-bold text-white">{t('m_scan_verify')}</p>
+              <p className="text-[10px] mt-0.5 text-slate-300">{t('m_redeem_voucher')}</p>
             </div>
           </button>
         </div>
@@ -383,13 +393,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
           <div style={fi(240)}>
             <div className="flex items-center justify-between mb-3">
               <h2 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Live Deals
+                {t('m_live_deals_title')}
               </h2>
               <button
                 onClick={() => setView('merchant_deals')}
                 className={`flex items-center gap-1 text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
               >
-                View all
+                {t('m_view_all')}
                 <ChevronRight className="w-3 h-3" />
               </button>
             </div>
@@ -397,19 +407,16 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
               {activeDeals.map((deal) => (
                 <button
                   key={deal.campaign_id}
-                  onClick={() => {
-                    setDealIdToEdit(deal.campaign_id);
-                    setView('merchant_deals');
-                  }}
+                  onClick={() => setSelectedDeal(deal)}
                   className={`shrink-0 w-56 rounded-2xl overflow-hidden border text-left active:scale-[0.97] transition-all ${
                     isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
                   }`}
                 >
                   {/* Deal thumbnail */}
                   <div className={`relative w-full h-28 ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                    {deal.thumbnail ? (
+                    {getDealImage(deal) ? (
                       <img
-                        src={deal.thumbnail}
+                        src={getDealImage(deal)}
                         alt={deal.deal_heading}
                         className="w-full h-full object-cover"
                         onError={e => { e.currentTarget.style.display = 'none'; }}
@@ -430,7 +437,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                         isDark ? 'bg-black/60 text-white' : 'bg-white/80 text-slate-700'
                       }`}>
                         <Clock className="w-2.5 h-2.5" />
-                        {deal.daysLeft === 0 ? 'Last day' : `${deal.daysLeft}d left`}
+                        {deal.daysLeft === 0 ? t('m_last_day') : `${deal.daysLeft}d left`}
                       </span>
                     )}
                   </div>
@@ -440,7 +447,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                       {deal.deal_heading}
                     </p>
                     <p className={`text-[10px] font-semibold mt-0.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                      {deal.offerValue}
+                      {deal.offerValue || (deal as any).offer_value}
                     </p>
                     {/* Clicks & Claims */}
                     <div className={`flex items-center gap-3 mt-1.5 pt-1.5 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
@@ -463,10 +470,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
         {/* ─── Shortcut Row ─── */}
         <div style={fi(320)} className="grid grid-cols-4 gap-2">
           {[
-            { icon: BarChart3, label: 'Intel', view: 'merchant_analytics' as AppView, color: 'text-violet-500', bg: isDark ? 'bg-violet-500/10' : 'bg-violet-50' },
-            { icon: Package, label: 'Catalogue', view: 'merchant_catalogue' as AppView, color: 'text-emerald-500', bg: isDark ? 'bg-emerald-500/10' : 'bg-emerald-50' },
-            { icon: Store, label: 'Stores', view: 'merchant_stores' as AppView, color: 'text-sky-500', bg: isDark ? 'bg-sky-500/10' : 'bg-sky-50' },
-            { icon: Sparkles, label: 'AI Hub', view: 'merchant_ai_insights' as AppView, color: 'text-amber-500', bg: isDark ? 'bg-amber-500/10' : 'bg-amber-50' },
+            { icon: BarChart3, label: t('m_intel'), view: 'merchant_analytics' as AppView, color: 'text-violet-500', bg: isDark ? 'bg-violet-500/10' : 'bg-violet-50' },
+            { icon: Package, label: t('m_catalogue'), view: 'merchant_catalogue' as AppView, color: 'text-emerald-500', bg: isDark ? 'bg-emerald-500/10' : 'bg-emerald-50' },
+            { icon: Store, label: t('m_stores'), view: 'merchant_stores' as AppView, color: 'text-sky-500', bg: isDark ? 'bg-sky-500/10' : 'bg-sky-50' },
+            { icon: Sparkles, label: t('m_ai_hub'), view: 'merchant_ai_insights' as AppView, color: 'text-amber-500', bg: isDark ? 'bg-amber-500/10' : 'bg-amber-50' },
           ].map(({ icon: Icon, label, view: targetView, color, bg }) => (
             <button
               key={label}
@@ -488,7 +495,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
           <div style={fi(400)} id="tour-festival-banner">
             <div className="flex items-center justify-between mb-2.5">
               <h2 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Upcoming Events
+                {t('m_upcoming_events')}
               </h2>
             </div>
             <div className="space-y-2.5">
@@ -524,7 +531,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                               ? 'bg-emerald-500/20 text-emerald-400'
                               : isDark ? 'bg-white/10 text-slate-400' : 'bg-slate-900/10 text-slate-500'
                         }`}>
-                          {daysAway === 0 ? 'Today!' : `${daysAway}d away`}
+                          {daysAway === 0 ? t('m_today') : `${daysAway}d away`}
                         </span>
                       </div>
                       <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -550,22 +557,203 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
               <Megaphone className={`w-7 h-7 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
             </div>
             <h3 className={`text-sm font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              No active deals yet
+              {t('m_no_active_deals')}
             </h3>
             <p className={`text-xs mb-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              Create your first campaign to start attracting customers.
+              {t('m_create_first_deal')}
             </p>
             <button
               onClick={() => setView('merchant_deals')}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-500 text-white text-xs font-bold active:scale-[0.97] transition-all"
             >
               <Plus className="w-3.5 h-3.5" />
-              Create First Deal
+              {t('m_create_first_deal_btn')}
             </button>
           </div>
         )}
       </div>
 
+      {/* Deal Detail Modal */}
+      {selectedDeal && (() => {
+        const deal = selectedDeal;
+        const allMedia: { url: string; isVideo: boolean }[] = [];
+        const mainImg = getDealImage(deal);
+        if (mainImg) allMedia.push({ url: mainImg, isVideo: false });
+        if ((deal as any).media_urls) {
+          for (const url of (deal as any).media_urls) {
+            if (url && url !== mainImg) allMedia.push({ url, isVideo: false });
+          }
+        }
+        if ((deal as any).video_url) allMedia.push({ url: (deal as any).video_url, isVideo: true });
+        const totalMedia = allMedia.length;
+        const priceOverlays = (deal as any).image_price_overlays || {};
+
+        const formatDateUTC = (dateStr: string) => {
+          const date = new Date(dateStr + 'T00:00:00Z');
+          return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+        };
+
+        const plainDesc = (deal.longDescription || (deal as any).long_description || '')
+          .replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+
+        return (
+          <div className="fixed inset-0 z-[300] bg-black/70 flex items-end sm:items-center justify-center" onClick={() => setSelectedDeal(null)}>
+            <div
+              onClick={e => e.stopPropagation()}
+              className={`w-full sm:max-w-md max-h-[90vh] rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col ${isDark ? 'bg-slate-900' : 'bg-white'}`}
+            >
+              {/* Media Carousel */}
+              {totalMedia > 0 ? (
+                <>
+                  <div className="relative shrink-0">
+                    <div
+                      id="dashboard-deal-carousel"
+                      onScroll={(e) => {
+                        const el = e.currentTarget;
+                        const idx = Math.round(el.scrollLeft / el.clientWidth);
+                        // Update dot via DOM (avoids re-render)
+                        el.dataset.activeIdx = String(Math.min(idx, totalMedia - 1));
+                        document.querySelectorAll('.dash-carousel-dot').forEach((dot, i) => {
+                          if (i === idx) {
+                            dot.className = `dash-carousel-dot rounded-full transition-all duration-300 w-5 h-2 ${allMedia[i]?.isVideo ? 'bg-indigo-500' : 'bg-blue-500'}`;
+                          } else {
+                            dot.className = `dash-carousel-dot rounded-full transition-all duration-300 w-2 h-2 ${isDark ? 'bg-slate-600' : 'bg-slate-300'}`;
+                          }
+                        });
+                      }}
+                      className="flex overflow-x-auto snap-x snap-mandatory"
+                      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+                    >
+                      {allMedia.map((item, i) => {
+                        const overlay = priceOverlays[String(i)];
+                        const hasOverlay = overlay && (overlay.discountPct || overlay.offerPrice);
+                        const mrp = overlay?.offerPrice ? Math.round(parseFloat(overlay.offerPrice) * 1.3) : null;
+                        return (
+                          <div key={i} className="w-full flex-shrink-0 snap-center relative">
+                            {item.isVideo ? (
+                              <video src={item.url} className="w-full h-56 object-cover bg-black" controls muted playsInline />
+                            ) : (
+                              <img src={item.url} alt="" className="w-full h-56 object-cover" draggable={false} />
+                            )}
+                            {hasOverlay && !item.isVideo && (
+                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-8 pb-3 px-4">
+                                {overlay.discountPct && (
+                                  <div className="inline-block bg-red-500 text-white text-xs font-black px-2 py-1 rounded mb-1.5">
+                                    {overlay.discountPct}% OFF
+                                  </div>
+                                )}
+                                <div className="flex items-baseline gap-2">
+                                  {overlay.offerPrice && (
+                                    <span className="text-white text-2xl font-black drop-shadow-lg">₹{overlay.offerPrice}</span>
+                                  )}
+                                  {mrp && (
+                                    <span className="text-white/60 text-sm line-through">₹{mrp}</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Close */}
+                    <button onClick={() => setSelectedDeal(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center">
+                      <X className="w-4 h-4 text-white" />
+                    </button>
+                    {/* Counter */}
+                    {totalMedia > 1 && (
+                      <div className="absolute top-3 right-14 px-2 py-0.5 rounded-md bg-black/50">
+                        <span className="text-[10px] font-semibold text-white">1/{totalMedia}</span>
+                      </div>
+                    )}
+                    {/* DOTD badge */}
+                    {deal.is_deal_of_the_day && (
+                      <div className="absolute top-3 left-3 flex items-center gap-1 bg-amber-500 text-white px-2 py-1 rounded-lg text-xs font-bold">
+                        <Zap className="w-3 h-3" /> DOTD
+                      </div>
+                    )}
+                  </div>
+                  {/* Dot indicators below image */}
+                  {totalMedia > 1 && (
+                    <div className="flex items-center justify-center gap-2 py-2.5">
+                      {allMedia.map((item, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            const el = document.getElementById('dashboard-deal-carousel');
+                            if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
+                          }}
+                          className={`dash-carousel-dot rounded-full transition-all duration-300 ${
+                            i === 0
+                              ? `w-5 h-2 ${item.isVideo ? 'bg-indigo-500' : 'bg-blue-500'}`
+                              : `w-2 h-2 ${isDark ? 'bg-slate-600' : 'bg-slate-300'}`
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="relative shrink-0">
+                  <div className={`w-full h-32 flex items-center justify-center ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                    <Megaphone className={`w-10 h-10 ${isDark ? 'text-slate-700' : 'text-slate-300'}`} />
+                  </div>
+                  <button onClick={() => setSelectedDeal(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center">
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              )}
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className={`text-lg font-bold flex-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {deal.deal_heading || deal.details}
+                    </h2>
+                    <span className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-bold">
+                      {deal.offerValue || (deal as any).offer_value}
+                    </span>
+                  </div>
+                  <p className={`text-xs mt-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{deal.shopName}</p>
+                </div>
+
+                {deal.start_date && deal.end_date && (
+                  <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <Calendar className="w-3.5 h-3.5" />
+                    {formatDateUTC(deal.start_date)} — {formatDateUTC(deal.end_date)}
+                  </div>
+                )}
+
+                {deal.address && (
+                  <div className={`flex items-start gap-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>{deal.address}</span>
+                  </div>
+                )}
+
+                {plainDesc && (
+                  <div>
+                    <p className={`text-xs font-semibold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Description</p>
+                    <p className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{plainDesc}</p>
+                  </div>
+                )}
+
+                <div className={`grid grid-cols-2 gap-2 p-3 rounded-xl ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                  <div className="text-center">
+                    <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{clickCounts[deal.campaign_id] || 0}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_clicks')}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className={`text-lg font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{redeemCounts[deal.campaign_id] || 0}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_redeemed')}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

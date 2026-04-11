@@ -19,6 +19,13 @@ import {
   ArrowLeft,
   CheckCircle2,
   Timer,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Film,
+  MapPin,
+  Calendar,
+  Store,
 } from 'lucide-react';
 
 const EDIT_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
@@ -107,6 +114,8 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
     profitMarginPercentage: number;
   }>>({});
   const [showRoiCalculator, setShowRoiCalculator] = useState<Record<string, boolean>>({});
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  const [detailCarouselIndex, setDetailCarouselIndex] = useState(0);
 
   const [perCampaignClickCounts, setPerCampaignClickCounts] = useState<Record<string, number>>({});
   const [perCampaignRedemptionCounts, setPerCampaignRedemptionCounts] = useState<Record<string, number>>({});
@@ -231,10 +240,6 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
     setView('campaign_wizard');
   };
 
-  const handleModifyExisting = () => {
-    campaignListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const updateRoiInput = (campaignId: string, field: string, value: number) => {
     setRoiInputs(prev => ({
       ...prev,
@@ -259,8 +264,8 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>My Campaigns</h1>
-          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Create and manage your deals</p>
+          <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_my_campaigns')}</h1>
+          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_create_manage_deals')}</p>
         </div>
         <button
           onClick={() => setView('merchant_dashboard')}
@@ -279,7 +284,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 <Megaphone className="w-5 h-5 text-blue-500" />
               </div>
               <div>
-                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Campaigns</p>
+                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_campaigns')}</p>
                 <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   <span className={campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? 'text-rose-500' : 'text-emerald-500'}>
                     {campaignUsage.campaigns_used}
@@ -293,7 +298,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 <Zap className="w-5 h-5 text-amber-500" />
               </div>
               <div>
-                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Deal of the Day</p>
+                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_deal_of_day')}</p>
                 <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   <span className={campaignUsage.dotd_used >= campaignUsage.dotd_limit ? 'text-rose-500' : 'text-emerald-500'}>
                     {campaignUsage.dotd_used}
@@ -310,7 +315,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-200'}`}>
                   <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
                   <p className={`text-xs ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>
-                    Campaign limit reached ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.
+                    {t('m_campaign_limit_reached')} ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.
                   </p>
                 </div>
               )}
@@ -318,7 +323,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
                   <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                   <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                    Deal of the Day limit reached ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.
+                    {t('m_dotd_limit_reached')} ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.
                   </p>
                 </div>
               )}
@@ -327,65 +332,38 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
         </div>
       )}
 
-      {/* Landing Buttons */}
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          id="ctour-new-deal"
-          onClick={handleNewDeal}
-          className="relative overflow-hidden rounded-2xl p-4 bg-blue-600 border-2 border-blue-500 transition-all active:translate-y-0.5 active:shadow-none shadow-lg shadow-blue-600/30"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/20">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div className="w-7 h-7 rounded-full flex items-center justify-center bg-white/20">
-              <ArrowLeft className="w-3.5 h-3.5 text-white rotate-180" />
-            </div>
-          </div>
-          <h3 className="text-sm font-bold mb-0.5 text-left text-white">New Deal</h3>
-          <p className="text-[10px] leading-tight text-left text-blue-100">
-            Create step by step
-          </p>
-        </button>
-
-        <button
-          id="ctour-modify-deal"
-          onClick={handleModifyExisting}
-          className={`relative overflow-hidden rounded-2xl p-4 border-2 transition-all active:translate-y-0.5 active:shadow-none shadow-lg ${
-            isDark
-              ? 'bg-slate-800 border-slate-600 shadow-black/30'
-              : 'bg-slate-900 border-slate-700 shadow-slate-900/30'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/20">
-              <Edit2 className="w-5 h-5 text-amber-400" />
-            </div>
-            <div className="w-7 h-7 rounded-full flex items-center justify-center bg-white/10">
-              <ArrowLeft className="w-3.5 h-3.5 text-white/70 rotate-180" />
-            </div>
-          </div>
-          <h3 className="text-sm font-bold mb-0.5 text-left text-white">Modify Deal</h3>
-          <p className="text-[10px] leading-tight text-left text-slate-400">
-            Edit existing campaign
-          </p>
-        </button>
-      </div>
+      {/* New Deal Button — full width */}
+      <button
+        id="ctour-new-deal"
+        onClick={handleNewDeal}
+        className="w-full relative overflow-hidden rounded-2xl p-4 bg-blue-600 border-2 border-blue-500 transition-all active:translate-y-0.5 active:shadow-none shadow-lg shadow-blue-600/30 flex items-center gap-4"
+      >
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white/20 shrink-0">
+          <Sparkles className="w-6 h-6 text-white" />
+        </div>
+        <div className="text-left flex-1">
+          <h3 className="text-base font-bold text-white">{t('m_new_deal')}</h3>
+          <p className="text-xs text-blue-100">{t('m_launch_campaign')}</p>
+        </div>
+        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-white/20 shrink-0">
+          <ArrowLeft className="w-4 h-4 text-white rotate-180" />
+        </div>
+      </button>
 
       {/* Campaigns List */}
       <div ref={campaignListRef} className="space-y-4">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-            <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Auto-refresh active</span>
+            <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_auto_refresh')}</span>
           </div>
         </div>
 
         {/* Tabs */}
         <div id="ctour-tabs" ref={tabsRef} className={`p-1 rounded-lg border flex gap-1 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
           {[
-            { key: 'active' as CampaignTab, label: 'Live' },
-            { key: 'expired' as CampaignTab, label: 'Expired' },
+            { key: 'active' as CampaignTab, label: t('m_live') },
+            { key: 'expired' as CampaignTab, label: t('m_expired') },
           ].map(tab => {
             const count = merchantDeals.filter(d => (d.status || 'active').toLowerCase() === tab.key).length;
             return (
@@ -408,12 +386,12 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
         {filteredDeals.length === 0 ? (
           <div className={`text-center py-16 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
             <Megaphone className={`w-8 h-8 mx-auto mb-3 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
-            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No campaigns in this category</p>
+            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_no_campaigns_category')}</p>
             <button
               onClick={handleNewDeal}
               className="text-xs font-medium text-blue-500 mt-2"
             >
-              Create New Campaign
+              {t('m_create_new_campaign')}
             </button>
           </div>
         ) : (
@@ -425,7 +403,9 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
 
               return (
                 <div key={deal.campaign_id}>
-                  <div className={`flex gap-3 p-3 rounded-xl border ${
+                  <div
+                    onClick={() => { setSelectedDeal(deal); setDetailCarouselIndex(0); }}
+                    className={`flex gap-3 p-3 rounded-xl border cursor-pointer active:scale-[0.99] transition-all ${
                     deal.is_deal_of_the_day
                       ? isDark ? 'bg-amber-500/5 border-amber-500/30 ring-1 ring-amber-500/20' : 'bg-amber-50/50 border-amber-300 ring-1 ring-amber-200'
                       : isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
@@ -456,7 +436,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                             <span className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
                               isDark ? 'bg-amber-500/15 text-amber-400' : 'bg-amber-100 text-amber-700'
                             }`}>
-                              Deal of the Day
+                              {t('m_dotd_label')}
                             </span>
                           )}
                         </div>
@@ -480,7 +460,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                               };
                               return `${formatDateUTC(deal.start_date!)} - ${formatDateUTC(deal.end_date!)}`;
                             })()
-                          ) : 'No dates'}
+                          ) : t('m_no_dates')}
                         </div>
                         <div className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-medium ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-50 text-slate-600'}`}>
                           <MousePointer2 className="w-3 h-3" /> {clicks}
@@ -506,13 +486,13 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                               isDark ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-700 border border-slate-200'
                             }`}
                           >
-                            <Edit2 className="w-3 h-3" /> Edit
+                            <Edit2 className="w-3 h-3" /> {t('m_edit')}
                           </button>
                         ) : (
                           <div className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium opacity-40 ${
                             isDark ? 'bg-slate-800 text-slate-500 border border-slate-700' : 'bg-slate-100 text-slate-400 border border-slate-200'
                           }`}>
-                            <Edit2 className="w-3 h-3" /> Edit window closed
+                            <Edit2 className="w-3 h-3" /> {t('m_edit_window_closed')}
                           </div>
                         )}
                         <button
@@ -521,7 +501,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                             isDark ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-700 border border-slate-200'
                           }`}
                         >
-                          <Calculator className="w-3 h-3" /> {showRoiCalculator[deal.campaign_id] ? 'Hide ROI' : 'ROI'}
+                          <Calculator className="w-3 h-3" /> {showRoiCalculator[deal.campaign_id] ? t('m_hide_roi') : t('m_roi')}
                         </button>
                       </div>
                     </div>
@@ -532,12 +512,12 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                     <div className={`mt-2 p-4 rounded-lg border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
                       <div className="flex items-center gap-2 mb-3">
                         <Calculator className="w-4 h-4 text-blue-500" />
-                        <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>ROI Calculator</span>
+                        <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_roi_calculator')}</span>
                       </div>
 
                       <div className="grid grid-cols-3 gap-2 mb-3">
                         <div>
-                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Expected Claims</label>
+                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_expected_claims')}</label>
                           <input
                             type="number"
                             placeholder="100"
@@ -549,7 +529,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                           />
                         </div>
                         <div>
-                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Avg Spend (Rs)</label>
+                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_avg_spend')}</label>
                           <input
                             type="number"
                             placeholder="500"
@@ -561,7 +541,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                           />
                         </div>
                         <div>
-                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Margin %</label>
+                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_margin_pct')}</label>
                           <input
                             type="number"
                             placeholder="20"
@@ -577,11 +557,11 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                       {roiData && roiData.projectedRevenue > 0 && (
                         <div className={`grid grid-cols-2 gap-2 pt-3 border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
                           <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
-                            <p className={`text-[10px] font-medium mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Projected Revenue</p>
+                            <p className={`text-[10px] font-medium mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_projected_revenue')}</p>
                             <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Rs.{Math.round(roiData.projectedRevenue).toLocaleString('en-IN')}</p>
                           </div>
                           <div className={`p-3 rounded-lg ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
-                            <p className={`text-[10px] font-medium mb-0.5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Projected Profit</p>
+                            <p className={`text-[10px] font-medium mb-0.5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{t('m_projected_profit')}</p>
                             <p className="text-lg font-semibold text-emerald-500">Rs.{Math.round(roiData.projectedProfit).toLocaleString('en-IN')}</p>
                           </div>
                         </div>
@@ -594,6 +574,176 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
           </div>
         )}
       </div>
+
+      {/* Deal Detail Modal */}
+      {selectedDeal && (() => {
+        const deal = selectedDeal;
+        const allMedia: { url: string; isVideo: boolean }[] = [];
+        const mainImg = (deal as any).image_url || deal.thumbnail;
+        if (mainImg) allMedia.push({ url: mainImg, isVideo: false });
+        if ((deal as any).media_urls) {
+          for (const url of (deal as any).media_urls) {
+            if (url && url !== mainImg) allMedia.push({ url, isVideo: false });
+          }
+        }
+        if ((deal as any).video_url) allMedia.push({ url: (deal as any).video_url, isVideo: true });
+        const totalMedia = allMedia.length;
+        const priceOverlays = (deal as any).image_price_overlays || {};
+
+        const formatDateUTC = (dateStr: string) => {
+          const date = new Date(dateStr + 'T00:00:00Z');
+          return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+        };
+
+        const plainDesc = (deal.longDescription || (deal as any).long_description || '')
+          .replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+
+        return (
+          <div className="fixed inset-0 z-[300] bg-black/70 flex items-end sm:items-center justify-center" onClick={() => setSelectedDeal(null)}>
+            <div
+              onClick={e => e.stopPropagation()}
+              className={`w-full sm:max-w-md max-h-[90vh] rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col ${isDark ? 'bg-slate-900' : 'bg-white'}`}
+            >
+              {/* Media Carousel */}
+              {totalMedia > 0 && (
+                <div className="relative shrink-0">
+                  <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                    {allMedia.map((item, i) => {
+                      const overlay = priceOverlays[String(i)];
+                      const hasOverlay = overlay && (overlay.discountPct || overlay.offerPrice);
+                      const mrp = overlay?.offerPrice ? Math.round(parseFloat(overlay.offerPrice) * 1.3) : null;
+                      return (
+                        <div key={i} className="w-full flex-shrink-0 snap-center relative">
+                          {item.isVideo ? (
+                            <video src={item.url} className="w-full h-56 object-cover bg-black" controls muted playsInline />
+                          ) : (
+                            <img src={item.url} alt="" className="w-full h-56 object-cover" />
+                          )}
+                          {/* Price tag overlay */}
+                          {hasOverlay && !item.isVideo && (
+                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-8 pb-3 px-4">
+                              {overlay.discountPct && (
+                                <div className="inline-block bg-red-500 text-white text-xs font-black px-2 py-1 rounded mb-1.5">
+                                  {overlay.discountPct}% OFF
+                                </div>
+                              )}
+                              <div className="flex items-baseline gap-2">
+                                {overlay.offerPrice && (
+                                  <span className="text-white text-2xl font-black drop-shadow-lg">₹{overlay.offerPrice}</span>
+                                )}
+                                {mrp && (
+                                  <span className="text-white/60 text-sm line-through">₹{mrp}</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Close button */}
+                  <button onClick={() => setSelectedDeal(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center">
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                  {/* Media count */}
+                  {totalMedia > 1 && (
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full bg-black/50">
+                      <span className="text-[10px] font-semibold text-white">{totalMedia} {totalMedia === 1 ? 'photo' : 'photos'}{(deal as any).video_url ? ' + video' : ''}</span>
+                    </div>
+                  )}
+                  {/* DOTD badge */}
+                  {deal.is_deal_of_the_day && (
+                    <div className="absolute top-3 left-3 flex items-center gap-1 bg-amber-500 text-white px-2 py-1 rounded-lg text-xs font-bold">
+                      <Zap className="w-3 h-3" /> {t('m_dotd_label')}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Dot indicators */}
+              {totalMedia > 1 && (
+                <div className="flex items-center justify-center gap-2 py-2">
+                  {allMedia.map((item, i) => (
+                    <div key={i} className={`rounded-full transition-all ${i === detailCarouselIndex ? `w-5 h-2 ${item.isVideo ? 'bg-indigo-500' : 'bg-blue-500'}` : `w-2 h-2 ${isDark ? 'bg-slate-600' : 'bg-slate-300'}`}`} />
+                  ))}
+                </div>
+              )}
+
+              {/* Content — scrollable */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                {/* Heading + Offer */}
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className={`text-lg font-bold flex-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {getLocalizedText(deal.localized_heading, deal.deal_heading || deal.details)}
+                    </h2>
+                    <span className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-bold">
+                      {getLocalizedText(deal.localized_offer, deal.offerValue)}
+                    </span>
+                  </div>
+                  <p className={`text-xs mt-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{deal.shopName}</p>
+                </div>
+
+                {/* Status */}
+                <div className="flex items-center gap-2">
+                  {getStatusDisplay(deal.status || 'active')}
+                  {deal.category && (
+                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                      {deal.category}
+                    </span>
+                  )}
+                </div>
+
+                {/* Dates */}
+                {deal.start_date && deal.end_date && (
+                  <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <Calendar className="w-3.5 h-3.5" />
+                    {formatDateUTC(deal.start_date)} — {formatDateUTC(deal.end_date)}
+                  </div>
+                )}
+
+                {/* Location */}
+                {deal.address && (
+                  <div className={`flex items-start gap-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>{deal.address}</span>
+                  </div>
+                )}
+
+                {/* Description */}
+                {plainDesc && (
+                  <div>
+                    <p className={`text-xs font-semibold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Description</p>
+                    <p className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{plainDesc}</p>
+                  </div>
+                )}
+
+                {/* Stats */}
+                <div className={`grid grid-cols-2 gap-2 p-3 rounded-xl ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                  <div className="text-center">
+                    <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{perCampaignClickCounts[deal.campaign_id] || 0}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_clicks')}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className={`text-lg font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{perCampaignRedemptionCounts[deal.campaign_id] || 0}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_redeemed')}</p>
+                  </div>
+                </div>
+
+                {/* Edit button if within window */}
+                {deal.created_at && getTimeRemaining(deal.created_at) > 0 && (
+                  <button
+                    onClick={() => { setSelectedDeal(null); handleEditClick(deal); }}
+                    className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                  >
+                    <Edit2 className="w-4 h-4" /> {t('m_edit')}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

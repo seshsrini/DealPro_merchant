@@ -17,7 +17,16 @@ console.log(`[SupabaseClient] Using Anon Key: ${supabaseAnonKey.substring(0, 10)
 
 
 // Initialize the client with the anon key initially
-export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+// CRITICAL: enable persistSession + autoRefreshToken so JWTs auto-refresh after the 1hr expiry
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    storageKey: 'dealpro-merchant-auth',
+  },
+});
 
 // Keep Authorization header in sync when tokens refresh.
 // IMPORTANT: mutate in-place — do NOT reassign (supabase as any).headers to a new object.
@@ -70,26 +79,59 @@ export const ensureFreshToken = async (): Promise<string> => {
 // Wrap functions.invoke to automatically refresh token before every authenticated Edge Function call.
 // Unauthenticated calls skip token refresh entirely.
 const originalInvoke = supabase.functions.invoke.bind(supabase.functions);
-const unauthFunctions = ['validate-identifier', 'register-user', 'login-merchant', 'search-localities-by-city', 'get-states', 'get-cities'];
+const unauthFunctions = ['validate-identifier', 'register-user', 'login-merchant', 'search-localities-by-city', 'get-states', 'get-cities', 'product-search'];
+
+async function attachFreshAuth(functionName: string, options?: any) {
+  if (unauthFunctions.includes(functionName)) return options;
+  const hasAuthHeader = options?.headers?.Authorization || options?.headers?.authorization;
+  if (hasAuthHeader) return options;
+  const freshToken = await ensureFreshToken();
+  return {
+    ...(options || {}),
+    headers: {
+      ...(options?.headers || {}),
+      'Authorization': `Bearer ${freshToken}`,
+    },
+  };
+}
+
 supabase.functions.invoke = async (functionName: string, options?: any) => {
-  if (!unauthFunctions.includes(functionName)) {
-    // If caller already provided an Authorization header, use it as-is (e.g., during fresh login)
-    const hasAuthHeader = options?.headers?.Authorization || options?.headers?.authorization;
-    if (!hasAuthHeader) {
-      try {
-        const freshToken = await ensureFreshToken();
-        options = options || {};
-        options.headers = {
-          ...(options.headers || {}),
-          'Authorization': `Bearer ${freshToken}`,
+  let finalOptions: any;
+  try {
+    finalOptions = await attachFreshAuth(functionName, options);
+  } catch (err: any) {
+    console.error('[SupabaseClient] Token refresh failed for', functionName, ':', err?.message);
+    throw new Error('Session expired. Please log in again.');
+  }
+
+  let result = await originalInvoke(functionName, finalOptions);
+
+  // Retry once on 401 — force refresh and try again. Handles stale-token scenarios.
+  const errMsg = (result.error as any)?.message || '';
+  const errCtxStatus = (result.error as any)?.context?.status;
+  const isUnauthorized = errCtxStatus === 401 || /401|unauthor|invalid token|expired/i.test(errMsg);
+  if (isUnauthorized && !unauthFunctions.includes(functionName)) {
+    console.warn('[SupabaseClient] 401 from', functionName, '— forcing token refresh and retrying');
+    try {
+      // Force refresh by clearing the cached promise and calling refreshSession directly
+      _refreshPromise = null;
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (!refreshError && refreshData.session?.access_token) {
+        const retryOptions = {
+          ...(options || {}),
+          headers: {
+            ...(options?.headers || {}),
+            'Authorization': `Bearer ${refreshData.session.access_token}`,
+          },
         };
-      } catch (err: any) {
-        console.error('[SupabaseClient] Token refresh failed for', functionName, ':', err?.message);
-        throw new Error('Session expired. Please log in again.');
+        (supabase as any).headers['Authorization'] = `Bearer ${refreshData.session.access_token}`;
+        result = await originalInvoke(functionName, retryOptions);
       }
+    } catch (retryErr: any) {
+      console.error('[SupabaseClient] Retry refresh failed:', retryErr?.message);
     }
   }
-  return originalInvoke(functionName, options);
+  return result;
 };
 
 /**

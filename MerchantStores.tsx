@@ -8,6 +8,7 @@ import { AppView, MerchantStore, User } from './types';
 import { merchantService } from './services/merchantService';
 import { locationsearchService } from './services/locationsearchService';
 import { addCampaignService } from './services/addCampaignService';
+import { useTranslation } from './contexts/LanguageContext';
 
 const SHIFT1_OPTIONS = [
   '5:00 AM','5:30 AM','6:00 AM','6:30 AM','7:00 AM','7:30 AM',
@@ -76,6 +77,7 @@ interface Props {
 
 export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAddMode = false, onFirstStoreAdded, onStoreCountChange }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
   const [stores, setStores] = useState<MerchantStore[]>([]);
   const [loadingStores, setLoadingStores] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
@@ -309,10 +311,10 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
   };
 
   const handleSave = async () => {
-    if (!form.address.trim()) { setError('Address is required'); return; }
-    if (!form.city.trim()) { setError('City is required'); return; }
-    if (!form.state.trim()) { setError('State is required'); return; }
-    if (!form.store_category) { setError('Store category is required'); return; }
+    if (!form.address.trim()) { setError(t('m_address_required')); return; }
+    if (!form.city.trim()) { setError(t('m_city_required')); return; }
+    if (!form.state.trim()) { setError(t('m_state_required')); return; }
+    if (!form.store_category) { setError(t('m_category_required')); return; }
 
     setSaving(true);
     setError(null);
@@ -323,6 +325,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
       if (editingStoreId) {
         // Update (address fields only)
         const updated = await merchantService.updateStore(user.id, editingStoreId, {
+          store_name: form.store_name,
           address: form.address,
           landmark: form.landmark,
           locality: form.locality,
@@ -335,10 +338,10 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
           store_category: form.store_category,
         });
         setStores(prev => prev.map(s => s.id === editingStoreId ? updated : s));
-        setSuccess('Store updated successfully');
+        setSuccess(t('m_store_updated'));
       } else {
         // Add new
-        if (!form.store_name.trim()) { setError('Store name is required'); setSaving(false); return; }
+        if (!form.store_name.trim()) { setError(t('m_store_name_required')); setSaving(false); return; }
         const added = await merchantService.addStore(user.id, {
           store_name: form.store_name,
           address: form.address,
@@ -355,7 +358,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
         const newCount = stores.length + 1;
         setStores(prev => [...prev, added]);
         onStoreCountChange?.(newCount);
-        setSuccess('Store added successfully');
+        setSuccess(t('m_store_added'));
         if (forceAddMode) onFirstStoreAdded?.();
       }
       closePanel();
@@ -400,10 +403,10 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
             )}
             <div>
               <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                {forceAddMode ? 'Add Your Store' : 'My Stores'}
+                {forceAddMode ? t('m_add_store') : t('m_my_stores')}
               </h2>
               <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                {forceAddMode ? 'Required to continue' : `${activeStores.length} active${disabledStores.length > 0 ? `, ${disabledStores.length} deleted` : ''}`}
+                {forceAddMode ? t('m_required_continue') : `${activeStores.length} active${disabledStores.length > 0 ? `, ${disabledStores.length} deleted` : ''}`}
               </p>
             </div>
           </div>
@@ -413,7 +416,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
               className="flex items-center gap-2 h-10 px-4 rounded-xl bg-slate-900 text-white text-sm font-medium active:scale-[0.98] transition-all"
             >
               <Plus className="w-4 h-4" />
-              Add Store
+              {t('m_add_store')}
             </button>
           )}
         </div>
@@ -628,7 +631,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
               {/* Panel header */}
               <div className="px-6 pb-4 flex items-center justify-between">
                 <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  {editingStoreId ? 'Edit Store' : 'Add Store'}
+                  {editingStoreId ? t('m_edit_store') : t('m_add_store')}
                 </h2>
                 {!forceAddMode && (
                   <button onClick={closePanel} className={`w-9 h-9 rounded-lg flex items-center justify-center ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
@@ -649,16 +652,12 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                 {/* Store Name */}
                 <div>
                   <label className={labelClass}>Store / Branch Name <span className="text-red-500">*</span></label>
-                  {editingStoreId ? (
-                    <input value={form.store_name} className={readOnlyClass} readOnly />
-                  ) : (
-                    <input
-                      value={form.store_name}
-                      onChange={e => setForm(f => ({ ...f, store_name: e.target.value }))}
-                      placeholder="e.g. Main Branch, Mall Outlet"
-                      className={inputClass}
-                    />
-                  )}
+                  <input
+                    value={form.store_name}
+                    onChange={e => setForm(f => ({ ...f, store_name: e.target.value }))}
+                    placeholder="e.g. Main Branch, Mall Outlet"
+                    className={inputClass}
+                  />
                 </div>
 
                 {/* Store Category */}
@@ -759,7 +758,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                     }`}
                   >
                     {gpsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Navigation className="w-3.5 h-3.5" />}
-                    {form.city || form.pincode ? 'Resolve from Address' : 'Use Device GPS'}
+                    {form.city || form.pincode ? t('m_resolve_address') : t('m_use_location')}
                   </button>
                   {(form.latitude !== 0 || form.longitude !== 0) && (
                     <p className={`text-[10px] mt-1.5 text-center font-mono ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
@@ -827,7 +826,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                   disabled={saving}
                   className={`${forceAddMode ? 'w-full' : 'flex-1'} h-12 rounded-xl text-sm font-semibold text-white bg-slate-900 disabled:opacity-40 flex items-center justify-center gap-2`}
                 >
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : editingStoreId ? 'Save Changes' : 'Add Store'}
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : editingStoreId ? t('m_save_changes') : t('m_add_store')}
                 </button>
               </div>
             </div>

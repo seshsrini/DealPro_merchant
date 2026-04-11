@@ -239,16 +239,58 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     return { publicUrl: json.secure_url as string, imageName };
   },
 
+  // Direct client-to-Cloudinary video upload
+  uploadDealVideo: async (mId: string, file: File): Promise<{ publicUrl: string }> => {
+    const { data: signData, error: signErr } = await supabase.functions.invoke('cloudinary-sign', {
+      body: { folder: 'dealpro-campaigns-video' },
+    });
+    if (signErr) throw new Error('Video upload preparation failed. Please try again.');
+
+    const { signature, timestamp, api_key, cloud_name, folder } = signData;
+
+    const form = new FormData();
+    form.append('file', file);
+    form.append('signature', signature);
+    form.append('timestamp', String(timestamp));
+    form.append('api_key', api_key);
+    form.append('folder', folder);
+    form.append('resource_type', 'video');
+
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloud_name}/video/upload`,
+      { method: 'POST', body: form, signal: AbortSignal.timeout(120000) }
+    );
+    if (!res.ok) throw new Error('Video upload failed. Please try again.');
+
+    const json = await res.json();
+    if (!json.secure_url) throw new Error('Video upload succeeded but no URL returned');
+    return { publicUrl: json.secure_url as string };
+  },
+
   // Calls Edge Function
   createCampaign: async (d: any) => {
-    const { data, error } = await supabase.functions.invoke('create-campaign', {
-      body: d,
-    });
+    let data, error;
+    try {
+      const result = await supabase.functions.invoke('create-campaign', {
+        body: d,
+      });
+      data = result.data;
+      error = result.error;
+    } catch (tokenErr: any) {
+      console.error('[addCampaignService] Session error:', tokenErr?.message);
+      throw new Error(tokenErr?.message?.includes('Session expired') || tokenErr?.message?.includes('log in')
+        ? 'Your session has expired. Please close and reopen the app.'
+        : 'Unable to process campaign. Please try again.');
+    }
     if (error) {
-      // Extract actual error message from edge function response
       try {
         const errorBody = await error.context?.json?.();
-        if (errorBody?.error) throw new Error(errorBody.error);
+        if (errorBody?.error) {
+          if (errorBody.error.includes('Unauthorized') || errorBody.error.includes('expired')) {
+            throw new Error('Your session has expired. Please close and reopen the app.');
+          }
+          throw new Error(errorBody.error);
+        }
       } catch (parseErr: any) {
         if (parseErr.message && parseErr.message !== error.message) throw parseErr;
       }

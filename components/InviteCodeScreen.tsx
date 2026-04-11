@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
 import { AppView } from '../types';
-import { KeyRound, ArrowRight } from 'lucide-react';
+import { KeyRound, ArrowRight, Users, Share2 } from 'lucide-react';
 
-const VALID_INVITE_CODE = 'BALA10';
+// Known app-level invite codes (gatekeeper for new merchants)
+const APP_INVITE_CODES = ['BALA10', 'DEALPRO', 'MERCHANT2026'];
 
 interface InviteCodeScreenProps {
   setView: (view: AppView) => void;
@@ -17,15 +18,18 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
 
   const handleVerify = () => {
     setError(null);
-    if (!code.trim()) {
+    const trimmed = code.trim().toUpperCase();
+    if (!trimmed) {
       setError('Please enter an invite code.');
       return;
     }
-    if (code.trim().toUpperCase() !== VALID_INVITE_CODE) {
-      setError('Invalid invite code. Please check and try again.');
+    if (trimmed.length < 4) {
+      setError('Code is too short. Please check and try again.');
       return;
     }
-    onInviteCodeValidated(code.trim().toUpperCase());
+    // Accept all codes — app invite, merchant referral, or staff invite.
+    // The backend (login-merchant) will validate and handle each type.
+    onInviteCodeValidated(trimmed);
     setView(nextView);
   };
 
@@ -44,7 +48,7 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
           Enter invite code
         </h2>
         <p className="text-sm text-slate-500">
-          DealPro Merchant is invite-only. Enter your invite code to get started.
+          Enter your invite code, referral code, or staff team code to get started.
         </p>
       </div>
 
@@ -58,7 +62,7 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
               setCode(e.target.value.toUpperCase());
               setError(null);
             }}
-            placeholder="e.g. BALA10"
+            placeholder="e.g. BALA10 or ABCD1234"
             maxLength={20}
             autoCapitalize="characters"
             className={`w-full h-14 px-4 rounded-xl border-2 text-slate-900 text-base font-mono tracking-widest placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-400 outline-none transition-all ${
@@ -68,9 +72,26 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
           {error && (
             <p className="text-sm text-red-500 font-medium">{error}</p>
           )}
+
+          {/* Code type hints */}
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center gap-2.5">
+              <KeyRound className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
+              <span className="text-[11px] text-slate-400">App invite code from DealPro</span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <Share2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span className="text-[11px] text-slate-400">Referral code from another merchant</span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span className="text-[11px] text-slate-400">Staff team code from your store owner</span>
+            </div>
+          </div>
+
           <button
             onClick={handleSkip}
-            className="text-sm text-slate-400 hover:text-slate-600 underline-offset-2 hover:underline transition-colors"
+            className="w-full h-12 rounded-xl bg-slate-100 text-slate-900 font-semibold text-sm active:scale-[0.98] transition-all mt-4"
           >
             I don&apos;t have an invite code
           </button>

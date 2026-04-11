@@ -20,6 +20,9 @@ export const dealOfDayService = {
       image_url: string;
       image_name: string;
       latlong: string;
+      media_urls?: string[];
+      video_url?: string;
+      image_price_overlays?: Record<string, { discountPct: string; offerPrice: string }>;
       localized_heading?: any;
       localized_offer?: any;
       localized_description?: any;

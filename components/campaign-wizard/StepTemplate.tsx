@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, Zap, Gift, Star, Award, TrendingUp, Target, Loader2, ArrowRight } from 'lucide-react';
+import { Sparkles, Zap, Gift, Star, Award, TrendingUp, Target, Loader2, ArrowRight, UserPen } from 'lucide-react';
 import { floatIn } from './floatIn';
+import { useTranslation } from '../../contexts/LanguageContext';
 import {
   campaignTemplatesService,
   CampaignTemplate,
@@ -19,14 +20,15 @@ export const StepTemplate: React.FC<StepTemplateProps> = ({
   merchantId, onSelectTemplate, onSkip, onBack, theme,
 }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<TemplatesResponse | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   useEffect(() => {
-    const t = setTimeout(() => setVisible(true), 50);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setVisible(true), 50);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -71,34 +73,39 @@ export const StepTemplate: React.FC<StepTemplateProps> = ({
 
   const getCategoryLabel = (category: string) => {
     switch (category) {
-      case 'flash-sale': return 'Flash Sale';
-      case 'festival': return 'Festival';
-      case 'clearance': return 'Clearance';
-      case 'new-launch': return 'New Launch';
-      case 'premium': return 'Premium';
-      case 'personal': return 'My Templates';
-      default: return 'Other';
+      case 'flash-sale': return t('m_flash_sale');
+      case 'festival': return t('m_festival');
+      case 'clearance': return t('m_clearance');
+      case 'new-launch': return t('m_new_launch');
+      case 'premium': return t('m_premium');
+      case 'personal': return t('m_my_templates');
+      default: return t('m_other');
     }
   };
 
   const HIDDEN_TEMPLATES = ['premium product showcase', 'mid-week flash'];
 
-  const filteredTemplates = (selectedCategory === 'all'
-    ? templates?.templates || []
-    : templates?.grouped[selectedCategory] || []
-  ).filter(t => !HIDDEN_TEMPLATES.includes(t.name.toLowerCase()));
+  const allTemplates = (templates?.templates || [])
+    .filter(tmpl => !HIDDEN_TEMPLATES.includes(tmpl.name.toLowerCase()));
+
+  // Split into personal and general
+  const personalTemplates = allTemplates.filter(tmpl => tmpl.templateType === 'personal');
+  const generalTemplates = (selectedCategory === 'all'
+    ? allTemplates.filter(tmpl => tmpl.templateType !== 'personal')
+    : (templates?.grouped[selectedCategory] || []).filter(tmpl => tmpl.templateType !== 'personal' && !HIDDEN_TEMPLATES.includes(tmpl.name.toLowerCase()))
+  );
 
   const categories = Object.keys(templates?.grouped || {}).filter(
-    cat => (templates?.grouped[cat]?.length || 0) > 0
+    cat => cat !== 'personal' && (templates?.grouped[cat]?.length || 0) > 0
   );
 
   return (
     <div className="flex flex-col min-h-full px-6 pt-6">
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Start with a template
+        {t('m_start_template')}
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        Pick a proven format or start from scratch.
+        {t('m_pick_format')}
       </p>
 
       {/* Category filter pills */}
@@ -112,7 +119,7 @@ export const StepTemplate: React.FC<StepTemplateProps> = ({
                 : isDark ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-500'
             }`}
           >
-            All ({templates?.totalCount || 0})
+            All ({(templates?.totalCount || 0) - personalTemplates.length})
           </button>
           {categories.map((cat) => (
             <button
@@ -135,58 +142,118 @@ export const StepTemplate: React.FC<StepTemplateProps> = ({
         <div style={floatIn(300, visible)} className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className={`w-7 h-7 animate-spin ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-            <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Loading templates...</p>
+            <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_loading_templates')}</p>
           </div>
         </div>
       )}
 
-      {/* Template tiles - 2 column grid */}
+      {/* Template sections */}
       {!loading && (
         <div style={floatIn(300, visible)} className="flex-1 overflow-y-auto max-h-[50vh] -mx-1">
-          {filteredTemplates.length === 0 ? (
+          {personalTemplates.length === 0 && generalTemplates.length === 0 ? (
             <div className="text-center py-10">
-              <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>No templates available</p>
+              <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_no_templates')}</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 px-1 pb-2">
-              {filteredTemplates.map((template) => {
-                const colors = getCategoryColor(template.category);
-                return (
-                  <button
-                    key={template.id}
-                    onClick={() => handleSelect(template)}
-                    className={`aspect-square rounded-2xl p-3.5 border-2 text-left transition-all active:translate-y-0.5 active:shadow-none shadow-lg flex flex-col ${colors.tileBg} ${colors.tileBorder} ${colors.tileShadow}`}
-                  >
-                    {/* Icon */}
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-2 ${colors.iconBg}`}>
-                      <span className={colors.iconText}>{getCategoryIcon(template.category)}</span>
-                    </div>
-
-                    {/* Name */}
-                    <h3 className="text-[13px] font-bold leading-snug mb-0.5 line-clamp-2 text-white">
-                      {template.name}
-                    </h3>
-
-                    {/* Description */}
-                    <p className="text-[10px] leading-relaxed line-clamp-2 text-white/70">
-                      {template.description}
+            <div className="px-1 pb-2 space-y-5">
+              {/* ── Your Templates section ── */}
+              {personalTemplates.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <UserPen className={`w-3.5 h-3.5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
+                    <p className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>
+                      {t('m_your_templates')}
                     </p>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${isDark ? 'bg-cyan-500/10 text-cyan-400' : 'bg-cyan-50 text-cyan-600'}`}>
+                      {personalTemplates.length}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {personalTemplates.map((template) => {
+                      const colors = getCategoryColor('personal');
+                      return (
+                        <button
+                          key={template.id}
+                          onClick={() => handleSelect(template)}
+                          className={`aspect-square rounded-2xl p-3.5 border-2 text-left transition-all active:translate-y-0.5 active:shadow-none shadow-lg flex flex-col ${colors.tileBg} ${colors.tileBorder} ${colors.tileShadow}`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${colors.iconBg}`}>
+                              <span className={colors.iconText}><UserPen className="w-4 h-4" /></span>
+                            </div>
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/20">
+                              <UserPen className="w-2.5 h-2.5 text-white" />
+                              <span className="text-[8px] font-bold uppercase tracking-wide text-white">{t('m_custom')}</span>
+                            </div>
+                          </div>
+                          <h3 className="text-[13px] font-bold leading-snug mb-0.5 line-clamp-2 text-white">
+                            {template.name}
+                          </h3>
+                          <p className="text-[10px] leading-relaxed line-clamp-2 text-white/70">
+                            {template.description}
+                          </p>
+                          <div className="mt-auto pt-2 flex items-center gap-2">
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/20 text-white">
+                              {template.suggestedDiscount}% off
+                            </span>
+                            <span className="text-[10px] font-medium text-white/60">
+                              {template.durationDays}d
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                    {/* Bottom stats — pushed to bottom */}
-                    <div className="mt-auto pt-2 flex items-center gap-2">
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/20 text-white">
-                        {template.suggestedDiscount}% off
-                      </span>
-                      <span className="text-[10px] font-medium text-white/60">
-                        {template.durationDays}d
-                      </span>
-                      <span className="text-[9px] font-semibold ml-auto text-white/80">
-                        {template.successRate}%
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+              {/* ── General Templates section ── */}
+              {generalTemplates.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                    <p className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {t('m_general_templates')}
+                    </p>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
+                      {generalTemplates.length}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {generalTemplates.map((template) => {
+                      const colors = getCategoryColor(template.category);
+                      return (
+                        <button
+                          key={template.id}
+                          onClick={() => handleSelect(template)}
+                          className={`aspect-square rounded-2xl p-3.5 border-2 text-left transition-all active:translate-y-0.5 active:shadow-none shadow-lg flex flex-col ${colors.tileBg} ${colors.tileBorder} ${colors.tileShadow}`}
+                        >
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-2 ${colors.iconBg}`}>
+                            <span className={colors.iconText}>{getCategoryIcon(template.category)}</span>
+                          </div>
+                          <h3 className="text-[13px] font-bold leading-snug mb-0.5 line-clamp-2 text-white">
+                            {template.name}
+                          </h3>
+                          <p className="text-[10px] leading-relaxed line-clamp-2 text-white/70">
+                            {template.description}
+                          </p>
+                          <div className="mt-auto pt-2 flex items-center gap-2">
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/20 text-white">
+                              {template.suggestedDiscount}% off
+                            </span>
+                            <span className="text-[10px] font-medium text-white/60">
+                              {template.durationDays}d
+                            </span>
+                            <span className="text-[9px] font-semibold ml-auto text-white/80">
+                              {template.successRate}%
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -200,7 +267,7 @@ export const StepTemplate: React.FC<StepTemplateProps> = ({
             isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
           }`}
         >
-          Back
+          {t('m_back')}
         </button>
         <button
           onClick={onSkip}
@@ -208,7 +275,7 @@ export const StepTemplate: React.FC<StepTemplateProps> = ({
             isDark ? 'bg-slate-700 text-white' : 'bg-slate-900 text-white'
           }`}
         >
-          Start from scratch
+          {t('m_start_scratch')}
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>

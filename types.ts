@@ -1,7 +1,7 @@
 
 export type Locale = 'en' | 'kn' | 'hi' | 'ta' | 'te' | 'ml' | 'bn' | 'mr' | 'gu';
 
-export type AppView = 'splash' | 'welcome' | 'language_selection' | 'login' | 'onboarding' | 'preferences' | 'home' | 'detail' | 'deals_of_day' | 'favorites' | 'profile' | 'merchant_dashboard' | 'merchant_analytics' | 'merchant_deals' | 'merchant_deal_of_day' | 'forgot_password' | 'register' | 'edit_profile' | 'deals' | 'help_feedback' | 'merchant_subscriptions' | 'redemption_survey' | 'campaign_survey' | 'my_redemptions' | 'verify_email' | 'verify_phone' | 'payment_plans' | 'bank_verification' | 'store_search' | 'privacy_policy' | 'terms_of_service' | 'privacy_policy_signup' | 'terms_of_service_signup' | 'notifications' | 'merchant_catalogue' | 'merchant_notifications' | 'merchant_ai_insights' | 'merchant_onboarding' | 'merchant_stores' | 'location_permission' | 'invite_code' | 'campaign_wizard' | 'dotd_wizard' | 'product_wizard' | 'refer_consumer' | 'referral_tracker';
+export type AppView = 'splash' | 'welcome' | 'language_selection' | 'login' | 'onboarding' | 'preferences' | 'home' | 'detail' | 'deals_of_day' | 'favorites' | 'profile' | 'merchant_dashboard' | 'merchant_analytics' | 'merchant_deals' | 'merchant_deal_of_day' | 'forgot_password' | 'register' | 'edit_profile' | 'deals' | 'help_feedback' | 'merchant_subscriptions' | 'redemption_survey' | 'campaign_survey' | 'my_redemptions' | 'verify_email' | 'verify_phone' | 'payment_plans' | 'bank_verification' | 'store_search' | 'privacy_policy' | 'terms_of_service' | 'privacy_policy_signup' | 'terms_of_service_signup' | 'notifications' | 'merchant_catalogue' | 'merchant_notifications' | 'merchant_ai_insights' | 'merchant_onboarding' | 'merchant_stores' | 'location_permission' | 'invite_code' | 'campaign_wizard' | 'dotd_wizard' | 'product_wizard' | 'refer_consumer' | 'referral_tracker' | 'merchant_team';
 
 export interface LocalizedNames {
   en: string;
@@ -122,6 +122,9 @@ export interface Deal {
   
   store_id?: string;
   image_name?: string;
+  media_urls?: string[];   // Up to 5 campaign images
+  video_url?: string;      // Optional campaign video
+  image_price_overlays?: Record<string, { discountPct: string; offerPrice: string }>;
   created_at?: string;
 
   // Added to reflect the joined structure from get-by-status Edge Function

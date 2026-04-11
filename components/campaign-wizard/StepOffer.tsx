@@ -3,6 +3,7 @@ import { Sparkles, Loader2 } from 'lucide-react';
 import { floatIn } from './floatIn';
 import { addCampaignService } from '../../services/addCampaignService';
 import { PlaceholderTooltip, isPlaceholderTooltipDismissed } from './PlaceholderTooltip';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 interface StepOfferProps {
   value: string;
@@ -13,6 +14,7 @@ interface StepOfferProps {
 }
 
 export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, onBack, theme }) => {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const isDark = theme === 'dark';
   const isValid = value.trim().length >= 2;
@@ -46,7 +48,7 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
   const handleContinue = async () => {
     // Block if placeholder text still present
     if (hasPlaceholder) {
-      setModerationError('Please replace the <...> placeholder with your own text.');
+      setModerationError(t('m_replace_placeholder'));
       return;
     }
     setChecking(true);
@@ -54,14 +56,14 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
     try {
       const result = await addCampaignService.moderateContent('', value, '');
       if (result.flagged) {
-        setModerationError(result.reason || 'This offer contains inappropriate content. Please revise.');
+        setModerationError(result.reason || t('m_offer_inappropriate'));
         setChecking(false);
         return;
       }
       onNext();
     } catch {
       // Profanity check is mandatory — block if service fails
-      setModerationError('Unable to verify content. Please try again.');
+      setModerationError(t('m_verify_fail'));
     } finally {
       setChecking(false);
     }
@@ -73,10 +75,10 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
         <Sparkles className="w-8 h-8 text-emerald-500" />
       </div>
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Offer value
+        {t('m_offer_value')}
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-8 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        What's the deal? Be specific so customers know what they get.
+        {t('m_offer_hint')}
       </p>
 
       <div style={floatIn(300, visible)}>
@@ -95,7 +97,7 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
           }}
           onKeyDown={handleKeyDown}
           maxLength={50}
-          placeholder="e.g., 50% OFF or Buy 1 Get 1 Free"
+          placeholder={t('m_offer_placeholder')}
           className={`w-full h-14 px-4 rounded-xl text-base font-medium outline-none transition-all border ${
             moderationError
               ? 'border-red-500 focus:border-red-500'
@@ -107,7 +109,7 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
         <div className="flex justify-between mt-2">
           <div>
             {value.length > 0 && !isValid && (
-              <p className="text-xs text-red-500">At least 2 characters required.</p>
+              <p className="text-xs text-red-500">{t('m_min_2_chars')}</p>
             )}
           </div>
           <p className={`text-xs ${value.length >= 45 ? 'text-amber-500' : isDark ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -125,16 +127,16 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
       {/* Quick pick suggestions */}
       <div style={floatIn(400, visible)} className={`mt-6 rounded-xl p-4 ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
         <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-          Tap to use
+          {t('m_tap_to_use')}
         </p>
         <div className="grid grid-cols-2 gap-2">
           {[
-            '30% OFF all items',
-            'Buy 1 Get 1 Free',
-            'Flat ₹200 Off',
-            'Upto 50% OFF',
-            'Free Delivery',
-            'Flat 15% off first order',
+            t('m_offer_q1'),
+            t('m_offer_q2'),
+            t('m_offer_q3'),
+            t('m_offer_q4'),
+            t('m_offer_q5'),
+            t('m_offer_q6'),
           ].map((chip) => (
             <button
               key={chip}
@@ -163,14 +165,14 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
             isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
           }`}
         >
-          Back
+          {t('m_back')}
         </button>
         <button
           onClick={handleContinue}
           disabled={!isValid || checking}
           className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center"
         >
-          {checking ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Continue'}
+          {checking ? <Loader2 className="w-5 h-5 animate-spin" /> : t('m_continue')}
         </button>
       </div>
     </div>

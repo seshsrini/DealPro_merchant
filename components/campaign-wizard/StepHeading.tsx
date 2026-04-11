@@ -3,6 +3,7 @@ import { Megaphone, Loader2 } from 'lucide-react';
 import { floatIn } from './floatIn';
 import { addCampaignService } from '../../services/addCampaignService';
 import { PlaceholderTooltip, isPlaceholderTooltipDismissed } from './PlaceholderTooltip';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 interface StepHeadingProps {
   value: string;
@@ -13,6 +14,7 @@ interface StepHeadingProps {
 }
 
 export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNext, onBack, theme }) => {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const isDark = theme === 'dark';
   const isValid = value.trim().length >= 3;
@@ -47,7 +49,7 @@ export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNex
   const handleContinue = async () => {
     // Block if placeholder text still present
     if (hasPlaceholder) {
-      setModerationError('Please replace the <...> placeholder with your own text.');
+      setModerationError(t('m_replace_placeholder'));
       return;
     }
     setChecking(true);
@@ -55,13 +57,13 @@ export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNex
     try {
       const result = await addCampaignService.moderateContent(value, '', '');
       if (result.flagged) {
-        setModerationError(result.reason || 'This heading contains inappropriate content. Please revise.');
+        setModerationError(result.reason || t('m_heading_inappropriate'));
         setChecking(false);
         return;
       }
       onNext();
     } catch {
-      setModerationError('Unable to verify content. Please try again.');
+      setModerationError(t('m_verify_fail'));
       return;
     } finally {
       setChecking(false);
@@ -74,10 +76,10 @@ export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNex
         <Megaphone className="w-8 h-8 text-amber-500" />
       </div>
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Campaign headline
+        {t('m_campaign_headline')}
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-8 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        Write a catchy title that grabs attention.
+        {t('m_headline_hint')}
       </p>
 
       <div style={floatIn(300, visible)}>
@@ -96,7 +98,7 @@ export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNex
           }}
           onKeyDown={handleKeyDown}
           maxLength={50}
-          placeholder="Enter campaign headline"
+          placeholder={t('m_enter_headline')}
           className={`w-full h-14 px-4 rounded-xl text-base font-medium outline-none transition-all border ${
             moderationError
               ? 'border-red-500 focus:border-red-500'
@@ -108,7 +110,7 @@ export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNex
         <div className="flex justify-between mt-2">
           <div>
             {value.length > 0 && !isValid && (
-              <p className="text-xs text-red-500">At least 3 characters required.</p>
+              <p className="text-xs text-red-500">{t('m_min_3_chars')}</p>
             )}
           </div>
           <p className={`text-xs ${value.length >= 45 ? 'text-amber-500' : isDark ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -126,10 +128,10 @@ export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNex
       {/* Examples */}
       <div style={floatIn(400, visible)} className={`mt-6 p-4 rounded-xl ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
         <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-          Examples
+          {t('m_examples')}
         </p>
         <div className="space-y-2">
-          {['Weekend Flash Sale', 'Grand Opening Special', 'Festive Season Offer', 'Exclusive Member Deal'].map((ex) => (
+          {[t('m_example_1'), t('m_example_2'), t('m_example_3'), t('m_example_4')].map((ex) => (
             <button
               key={ex}
               onClick={() => onChange(ex)}
@@ -148,14 +150,14 @@ export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNex
             isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
           }`}
         >
-          Back
+          {t('m_back')}
         </button>
         <button
           onClick={handleContinue}
           disabled={!isValid || checking}
           className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center"
         >
-          {checking ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Continue'}
+          {checking ? <Loader2 className="w-5 h-5 animate-spin" /> : t('m_continue')}
         </button>
       </div>
     </div>

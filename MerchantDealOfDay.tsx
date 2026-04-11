@@ -7,6 +7,7 @@ import {
   ArrowRight,
   ArrowLeft,
 } from 'lucide-react';
+import { useTranslation } from './contexts/LanguageContext';
 
 interface MerchantDealOfDayProps {
   user: any;
@@ -16,6 +17,7 @@ interface MerchantDealOfDayProps {
 
 export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setView, theme = 'light' }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
 
   return (
     <div className={`min-h-screen px-5 pb-32 pt-6 ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
@@ -31,9 +33,9 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
             </div>
             <div>
               <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Deal of the Day
+                {t('m_dotd_title')}
               </h1>
-              <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Feature your best offer</p>
+              <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_dotd_feature')}</p>
             </div>
           </div>
         </div>
@@ -42,9 +44,9 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
           <div className="flex items-start gap-3">
             <Sparkles className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
             <div>
-              <p className={`text-sm font-semibold ${isDark ? 'text-yellow-400' : 'text-yellow-700'}`}>Deal of the Day Benefits</p>
+              <p className={`text-sm font-semibold ${isDark ? 'text-yellow-400' : 'text-yellow-700'}`}>{t('m_dotd_benefits')}</p>
               <p className={`text-xs mt-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                Your campaign will be prominently featured to consumers searching for today's best deals!
+                {t('m_dotd_benefits_desc')}
               </p>
             </div>
           </div>
@@ -65,10 +67,10 @@ export const MerchantDealOfDay: React.FC<MerchantDealOfDayProps> = ({ user, setV
           </div>
           <div>
             <h3 className="text-base font-bold text-white">
-              Create Deal of the Day
+              {t('m_dotd_create')}
             </h3>
             <p className="text-xs text-white/80">
-              Step-by-step in under a minute
+              {t('m_dotd_create_sub')}
             </p>
           </div>
         </div>

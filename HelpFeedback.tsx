@@ -9,29 +9,31 @@ interface HelpFeedbackProps {
   theme?: 'dark' | 'light';
 }
 
-const SUBJECT_OPTIONS = [
-  'Issue with deal redemption',
-  'Cannot find deals in my area',
-  'Problem with QR code scanning',
-  'Favorite deals not saving',
-  'Location/GPS not working',
-  'Deal information is incorrect',
-  'App performance issues',
-  'Account/Profile issues',
-  'Merchant store not responding',
-  'Feedback about the app',
-  'Feature request',
-  'Other'
+const SUBJECT_KEYS = [
+  'm_subj_redemption',
+  'm_subj_no_deals',
+  'm_subj_qr',
+  'm_subj_favorites',
+  'm_subj_gps',
+  'm_subj_incorrect',
+  'm_subj_performance',
+  'm_subj_account',
+  'm_subj_store',
+  'm_subj_feedback',
+  'm_subj_feature',
+  'm_subj_other'
 ];
 
 export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme = 'dark' }) => {
   const { t } = useTranslation();
   const isDark = theme === 'dark';
 
+  const subjectOptions = SUBJECT_KEYS.map(key => ({ key, label: t(key) }));
+
   const [formData, setFormData] = useState({
-    name: user.username || '',
-    email: user.email || '',
-    subject: SUBJECT_OPTIONS[0],
+    name: (user as any).full_name || (user as any).store_name || user.username || '',
+    email: (user as any).email || '',
+    subject: SUBJECT_KEYS[0],
     message: ''
   });
 
@@ -42,8 +44,13 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      setErrorMessage('Please enter a valid email address.');
+      return;
+    }
+
     if (!formData.message.trim()) {
-      setErrorMessage('Please enter your message');
+      setErrorMessage(t('m_enter_message'));
       return;
     }
 
@@ -67,7 +74,7 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
       }, 3000);
     } catch (err: any) {
       console.error('[HelpFeedback] Submission error:', err);
-      setErrorMessage('Failed to submit feedback. Please try again.');
+      setErrorMessage(t('m_submit_failed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -84,9 +91,9 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
       {/* Header */}
       <div className="mb-6">
         <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-          Help & Support
+          {t('m_help_support')}
         </h2>
-        <p className={`text-sm font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>We're here to help</p>
+        <p className={`text-sm font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{t('m_here_to_help')}</p>
       </div>
 
       {/* Form */}
@@ -94,7 +101,7 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
         {/* Name Field */}
         <div>
           <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-            Name
+            {t('m_name')}
           </label>
           <input
             type="text"
@@ -104,32 +111,33 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
           />
         </div>
 
-        {/* Email Field */}
+        {/* Email Field — editable so replies can be sent */}
         <div>
           <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-            Email
+            {t('m_email')}
           </label>
           <input
             type="email"
             value={formData.email}
-            readOnly
-            className={`${inputClass} opacity-60 cursor-not-allowed`}
+            onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+            placeholder="your@email.com"
+            className={inputClass}
           />
         </div>
 
         {/* Subject Dropdown */}
         <div>
           <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-            Subject
+            {t('m_subject')}
           </label>
           <select
             value={formData.subject}
             onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
             className={inputClass}
           >
-            {SUBJECT_OPTIONS.map((option) => (
-              <option key={option} value={option} className={isDark ? 'bg-slate-900' : 'bg-white'}>
-                {option}
+            {subjectOptions.map((option) => (
+              <option key={option.key} value={option.key} className={isDark ? 'bg-slate-900' : 'bg-white'}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -138,12 +146,12 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
         {/* Message Field */}
         <div>
           <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-            Message
+            {t('m_message')}
           </label>
           <textarea
             value={formData.message}
             onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
-            placeholder="Please describe your issue or feedback in detail..."
+            placeholder={t('m_message_placeholder')}
             rows={4}
             className={`w-full px-4 py-3 rounded-lg text-sm font-normal outline-none transition-all resize-none ${
               isDark
@@ -166,7 +174,7 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
           <div className={`p-3 rounded-lg flex items-center gap-2 ${isDark ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-200'}`}>
             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
             <p className="text-xs font-medium text-emerald-500">
-              Thank you! Your feedback has been submitted successfully.
+              {t('m_feedback_success')}
             </p>
           </div>
         )}
@@ -180,12 +188,12 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
           {isSubmitting ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Sending...</span>
+              <span>{t('m_sending')}</span>
             </>
           ) : (
             <>
               <Send className="w-5 h-5" />
-              <span>Submit Feedback</span>
+              <span>{t('m_submit_feedback')}</span>
             </>
           )}
         </button>
@@ -199,10 +207,10 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
           </div>
           <div>
             <h3 className={`font-semibold text-xs mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Need Quick Help?
+              {t('m_quick_help')}
             </h3>
             <p className={`text-[11px] leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-              We typically respond within 24 hours. For urgent issues, please include as much detail as possible in your message.
+              {t('m_quick_help_desc')}
             </p>
           </div>
         </div>

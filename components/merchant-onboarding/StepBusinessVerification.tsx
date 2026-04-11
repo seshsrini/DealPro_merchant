@@ -45,14 +45,17 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   }, []);
 
   // Duplicate checking state
-  const [gstinTaken, setGstinTaken] = useState<boolean | null>(null);
-  const [panTaken, setPanTaken] = useState<boolean | null>(null);
-  const [udyamTaken, setUdyamTaken] = useState<boolean | null>(null);
-  const [fssaiTaken, setFssaiTaken] = useState<boolean | null>(null);
-  const [tradeLicenseTaken, setTradeLicenseTaken] = useState<boolean | null>(null);
+  // Initialize as false (not taken) when values are pre-filled (edit from review)
+  const [gstinTaken, setGstinTaken] = useState<boolean | null>(gstinValue && isGstValid(gstinValue) ? false : null);
+  const [panTaken, setPanTaken] = useState<boolean | null>(panValue && isPanValid(panValue) ? false : null);
+  const [udyamTaken, setUdyamTaken] = useState<boolean | null>(udyamValue && isUdyamValid(udyamValue) ? false : null);
+  const [fssaiTaken, setFssaiTaken] = useState<boolean | null>(fssaiValue && isFssaiValid(fssaiValue) ? false : null);
+  const [tradeLicenseTaken, setTradeLicenseTaken] = useState<boolean | null>(tradeLicenseValue && isTradeLicenseValid(tradeLicenseValue) ? false : null);
   const [checking, setChecking] = useState<string | null>(null);
 
   const debounceRef = useRef<number | null>(null);
+  // Track the original values so we can skip duplicate check for unchanged data
+  const originalValues = useRef({ gstinValue, panValue, udyamValue, fssaiValue, tradeLicenseValue });
 
   const inputClass = `w-full h-12 px-4 rounded-xl text-sm font-medium outline-none transition-all border ${
     isDark
@@ -82,6 +85,8 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
     const upper = v.toUpperCase().slice(0, 15);
     onChangeField('gstinValue', upper);
     if (isGstValid(upper)) {
+      // Skip duplicate check if value unchanged from original (it's our own data)
+      if (upper === originalValues.current.gstinValue) { setGstinTaken(false); return; }
       checkDuplicate('gstin', upper, setGstinTaken);
     } else {
       setGstinTaken(null);
@@ -92,6 +97,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
     const upper = v.toUpperCase().slice(0, 10);
     onChangeField('panValue', upper);
     if (isPanValid(upper)) {
+      if (upper === originalValues.current.panValue) { setPanTaken(false); return; }
       checkDuplicate('pan', upper, setPanTaken);
     } else {
       setPanTaken(null);
@@ -102,6 +108,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
     const upper = v.toUpperCase();
     onChangeField('udyamValue', upper);
     if (isUdyamValid(upper)) {
+      if (upper === originalValues.current.udyamValue) { setUdyamTaken(false); return; }
       checkDuplicate('udyam_no', upper, setUdyamTaken);
     } else {
       setUdyamTaken(null);
@@ -112,6 +119,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
     const digits = v.replace(/\D/g, '').slice(0, 14);
     onChangeField('fssaiValue', digits);
     if (isFssaiValid(digits)) {
+      if (digits === originalValues.current.fssaiValue) { setFssaiTaken(false); return; }
       checkDuplicate('fssai_no', digits, setFssaiTaken);
     } else {
       setFssaiTaken(null);
@@ -122,6 +130,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
     const upper = v.toUpperCase();
     onChangeField('tradeLicenseValue', upper);
     if (isTradeLicenseValid(upper)) {
+      if (upper === originalValues.current.tradeLicenseValue) { setTradeLicenseTaken(false); return; }
       checkDuplicate('trade_license_no', upper, setTradeLicenseTaken);
     } else {
       setTradeLicenseTaken(null);

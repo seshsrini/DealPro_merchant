@@ -17,8 +17,10 @@ import { MerchantCatalogue } from './MerchantCatalogue';
 import { SmartNotifications } from './SmartNotifications'; // Import SmartNotifications
 import { MerchantAIInsights } from './MerchantAIInsights'; // Import AI Insights Dashboard
 import { MerchantStores } from './MerchantStores';
+import { HelpFeedback } from './HelpFeedback';
 import { StoreQRPrint } from './components/StoreQRPrint';
 import { ReferralTracker } from './components/ReferralTracker';
+import { MerchantTeam } from './MerchantTeam';
 import { merchantService } from './services/merchantService';
 import { AIAssistantChat } from './AIAssistantChat'; // Import AI Assistant Chat
 import { FeatureTour } from './components/FeatureTour'; // Import Feature Tour
@@ -59,10 +61,15 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
   const [editProduct, setEditProduct] = useState<CatalogueItem | null>(null);
 
   // Store gate: blocks app if merchant has no stores
+  // Staff members use the owner's merchant ID to check stores
+  const effectiveMerchantId = (user as any).staff_merchant_id || user.id;
+  const isStaff = !!(user as any).staff_role && (user as any).staff_role !== 'owner';
   const [storeGate, setStoreGate] = useState<'open' | 'blocked'>('open');
   useEffect(() => {
     if (!user.id) return;
-    merchantService.getMerchantStores(user.id)
+    // Staff members skip store gate — they use the owner's stores
+    if (isStaff) { setStoreGate('open'); return; }
+    merchantService.getMerchantStores(effectiveMerchantId)
       .then(s => { if (s.filter(store => store.active_status !== 'disabled').length === 0) setStoreGate('blocked'); })
       .catch(() => {}); // fail open — don't block on network error
   }, [user.id]);
@@ -150,6 +157,8 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
   );
   else if (view === 'refer_consumer') currentView = <StoreQRPrint user={user} setView={setView} theme={theme} />;
   else if (view === 'referral_tracker') currentView = <ReferralTracker user={user} setView={setView} theme={theme} />;
+  else if (view === 'merchant_team') currentView = <MerchantTeam user={user} setView={setView} theme={theme} />;
+  else if (view === 'help_feedback') currentView = <HelpFeedback user={user} setView={setView} theme={theme} />;
   else if (view === 'merchant_analytics') currentView = <MerchantAnalytics user={user} theme={theme} setView={setView} />;
   else if (view === 'merchant_catalogue') currentView = (
     <MerchantCatalogue user={user} theme={theme} setView={setView} setEditProduct={setEditProduct} />

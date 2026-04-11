@@ -235,7 +235,8 @@ Deno.serve(async (req) => {
     const {
       merchant_id, shop_name, deal_heading, offer_value, category,
       long_description, latlong, start_date, end_date, store_id,
-      image_url, image_name, localized_heading, localized_offer,
+      image_url, image_name, media_urls, video_url, image_price_overlays,
+      localized_heading, localized_offer,
       localized_description, localized_shop_name, is_deal_of_the_day
     } = body;
 
@@ -322,14 +323,28 @@ Deno.serve(async (req) => {
       });
     }
 
-    const campaignPayload = {
+    // Validate media_urls if provided (max 5 URLs)
+    if (media_urls !== undefined) {
+      if (!Array.isArray(media_urls) || media_urls.length > 5 || !media_urls.every((u: any) => typeof u === 'string')) {
+        return new Response(JSON.stringify({ error: 'media_urls must be an array of up to 5 URL strings.' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
+        });
+      }
+    }
+    if (video_url !== undefined && typeof video_url !== 'string') {
+      return new Response(JSON.stringify({ error: 'video_url must be a string.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
+      });
+    }
+
+    const campaignPayload: Record<string, any> = {
       merchant_id,
       shop_name,
       deal_heading,
       offer_value,
       category,
       long_description,
-      latlong, // Mapping the input string to campaigns.latlong
+      latlong,
       start_date,
       end_date,
       store_id,
@@ -339,10 +354,15 @@ Deno.serve(async (req) => {
       localized_offer,
       localized_description,
       localized_shop_name,
-      status: 'active', // AI moderation handles review — campaigns go live immediately
-      // rating: 4.5, // Removed as per request
-      is_deal_of_the_day: is_deal_of_the_day === true, // Use value from request, default to false
+      status: 'active',
+      is_deal_of_the_day: is_deal_of_the_day === true,
     };
+
+    if (media_urls && media_urls.length > 0) campaignPayload.media_urls = media_urls;
+    if (video_url) campaignPayload.video_url = video_url;
+    if (image_price_overlays && typeof image_price_overlays === 'object' && Object.keys(image_price_overlays).length > 0) {
+      campaignPayload.image_price_overlays = image_price_overlays;
+    }
 
     const { data, error } = await supabase
       .from('campaigns')
