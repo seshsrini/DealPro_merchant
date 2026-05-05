@@ -241,20 +241,49 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     if (!pendingUser) return;
     localStorage.setItem('dealpro_merchant_biometric_asked', 'true');
     await biometricService.saveSession(pendingUser.user);
+
+    // Establish Supabase session BEFORE navigating — prevents blank screen
+    // where dashboard components try to fetch data without a valid session.
+    if (pendingUser.user.access_token && pendingUser.user.refresh_token) {
+      await updateSupabaseSession({
+        access_token: pendingUser.user.access_token,
+        refresh_token: pendingUser.user.refresh_token,
+        user: { id: pendingUser.user.id, email: pendingUser.user.email, user_metadata: { role: pendingUser.user.role } } as any,
+        token_type: 'bearer',
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      });
+    }
+
     setUser(pendingUser.user);
+    const targetView = pendingUser.targetView;
     setPendingUser(null);
     setLoginPhase('phone');
-    setView(pendingUser.targetView as AppView);
+    setView(targetView as AppView);
   };
 
   // User declined quick login
-  const handleBiometricDecline = () => {
+  const handleBiometricDecline = async () => {
     if (!pendingUser) return;
     localStorage.setItem('dealpro_merchant_biometric_asked', 'true');
+
+    // Establish Supabase session BEFORE navigating
+    if (pendingUser.user.access_token && pendingUser.user.refresh_token) {
+      await updateSupabaseSession({
+        access_token: pendingUser.user.access_token,
+        refresh_token: pendingUser.user.refresh_token,
+        user: { id: pendingUser.user.id, email: pendingUser.user.email, user_metadata: { role: pendingUser.user.role } } as any,
+        token_type: 'bearer',
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      });
+    }
+
     setUser(pendingUser.user);
+    const targetView = pendingUser.targetView;
     setPendingUser(null);
     setLoginPhase('phone');
-    setView(pendingUser.targetView as AppView);
+    setView(targetView as AppView);
   };
 
   useEffect(() => {

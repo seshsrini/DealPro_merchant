@@ -29,7 +29,10 @@ export async function authenticateRequest(req: Request) {
   });
 
   const { data: { user }, error } = await supabase.auth.getUser(jwt);
-  if (error || !user) throw new Error('Unauthorized: Invalid or expired token.');
+  if (error || !user) {
+    const reason = /jwt expired|expired/i.test(error?.message || '') ? 'expired' : 'invalid';
+    throw new Error(`Unauthorized: token ${reason}`);
+  }
   return user;
 }
 
@@ -50,18 +53,17 @@ Deno.serve(async (req) => {
   try {
     // 4. AUTHENTICATION
     const user = await authenticateRequest(req);
-    
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
-    });
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    // Use service role to read campaign_interactions — consumer rows aren't
+    // visible to the merchant via RLS.
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Safe JSON parsing
     const body = await req.json().catch(() => ({}));
     const { campaignIds, merchantId } = body;
-    console.log('[GetCampaignRedemptions] Fetching for merchant:', merchantId, 'campaigns:', campaignIds?.length ?? 0);
 
     // 5. VALIDATION
     if (!isArray(campaignIds) || !campaignIds.every(isString)) {
@@ -86,6 +88,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    console.log('[GetCampaignSpecificRedemptions] Fetching redemptions for', campaignIds.length, 'campaigns, merchant:', merchantId);
+
     // 6. DATABASE QUERY
     const { data: redemptionLogs, error: logError } = await supabase
       .from('campaign_interactions')
@@ -94,7 +98,10 @@ Deno.serve(async (req) => {
       .eq('is_redeemed', true)
       .in('campaign_id', campaignIds);
 
-    if (logError) { console.error('[GetCampaignRedemptions] Query failed:', logError.message); throw logError; }
+    if (logError) {
+      console.error('[GetCampaignSpecificRedemptions] Query failed:', logError.message);
+      throw logError;
+    }
 
     // 7. PROCESSING
     const counts: Record<string, number> = {};
@@ -107,6 +114,8 @@ Deno.serve(async (req) => {
         }
     });
 
+    console.log('[GetCampaignSpecificRedemptions] Returned counts for', Object.keys(counts).length, 'campaigns');
+
     // 8. SUCCESS RESPONSE
     return new Response(JSON.stringify(counts), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -114,11 +123,16 @@ Deno.serve(async (req) => {
     });
 
   } catch (error: any) {
-    console.error('Redemptions Fetch Error:', error.message);
-    
+    const isAuth = error?.message?.includes('Unauthorized');
+    if (isAuth) {
+      console.warn('[GetCampaignSpecificRedemptions] Auth rejected:', error.message);
+    } else {
+      console.error('[GetCampaignSpecificRedemptions] Error:', error.message);
+    }
+
     let status = 500;
-    if (error.message.includes('Unauthorized')) status = 401;
-    if (error.message.includes('array') || error.message.includes('required')) status = 400;
+    if (isAuth) status = 401;
+    else if (error.message.includes('array') || error.message.includes('required')) status = 400;
 
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

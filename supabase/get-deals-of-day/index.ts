@@ -142,6 +142,11 @@ serve(async (req) => {
         landmark: store?.landmark || '',
         storeHrs: store?.store_hours || store?.storeHrs || store?.store_hrs || '',
         image_name: d.image_name,
+        media_urls: d.media_urls || [],
+        video_url: d.video_url || null,
+        image_price_overlays: d.image_price_overlays || {},
+        trust_badges: d.trust_badges || [],
+        free_gifts: d.free_gifts || [],
         is_deal_of_the_day: true, // Always true for this endpoint
         rating: merchantRatings.get(d.merchant_id) || 0
       };

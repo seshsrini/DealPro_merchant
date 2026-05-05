@@ -24,6 +24,7 @@
     "@capacitor/geolocation": "^6.0.0",
     "@capacitor/push-notifications": "^6.0.5",
     "@google/genai": "^1.35.0",
+    "@sentry/react": "^10.51.0",
     "@supabase/supabase-js": "^2.49.1",
     "@types/crypto-js": "^4.2.2",
     "cordova-plugin-purchase": "^13.13.1",

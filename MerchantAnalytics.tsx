@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { User } from './types';
-import { Loader2, TrendingUp, BarChart3, Calendar, AlertCircle, TicketCheck, MousePointer2, Percent, HeartHandshake, CheckCircle2, BarChart, Package, Eye, Heart, Star, Zap, TrendingDown, Award, Brain, Target, Clock, ChevronRight } from 'lucide-react';
+import { Loader2, TrendingUp, BarChart3, Calendar, AlertCircle, TicketCheck, MousePointer2, Percent, HeartHandshake, CheckCircle2, BarChart, Package, Eye, Heart, Star, Zap, TrendingDown, Award, Brain, Target, Clock, ChevronRight, Users, Repeat, Crown } from 'lucide-react';
 import { supabase } from './services/supabaseClient';
 import { mDashboardService } from './services/mDashboardService';
 import { aiInsightsService, AIInsight } from './services/aiInsightsService';
@@ -82,6 +82,18 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
   const [performanceScore, setPerformanceScore] = useState<PerformanceScore | null>(null);
   const [loadingPerformanceScore, setLoadingPerformanceScore] = useState(false);
 
+  // Repeat customer tracking
+  const [repeatData, setRepeatData] = useState<{
+    totalCustomers: number;
+    repeatCustomers: number;
+    repeatRate: number;
+    avgRedemptionsPerCustomer: number;
+    totalRedemptions: number;
+    frequencyBreakdown: { once: number; twice: number; threeToFive: number; sixPlus: number };
+    topRepeaters: { consumerId: string; count: number; uniqueDeals: number; name?: string }[];
+  } | null>(null);
+  const [loadingRepeat, setLoadingRepeat] = useState(false);
+
   const isDark = theme === 'dark';
 
   const lifetimeConversionRate = useMemo(() => {
@@ -148,6 +160,16 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
     };
 
     fetchLifetimeAnalytics();
+  }, [user?.id]);
+
+  // Fetch repeat customer metrics
+  useEffect(() => {
+    if (!user?.id) return;
+    setLoadingRepeat(true);
+    mDashboardService.getRepeatCustomers(user.id)
+      .then(data => setRepeatData(data))
+      .catch(() => setRepeatData(null))
+      .finally(() => setLoadingRepeat(false));
   }, [user?.id]);
 
   useEffect(() => {
@@ -505,6 +527,102 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
             ))}
           </div>
         )}
+      </div>
+
+      {/* Repeat Customer Tracking */}
+      <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-violet-500" />
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Customer Loyalty</h3>
+          </div>
+          {loadingRepeat && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
+        </div>
+
+        {!loadingRepeat && repeatData ? (
+          repeatData.totalCustomers === 0 ? (
+            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              No redemption data yet. Customers who redeem your deals will appear here.
+            </p>
+          ) : (
+            <>
+              {/* Key metrics row */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className={`rounded-lg p-3 text-center ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                  <p className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{repeatData.totalCustomers}</p>
+                  <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Total Customers</p>
+                </div>
+                <div className={`rounded-lg p-3 text-center ${isDark ? 'bg-violet-500/10' : 'bg-violet-50'}`}>
+                  <p className="text-xl font-bold text-violet-500">{repeatData.repeatCustomers}</p>
+                  <p className={`text-[10px] font-medium ${isDark ? 'text-violet-400' : 'text-violet-600'}`}>Repeat</p>
+                </div>
+                <div className={`rounded-lg p-3 text-center ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
+                  <p className="text-xl font-bold text-emerald-500">{repeatData.repeatRate}%</p>
+                  <p className={`text-[10px] font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Repeat Rate</p>
+                </div>
+              </div>
+
+              {/* Frequency breakdown */}
+              <div className="mb-4">
+                <p className={`text-[10px] font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Redemption Frequency</p>
+                <div className="space-y-1.5">
+                  {[
+                    { label: '1 time', count: repeatData.frequencyBreakdown.once, color: 'bg-slate-400' },
+                    { label: '2 times', count: repeatData.frequencyBreakdown.twice, color: 'bg-blue-500' },
+                    { label: '3-5 times', count: repeatData.frequencyBreakdown.threeToFive, color: 'bg-violet-500' },
+                    { label: '6+ times', count: repeatData.frequencyBreakdown.sixPlus, color: 'bg-amber-500' },
+                  ].filter(r => r.count > 0).map(row => {
+                    const pct = repeatData.totalCustomers > 0 ? Math.round((row.count / repeatData.totalCustomers) * 100) : 0;
+                    return (
+                      <div key={row.label} className="flex items-center gap-2">
+                        <span className={`text-[11px] font-medium w-16 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{row.label}</span>
+                        <div className={`flex-1 h-5 rounded-full overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                          <div className={`h-full rounded-full ${row.color}`} style={{ width: `${Math.max(pct, 4)}%` }} />
+                        </div>
+                        <span className={`text-[11px] font-semibold w-8 text-right ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{row.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Top repeaters */}
+              {repeatData.topRepeaters.length > 0 && (
+                <div>
+                  <p className={`text-[10px] font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Top Loyal Customers</p>
+                  <div className="space-y-2">
+                    {repeatData.topRepeaters.map((r, i) => (
+                      <div key={r.consumerId} className={`flex items-center gap-2.5 p-2 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                          i === 0 ? 'bg-amber-500 text-white' : i === 1 ? 'bg-slate-400 text-white' : i === 2 ? 'bg-amber-700 text-white' : isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          {i < 3 ? <Crown className="w-3.5 h-3.5" /> : i + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs font-medium truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{(r as any).name || 'Customer'}</p>
+                          <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{r.uniqueDeals} different deals</p>
+                        </div>
+                        <div className={`px-2 py-1 rounded-md ${isDark ? 'bg-violet-500/10' : 'bg-violet-50'}`}>
+                          <span className="text-[11px] font-bold text-violet-500">{r.count}x</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Avg redemptions per customer */}
+              <div className={`mt-3 flex items-center gap-2 p-2.5 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                <Repeat className="w-4 h-4 text-blue-500" />
+                <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                  Avg {repeatData.avgRedemptionsPerCustomer} redemptions per customer
+                </span>
+              </div>
+            </>
+          )
+        ) : !loadingRepeat ? (
+          <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Unable to load customer data.</p>
+        ) : null}
       </div>
 
       {/* Product Catalogue Stats */}

@@ -7,10 +7,37 @@ import { Deal } from "../types";
 // @google/genai Coding Guideline: Always use `const ai = new GoogleGenAI({apiKey: process.env.API_KEY});`
 const ai = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY });
 
+// ──────────────────────────────────────────────────────────────────────────
+// Image-verdict cache.
+// LLM moderation is non-deterministic by default — the same image can flip
+// verdicts between calls. We mitigate this in two layers:
+//   1. `temperature: 0` on every Gemini call (below) for reproducibility.
+//   2. Session-level memoization keyed on the file's SHA-256: once we have an
+//      answer for a given image, re-uploads of the same bytes return the cached
+//      verdict instantly (no AI call → no chance of disagreement).
+// ──────────────────────────────────────────────────────────────────────────
+type Verdict = { flagged: boolean; reason: string };
+const _imageVerdictCache = new Map<string, Verdict>();
+const _verdictCacheKey = (kind: 'mod' | 'cr', hash: string) => `${kind}:${hash}`;
+
+async function sha256OfFile(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export const addCampaignService = {
-  // AI-powered image moderation using Gemini multimodal — checks for inappropriate visual content
+  // AI-powered image moderation using Gemini multimodal — checks for inappropriate visual content.
+  // Memoized by file SHA-256 so the same image always returns the same verdict in a session.
   moderateImage: async (imageFile: File): Promise<{ flagged: boolean; reason: string }> => {
     try {
+      const hash = await sha256OfFile(imageFile);
+      const cacheKey = _verdictCacheKey('mod', hash);
+      const cached = _imageVerdictCache.get(cacheKey);
+      if (cached) {
+        console.log('[moderateImage] Cache hit — skipping AI call');
+        return cached;
+      }
       // Convert file to base64
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -52,6 +79,7 @@ Be strict about inappropriate content but reasonable about normal commercial ima
           },
         ],
         config: {
+          temperature: 0,
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -63,10 +91,82 @@ Be strict about inappropriate content but reasonable about normal commercial ima
           },
         },
       });
-      return JSON.parse(response.text || '{"flagged":false,"reason":""}');
+      const result: Verdict = JSON.parse(response.text || '{"flagged":false,"reason":""}');
+      _imageVerdictCache.set(_verdictCacheKey('mod', hash), result);
+      return result;
     } catch (e) {
       console.error('[moderateImage] AI image moderation failed:', e);
       // Don't block on AI failure
+      return { flagged: false, reason: '' };
+    }
+  },
+
+  // AI-powered copyright check using Gemini Vision — detects watermarks, screenshots, scraped images.
+  // Memoized by file SHA-256 so the same image always returns the same verdict in a session.
+  checkImageCopyright: async (imageFile: File): Promise<{ flagged: boolean; reason: string }> => {
+    try {
+      const hash = await sha256OfFile(imageFile);
+      const cacheKey = _verdictCacheKey('cr', hash);
+      const cached = _imageVerdictCache.get(cacheKey);
+      if (cached) {
+        console.log('[checkImageCopyright] Cache hit — skipping AI call');
+        return cached;
+      }
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(imageFile);
+      });
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                inlineData: {
+                  mimeType: imageFile.type || 'image/jpeg',
+                  data: base64,
+                },
+              },
+              {
+                text: `You are a copyright compliance checker for a commercial product catalogue platform.
+
+Analyze this product image and check for signs of copyright infringement:
+
+1. **Watermarks**: Look for visible text watermarks from stock photo sites (Shutterstock, Getty, iStock, Adobe Stock, Alamy, 123RF, Dreamstime, etc.) or any photographer/studio watermarks
+2. **Screenshots**: Check if this is a screenshot from another e-commerce site (Amazon, Flipkart, Myntra, etc.) — look for browser chrome, address bars, add-to-cart buttons, ratings UI, price tags from other platforms
+3. **Scraped images**: Look for other company logos overlaid on the product, website URLs embedded in the image, or obvious web page artifacts
+4. **Google Images**: Check if the image appears to be a direct save from Google Image search (has Google UI elements)
+
+If the image is an original photo taken by the merchant (even if low quality), a product photo on a plain background, or a promotional graphic made by the merchant — do NOT flag it.
+
+Only flag if there are CLEAR visual indicators of copyright infringement as described above.
+Return the reason in English.`,
+              },
+            ],
+          },
+        ],
+        config: {
+          temperature: 0,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              flagged: { type: Type.BOOLEAN },
+              reason: { type: Type.STRING },
+            },
+            required: ['flagged', 'reason'],
+          },
+        },
+      });
+      const result: Verdict = JSON.parse(response.text || '{"flagged":false,"reason":""}');
+      _imageVerdictCache.set(_verdictCacheKey('cr', hash), result);
+      return result;
+    } catch (e) {
+      console.error('[checkImageCopyright] AI copyright check failed:', e);
       return { flagged: false, reason: '' };
     }
   },
@@ -76,11 +176,15 @@ Be strict about inappropriate content but reasonable about normal commercial ima
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `You are a strict content moderator for a commercial deals and coupons platform in India.
-Analyze ONLY the provided non-empty fields below for inappropriate content including:
-- Profanity or vulgar language (in any language including Hindi, Kannada, Tamil, Telugu)
-- Sexual content, innuendo, or suggestive language (e.g. "sleep with you", "come to bed", etc.)
-- Hate speech, discrimination, or casteist slurs
+        contents: `You are a strict multilingual content moderator for a commercial deals and coupons platform in India.
+
+The text below may be in ANY Indian language — Hindi, Kannada, Tamil, Telugu, Malayalam, Bengali, Marathi, Gujarati, or English. You MUST detect inappropriate content regardless of which language or script it is written in.
+
+Step 1: If the text is NOT in English, mentally translate it to English first.
+Step 2: Analyze the translated (or original English) text for:
+- Profanity, vulgar language, or abusive slang (including transliterated slang like "BC", "MC", etc.)
+- Sexual content, innuendo, or suggestive language
+- Hate speech, discrimination, casteist or communal slurs
 - Harassment, threats, or violent language
 - Personal messages disguised as deals
 
@@ -90,8 +194,10 @@ ${description ? `Deal Description: "${description}"` : ''}
 
 IMPORTANT: Only check the fields that have content above. Empty or missing fields are being filled in separately and should NOT be flagged.
 Be strict about inappropriate language. If the provided content is a normal commercial deal/offer text, do NOT flag it.
-Only flag if the actual text content is inappropriate for a family-friendly commercial platform.`,
+Only flag if the actual text content is inappropriate for a family-friendly commercial platform.
+ALWAYS return the reason in English regardless of the input language.`,
         config: {
+          temperature: 0,
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -180,14 +286,42 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     return data as Deal[];
   },
   
-  // Calls Edge Function to get deals specific to a merchant
+  // Calls Edge Function to get deals specific to a merchant.
+  // The edge function returns raw DB rows with snake_case keys and a nested
+  // `merchant_stores` join. We map them here so the rest of the app can use
+  // the camelCase `Deal` interface (e.g. `deal.shopName`).
   getMerchantDeals: async (merchantId: string): Promise<Deal[]> => {
     console.log(`[addCampaignService] Invoking 'get-by-merchant' for merchant ID: ${merchantId}`);
     const { data, error } = await supabase.functions.invoke('get-by-merchant', {
       body: { merchantId },
     });
     if (error) throw new Error('Unable to process campaign. Please try again.');
-    return data as Deal[];
+    if (!Array.isArray(data)) return [];
+    return data.map((d: any) => ({
+      ...d,
+      campaign_id: String(d.campaign_id || d.id),
+      merchantId: d.merchant_id,
+      shopName: d.shop_name || d.merchant_stores?.store_name || '',
+      thumbnail: d.image_url || d.thumbnail || '',
+      details: d.deal_heading || d.details || '',
+      deal_heading: d.deal_heading || '',
+      offerValue: d.offer_value || d.offerValue || '',
+      offer_value: d.offer_value || '',
+      location: d.merchant_stores?.address || d.address || d.location || '',
+      address: d.merchant_stores
+        ? [d.merchant_stores.address, d.merchant_stores.locality, d.merchant_stores.city, d.merchant_stores.state, d.merchant_stores.pincode].filter(Boolean).join(', ')
+        : (d.address || d.location || ''),
+      landmark: d.merchant_stores?.landmark || d.landmark || '',
+      storeHrs: d.merchant_stores?.store_hrs || '',
+      storePhone: d.merchant_stores?.store_phone || null,
+      storePhoneAlt: d.merchant_stores?.store_phone_alt || null,
+      delivers: d.merchant_stores?.delivers ?? false,
+      delivery_radius_km: d.merchant_stores?.delivery_radius_km ?? null,
+      city: d.merchant_stores?.city || d.city || '',
+      localized_shop_name: d.localized_shop_name || {},
+      localized_heading: d.localized_heading || {},
+      localized_offer: d.localized_offer || {},
+    })) as Deal[];
   },
 
   // NEW: Calls Edge Function to get deals by status (e.g., for admin review)
@@ -209,11 +343,17 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     return data as string[];
   },
 
-  // Direct client-to-Cloudinary upload (fast — no Edge Function proxy for the file)
-  uploadDealImage: async (mId: string, file: File): Promise<{ publicUrl: string, imageName: string }> => {
+  // Direct client-to-Cloudinary upload (fast — no Edge Function proxy for the file).
+  // `folderOverride` lets callers route to the drafts folder (`dealpro-drafts`) so
+  // uploads tied to in-progress wizard state can be cleaned up if the draft expires.
+  uploadDealImage: async (
+    mId: string,
+    file: File,
+    folderOverride?: string,
+  ): Promise<{ publicUrl: string, imageName: string }> => {
     // Step 1 — get signature from edge function (lightweight JSON call)
     const { data: signData, error: signErr } = await supabase.functions.invoke('cloudinary-sign', {
-      body: { folder: 'dealpro-campaigns' },
+      body: { folder: folderOverride || 'dealpro-campaigns' },
     });
     if (signErr) throw new Error('Image upload preparation failed. Please try again.');
 
@@ -237,6 +377,37 @@ Only flag if the actual text content is inappropriate for a family-friendly comm
     if (!json.secure_url) throw new Error('Image upload succeeded but no URL returned');
     const imageName = `${mId}/${Date.now()}_${file.name}`;
     return { publicUrl: json.secure_url as string, imageName };
+  },
+
+  /**
+   * Upload to the `dealpro-drafts` folder. Used by the wizard so in-flight images
+   * can be persisted to the draft row and resumed across sessions/devices.
+   * Use `destroyDraftImages` to clean up if the draft is abandoned / Started Over.
+   */
+  uploadDealImageDraft: async (mId: string, file: File): Promise<{ publicUrl: string, imageName: string }> => {
+    return addCampaignService.uploadDealImage(mId, file, 'dealpro-drafts');
+  },
+
+  /**
+   * Destroy a list of Cloudinary assets by URL. Used when a draft is abandoned
+   * (Start Over button) or expires via the cleanup cron — prevents orphaned
+   * drafts/* assets from accumulating in the Cloudinary account.
+   * Failures are logged but never thrown — orphan cleanup is best-effort.
+   */
+  destroyDraftImages: async (urls: string[]): Promise<void> => {
+    if (!urls || urls.length === 0) return;
+    // Only destroy assets we know are drafts — extra safety against accidentally
+    // deleting a published deal's image if someone passes the wrong URL.
+    const draftUrls = urls.filter(u => /\/dealpro-drafts\//.test(u));
+    if (draftUrls.length === 0) return;
+    try {
+      const { error } = await supabase.functions.invoke('cloudinary-destroy', {
+        body: { urls: draftUrls },
+      });
+      if (error) console.warn('[destroyDraftImages] EF error (best-effort):', error.message);
+    } catch (err: any) {
+      console.warn('[destroyDraftImages] Threw (best-effort):', err?.message || err);
+    }
   },
 
   // Direct client-to-Cloudinary video upload

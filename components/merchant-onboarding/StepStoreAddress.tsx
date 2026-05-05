@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { MapPin, Loader2, Navigation, Clock, CheckCircle2 } from 'lucide-react';
+import { MapPin, Loader2, Navigation, Clock, CheckCircle2, Phone, Truck } from 'lucide-react';
 import { StoreLocation } from '../../types';
 import { locationsearchService } from '../../services/locationsearchService';
 import { addCampaignService } from '../../services/addCampaignService';
@@ -233,6 +233,12 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
     }
   }, [store.street]);
 
+  // Strip non-digit chars for validation (allow +, -, spaces in display)
+  const phoneDigits = (store.store_phone || '').replace(/\D/g, '');
+  const phoneAltDigits = (store.store_phone_alt || '').replace(/\D/g, '');
+  const isPhoneValid = phoneDigits.length === 10;
+  const isPhoneAltValid = !store.store_phone_alt?.trim() || phoneAltDigits.length === 10;
+
   const isValid = !!(
     store.store_name?.trim() &&
     store.store_category &&
@@ -240,6 +246,8 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
     store.pincode?.length === 6 &&
     store.city &&
     store.state &&
+    isPhoneValid &&
+    isPhoneAltValid &&
     (store.is24hrs || (store.shift1 && store.shift2))
   );
 
@@ -340,10 +348,12 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
           <label className={labelClass}>Locality / Area</label>
           <input
             value={localitySearch}
-            readOnly
-            tabIndex={-1}
-            placeholder="Auto-filled from pincode"
-            className={`${inputClass} cursor-default ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'}`}
+            onChange={(e) => {
+              setLocalitySearch(e.target.value);
+              onChange('locality', e.target.value);
+            }}
+            placeholder="Auto-filled from pincode or type manually"
+            className={inputClass}
           />
           {showLocalityDropdown && (
             <div className={`absolute top-full left-0 right-0 z-20 mt-1 rounded-xl border max-h-40 overflow-y-auto ${
@@ -373,6 +383,98 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
             placeholder="Near famous place, etc."
             className={inputClass}
           />
+        </div>
+
+        {/* Store Phone Numbers */}
+        <div>
+          <label className={`${labelClass} flex items-center gap-2`}>
+            <Phone className="w-3.5 h-3.5" /> Store Phone Number
+          </label>
+          <input
+            value={store.store_phone || ''}
+            onChange={(e) => onChange('store_phone', e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
+            placeholder="e.g. 9876543210"
+            type="tel"
+            inputMode="numeric"
+            maxLength={10}
+            className={inputClass}
+          />
+          {store.store_phone && !isPhoneValid && (
+            <p className="text-[11px] text-red-500 mt-1">Phone number must be 10 digits</p>
+          )}
+        </div>
+        <div>
+          <label className={labelClass}>Alternate Phone Number (optional)</label>
+          <input
+            value={store.store_phone_alt || ''}
+            onChange={(e) => onChange('store_phone_alt', e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
+            placeholder="e.g. 9876543210 (optional)"
+            type="tel"
+            inputMode="numeric"
+            maxLength={10}
+            className={inputClass}
+          />
+          {store.store_phone_alt && !isPhoneAltValid && (
+            <p className="text-[11px] text-red-500 mt-1">Phone number must be 10 digits</p>
+          )}
+        </div>
+
+        {/* Delivery Option (optional) */}
+        <div>
+          <label className={`${labelClass} flex items-center gap-2`}>
+            <Truck className="w-3.5 h-3.5" /> Delivery
+            <span className={`text-[10px] font-normal ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>(optional)</span>
+          </label>
+          <label className={`flex items-center gap-2 mb-3 cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+            <input
+              type="checkbox"
+              checked={store.delivers || false}
+              onChange={(e) => {
+                onChange('delivers', e.target.checked);
+                if (!e.target.checked) onChange('delivery_radius_km', null);
+              }}
+              className="w-4 h-4 rounded accent-slate-900"
+            />
+            <span className="text-sm">We deliver to customers</span>
+          </label>
+          {store.delivers && (
+            <div>
+              <label className={labelClass}>
+                Delivery Range
+                <span className={`ml-1.5 text-[10px] font-normal ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>(optional)</span>
+              </label>
+              <select
+                value={store.delivery_radius_km ?? ''}
+                onChange={(e) => onChange('delivery_radius_km', e.target.value ? Number(e.target.value) : null)}
+                className={inputClass}
+              >
+                <option value="">Select range (optional)</option>
+                <option value="1">1 km</option>
+                <option value="2">2 km</option>
+                <option value="3">3 km</option>
+                <option value="4">4 km</option>
+                <option value="5">5 km</option>
+                <option value="10">Anywhere within city limits</option>
+              </select>
+              <div className={`mt-3 flex items-start gap-2.5 p-2.5 rounded-lg border ${
+                isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50/60 border-emerald-200'
+              }`}>
+                <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
+                  isDark ? 'bg-emerald-500/15' : 'bg-emerald-100'
+                }`}>
+                  <Truck className={`w-4 h-4 ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                    Customers will see "Delivery available" on your deals
+                  </p>
+                  <p className={`text-[10px] mt-0.5 leading-snug ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Delivered by you or your delivery partner; DealPro is not liable.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* GPS */}

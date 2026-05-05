@@ -224,7 +224,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
 
 
   const [merchantStores, setMerchantStores] = useState<StoreLocation[]>([
-    { store_name: '', street: '', pincode: '', locality: '', state: '', city: '', landmark: '', coords: null, isGeocoding: false, shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, isPincodeSearching: false }
+    { store_name: '', street: '', pincode: '', locality: '', state: '', city: '', landmark: '', coords: null, isGeocoding: false, shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, isPincodeSearching: false, delivers: false, delivery_radius_km: null, store_category: '', store_phone: '', store_phone_alt: '' }
   ]);
 
   const geocodeDebounceRef = useRef<Record<number, number | null>>({});
@@ -682,7 +682,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const handleAddStore = () => {
     setMerchantStores(prev => [
       ...prev,
-      { store_name: '', street: '', pincode: '', locality: '', state: '', city: '', landmark: '', coords: null, isGeocoding: false, shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, isPincodeSearching: false }
+      { store_name: '', street: '', pincode: '', locality: '', state: '', city: '', landmark: '', coords: null, isGeocoding: false, shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, isPincodeSearching: false, delivers: false, delivery_radius_km: null, store_category: '', store_phone: '', store_phone_alt: '' }
     ]);
   };
 

@@ -18,10 +18,28 @@ const formatDate = (dateStr: string): string => {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+// Maximum campaign duration. Picker grays out anything past this many days from start.
+const MAX_DURATION_DAYS = 15;
+
+const addDaysISO = (isoDate: string, days: number): string => {
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
 export const StepEndDate: React.FC<StepEndDateProps> = ({ value, startDate, onChange, onNext, onBack, theme }) => {
   const isDark = theme === 'dark';
   const { t } = useTranslation();
-  const isValid = !!value && value > startDate;
+
+  // Max selectable end date = start + 15 days. Empty string when no start picked
+  // (the input then has no max constraint, but the wizard shouldn't reach this
+  // step without a startDate anyway).
+  const maxEndDate = startDate ? addDaysISO(startDate, MAX_DURATION_DAYS) : '';
+
+  const isValid = !!value
+    && value > startDate
+    && (!maxEndDate || value <= maxEndDate);
+
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -57,6 +75,7 @@ export const StepEndDate: React.FC<StepEndDateProps> = ({ value, startDate, onCh
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           min={startDate}
+          max={maxEndDate || undefined}
           className={`w-full h-14 px-4 rounded-xl text-base font-medium outline-none transition-all border ${
             isDark
               ? 'bg-slate-800 text-white border-slate-700 focus:border-slate-500'
@@ -68,6 +87,11 @@ export const StepEndDate: React.FC<StepEndDateProps> = ({ value, startDate, onCh
             Campaign duration: {durationDays} day{durationDays !== 1 ? 's' : ''}
           </p>
         )}
+        {startDate && maxEndDate && (
+          <p className={`text-[11px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            Maximum {MAX_DURATION_DAYS} days — latest you can pick is {formatDate(maxEndDate)}.
+          </p>
+        )}
       </div>
 
       <div style={floatIn(400, visible)} className={`mt-6 p-4 rounded-xl ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
@@ -77,7 +101,7 @@ export const StepEndDate: React.FC<StepEndDateProps> = ({ value, startDate, onCh
         <ul className={`text-xs space-y-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           <li>3-7 days — creates urgency, great for flash sales</li>
           <li>1-2 weeks — balanced exposure and engagement</li>
-          <li>3-4 weeks — maximum reach for seasonal offers</li>
+          <li>15 days — maximum window for seasonal or festival offers</li>
         </ul>
       </div>
 

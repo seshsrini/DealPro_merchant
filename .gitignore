@@ -69,3 +69,6 @@ google-services_old.json
 android/app/google-services.json
 android/app/google-services_old.json
 nul
+
+# Claude Code local project config
+.claude/

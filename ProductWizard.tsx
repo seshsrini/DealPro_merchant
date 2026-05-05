@@ -2,29 +2,42 @@ import React, { useState, useEffect, useReducer, useCallback } from 'react';
 import { AppView, User } from './types';
 import { X, CheckCircle2, RotateCcw } from 'lucide-react';
 import { getSchemaForCategory } from './data/formSchema';
-import { fetchStoreCategories } from './services/categoryService';
-import { ProductData } from './services/productLookupService';
 
 // Step components
-import { StepProductLookup } from './components/product-wizard/StepProductLookup';
-import { StepProductImage } from './components/product-wizard/StepProductImage';
+import { StepProductStoreSelect } from './components/product-wizard/StepProductStoreSelect';
+import { StepProductPhoto } from './components/product-wizard/StepProductPhoto';
 import { StepProductName } from './components/product-wizard/StepProductName';
 import { StepCategory } from './components/product-wizard/StepCategory';
 import { StepSpecs } from './components/product-wizard/StepSpecs';
 import { StepPriceStock } from './components/product-wizard/StepPriceStock';
 import { StepProductReview } from './components/product-wizard/StepProductReview';
+import {
+  AiProductAnalysis,
+  mapCategoryToSchemaId,
+  mapCategoryToUniversalLabel,
+} from './services/productLookupService';
+import { merchantService } from './services/merchantService';
 
 // --- Types ---
 interface ProductWizardState {
+  storeIds: string[];
   name: string;
   brand: string;
   imageUrl: string | null;
+  // Up to 4 extra image URLs (cover + extras = 5 total).
+  additionalImages: string[];
+  // Optional single product video URL.
+  videoUrl: string | null;
   category: string;
   schemaId: string;
   specs: Record<string, string>;
   price: string;
   mrp: string;
-  stock: 'in_stock' | 'out_of_stock' | 'limited';
+  // stock_count encoding (matches products.stock_count column):
+  //   null  → "10+" / Available (default)
+  //   0     → Out of Stock
+  //   1..10 → exact remaining count
+  stockCount: number | null;
 }
 
 type WizardAction =
@@ -34,15 +47,18 @@ type WizardAction =
   | { type: 'RESET' };
 
 const initialState: ProductWizardState = {
+  storeIds: [],
   name: '',
   brand: '',
   imageUrl: null,
+  additionalImages: [],
+  videoUrl: null,
   category: '',
   schemaId: 'general',
   specs: {},
   price: '',
   mrp: '',
-  stock: 'in_stock',
+  stockCount: null, // default = "10+" / Available
 };
 
 function wizardReducer(state: ProductWizardState, action: WizardAction): ProductWizardState {
@@ -62,8 +78,10 @@ function wizardReducer(state: ProductWizardState, action: WizardAction): Product
 
 // --- Step Definitions ---
 // Lookup → Image → Name/Brand → Category → Specs → Price/Stock → Review
-const STEP_LABELS = ['Lookup', 'Image', 'Details', 'Category', 'Specs', 'Pricing', 'Review'];
-const TOTAL_STEPS = STEP_LABELS.length;
+// Steps: Photo → Details → Category → Store (multi-store only) → Specs → Pricing → Review
+// Single-store merchants skip the Store step entirely.
+const STEP_LABELS_MULTI = ['Photo', 'Details', 'Category', 'Store', 'Specs', 'Pricing', 'Review'];
+const STEP_LABELS_SINGLE = ['Photo', 'Details', 'Category', 'Specs', 'Pricing', 'Review'];
 
 // --- Component ---
 interface ProductWizardProps {
@@ -72,15 +90,18 @@ interface ProductWizardProps {
   theme: 'light' | 'dark';
   editProduct?: {
     id: string;
+    storeIds: string[];
     name: string;
     brand: string;
     imageUrl: string | null;
+    additionalImages: string[];
+    videoUrl: string | null;
     category: string;
     schemaId: string;
     specs: Record<string, string>;
     price: string;
     mrp: string;
-    stock: 'in_stock' | 'out_of_stock' | 'limited';
+    stockCount: number | null;
   } | null;
 }
 
@@ -89,13 +110,15 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
 }) => {
   const isDark = theme === 'dark';
   const [state, dispatch] = useReducer(wizardReducer, initialState);
-  // In edit mode, skip lookup step (start at step 1 = Image)
-  const [currentStep, setCurrentStep] = useState(editProduct ? 1 : 0);
+  const [currentStep, setCurrentStep] = useState(0);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('left');
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // Data
-  const [categories, setCategories] = useState<string[]>([]);
+  // Merchant stores for the store-select step
+  const [merchantStores, setMerchantStores] = useState<any[]>([]);
+  const isMultiStore = merchantStores.length > 1;
+  const STEP_LABELS = isMultiStore ? STEP_LABELS_MULTI : STEP_LABELS_SINGLE;
+  const TOTAL_STEPS = STEP_LABELS.length;
 
   // Result state
   const [showSuccess, setShowSuccess] = useState(false);
@@ -104,12 +127,19 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
 
   const DRAFT_KEY = `product_wizard_draft_${user.id}`;
 
-  // Load categories on mount
+  // Load merchant stores on mount; auto-assign if single store
   useEffect(() => {
-    fetchStoreCategories()
-      .then(cats => setCategories(cats))
-      .catch(err => console.error('[ProductWizard] Failed to load categories:', err));
-  }, []);
+    merchantService.getMerchantStores(user.id)
+      .then(stores => {
+        const active = (stores || []).filter((s: any) => s.active_status !== 'disabled');
+        setMerchantStores(active);
+        // Single store → auto-assign in background, no store selection step shown
+        if (active.length === 1 && state.storeIds.length === 0) {
+          dispatch({ type: 'SET_FIELD', field: 'storeIds', value: [active[0].id] });
+        }
+      })
+      .catch(err => console.error('[ProductWizard] Failed to load stores:', err));
+  }, [user.id]);
 
   // Pre-populate for edit mode
   useEffect(() => {
@@ -117,15 +147,18 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
       dispatch({
         type: 'BULK_UPDATE',
         payload: {
+          storeIds: editProduct.storeIds || [],
           name: editProduct.name,
           brand: editProduct.brand,
           imageUrl: editProduct.imageUrl,
+          additionalImages: editProduct.additionalImages || [],
+          videoUrl: editProduct.videoUrl,
           category: editProduct.category,
           schemaId: editProduct.schemaId,
           specs: { ...editProduct.specs },
           price: editProduct.price,
           mrp: editProduct.mrp,
-          stock: editProduct.stock,
+          stockCount: editProduct.stockCount,
         },
       });
     }
@@ -173,6 +206,25 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
 
   const handleNext = () => {
     saveDraft();
+    const nextStepName = STEP_LABELS[currentStep + 1];
+
+    // When moving to the Store step, auto-select stores matching the chosen category
+    if (nextStepName === 'Store' && isMultiStore && state.storeIds.length === 0) {
+      const categoryLower = (state.category || '').toLowerCase();
+      const matched = merchantStores
+        .filter((s: any) => {
+          const sc = (s.store_category || '').toLowerCase();
+          return sc && (categoryLower.includes(sc) || sc.includes(categoryLower.split(' ')[0]));
+        })
+        .map((s: any) => s.id);
+      // Pre-select matched stores; if no match, select all
+      dispatch({
+        type: 'SET_FIELD',
+        field: 'storeIds',
+        value: matched.length > 0 ? matched : merchantStores.map((s: any) => s.id),
+      });
+    }
+
     goToStep(currentStep + 1);
   };
 
@@ -211,50 +263,95 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
     setSaveError(error);
   };
 
-  // Product lookup auto-fill
-  const handleLookupResult = (product: ProductData) => {
-    const detectedSchema = getSchemaForCategory(product.detectedSchemaId);
-    const numericPrice = (product.specs.price ?? '').replace(/[^\d.]/g, '').replace(/\.(?=.*\.)/g, '');
-    dispatch({
-      type: 'BULK_UPDATE',
-      payload: {
-        name: product.name || state.name,
-        brand: product.brand || state.brand,
-        imageUrl: null, // Don't auto-set image from lookup — merchant should upload their own
-        category: detectedSchema.label,
-        schemaId: detectedSchema.id,
-        specs: { ...state.specs, ...product.specs },
-        price: numericPrice || state.price,
-      },
-    });
-    handleNext(); // Advance past lookup
+  // Photo + AI analysis result handler
+  const handlePhotoResult = ({
+    imageUrl,
+    additionalImages,
+    videoUrl,
+    analysis,
+  }: {
+    imageUrl: string;
+    additionalImages: string[];
+    videoUrl: string | null;
+    analysis: AiProductAnalysis | null;
+  }) => {
+    if (analysis) {
+      // Map AI category to a canonical universal dropdown label + internal schema
+      const universalLabel = mapCategoryToUniversalLabel(analysis.category);
+      const schemaId = mapCategoryToSchemaId(analysis.category);
+      const detectedSchema = getSchemaForCategory(schemaId);
+
+      // Extract brand from suggested_attributes if present
+      const brand = analysis.suggested_attributes.brand || analysis.suggested_attributes.Brand || '';
+
+      // Build specs from suggested_attributes (excluding 'brand' which is its own field)
+      const specs: Record<string, string> = {};
+      for (const [k, v] of Object.entries(analysis.suggested_attributes)) {
+        if (k.toLowerCase() !== 'brand' && v) {
+          specs[k.toLowerCase().replace(/\s+/g, '_')] = String(v);
+        }
+      }
+      // Save AI-generated description as a spec field (the products table also has a description column —
+      // this is also persisted via the attributes jsonb for backward compat with the form schema)
+      if (analysis.description) {
+        specs['ai_description'] = analysis.description;
+      }
+
+      dispatch({
+        type: 'BULK_UPDATE',
+        payload: {
+          name: analysis.product_name || state.name,
+          brand: brand || state.brand,
+          imageUrl: imageUrl,
+          additionalImages,
+          videoUrl,
+          category: universalLabel || '',
+          schemaId: detectedSchema.id,
+          specs: { ...state.specs, ...specs },
+          price: analysis.suggested_price ? String(analysis.suggested_price) : state.price,
+        },
+      });
+    } else {
+      // No AI analysis — just save the media, merchant fills the rest manually
+      dispatch({
+        type: 'BULK_UPDATE',
+        payload: { imageUrl, additionalImages, videoUrl },
+      });
+    }
+    handleNext();
   };
 
   // --- Render Step ---
+  // Steps vary based on store count:
+  //   Multi-store:  Photo(0) → Store(1) → Details(2) → Category(3) → Specs(4) → Pricing(5) → Review(6)
+  //   Single-store: Photo(0) → Details(1) → Category(2) → Specs(3) → Pricing(4) → Review(5)
   const renderStep = () => {
-    switch (currentStep) {
-      case 0:
+    const stepName = STEP_LABELS[currentStep];
+    switch (stepName) {
+      case 'Photo':
         return (
-          <StepProductLookup
-            hintCategory={user.category ?? ''}
-            onResult={handleLookupResult}
+          <StepProductPhoto
+            onResult={handlePhotoResult}
             onSkip={handleNext}
             onBack={handleBack}
             theme={theme}
+            initialImageUrl={state.imageUrl}
+            initialAdditionalImages={state.additionalImages}
+            initialVideoUrl={state.videoUrl}
           />
         );
-      case 1:
+      case 'Store':
         return (
-          <StepProductImage
-            value={state.imageUrl}
-            categoryLabel={state.category || user.category || ''}
-            onChange={(url) => dispatch({ type: 'SET_FIELD', field: 'imageUrl', value: url })}
+          <StepProductStoreSelect
+            stores={merchantStores}
+            selectedStoreIds={state.storeIds}
+            onChange={(ids) => dispatch({ type: 'SET_FIELD', field: 'storeIds', value: ids })}
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
           />
         );
-      case 2:
+      case 'Details':
         return (
           <StepProductName
             name={state.name}
@@ -266,16 +363,14 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
             theme={theme}
           />
         );
-      case 3:
+      case 'Category':
         return (
           <StepCategory
             selectedCategory={state.category}
             selectedSchemaId={state.schemaId}
-            categories={categories}
             onChange={(category, schemaId) => {
               dispatch({ type: 'SET_FIELD', field: 'category', value: category });
               dispatch({ type: 'SET_FIELD', field: 'schemaId', value: schemaId });
-              // Clear specs when category changes
               if (schemaId !== state.schemaId) {
                 dispatch({ type: 'SET_FIELD', field: 'specs', value: {} });
               }
@@ -285,7 +380,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
             theme={theme}
           />
         );
-      case 4:
+      case 'Specs':
         return (
           <StepSpecs
             schemaId={state.schemaId}
@@ -296,21 +391,21 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
             theme={theme}
           />
         );
-      case 5:
+      case 'Pricing':
         return (
           <StepPriceStock
             price={state.price}
             mrp={state.mrp}
-            stock={state.stock}
+            stock={state.stockCount}
             onPriceChange={(v) => dispatch({ type: 'SET_FIELD', field: 'price', value: v })}
             onMrpChange={(v) => dispatch({ type: 'SET_FIELD', field: 'mrp', value: v })}
-            onStockChange={(v) => dispatch({ type: 'SET_FIELD', field: 'stock', value: v })}
+            onStockChange={(v) => dispatch({ type: 'SET_FIELD', field: 'stockCount', value: v })}
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
           />
         );
-      case 6:
+      case 'Review':
         return (
           <StepProductReview
             wizardState={state}
@@ -448,7 +543,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
               onClick={() => setSaveError(null)}
               className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all"
             >
-              OK, I'll Fix It
+              Error occurred. Please close and open the app and try again.
             </button>
           </div>
         </div>

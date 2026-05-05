@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Zap, Clock, Flame, ShoppingBag, Utensils, Sparkles, Gift, Sun, ArrowRight } from 'lucide-react';
 import { floatIn } from '../campaign-wizard/floatIn';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 export interface DotdTemplate {
   id: string;
@@ -11,6 +12,20 @@ export interface DotdTemplate {
   description: string;
   category: 'flash' | 'lunch' | 'happy-hour' | 'doorbuster' | 'surprise' | 'seasonal' | 'clearance' | 'exclusive';
   discount: number;
+  // Which store-category buckets this template is appropriate for. Templates
+  // tagged with multiple buckets show up for all of them. A template with no
+  // matches still shows for unknown categories (default = retail).
+  buckets: Array<'retail' | 'food' | 'service' | 'pro'>;
+}
+
+type OfferBucket = 'retail' | 'food' | 'service' | 'pro';
+function bucketForCategory(category?: string | null): OfferBucket {
+  const c = (category || '').toLowerCase();
+  if (!c) return 'retail';
+  if (/restaurant|dining|cafe|bakery|chaat|juice|ice cream|tiffin|catering/.test(c)) return 'food';
+  if (/professional|education|training|real estate|consult|legal|law|account|finance/.test(c)) return 'pro';
+  if (/salon|beauty|parlor|automotive|pharmacy|healthcare|travel|tour|entertainment|games|fitness|optical|tailor|boutique|pet/.test(c)) return 'service';
+  return 'retail';
 }
 
 const DOTD_TEMPLATES: DotdTemplate[] = [
@@ -23,6 +38,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '⚡ 24-Hour Flash Deal!\n\nThis deal vanishes at midnight. No extensions, no repeats.\n\n✅ One-day-only pricing\n✅ Walk in anytime today\n✅ First come, first served\n\n⏰ Hurry — once it\'s gone, it\'s gone!',
     category: 'flash',
     discount: 40,
+    buckets: ['retail', 'food', 'service', 'pro'],
   },
   {
     id: 'lunch-rush',
@@ -33,6 +49,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '🍽️ Lunch Rush Special!\n\nShake off the afternoon slump with an unbeatable deal.\n\n🕐 Valid 11 AM – 3 PM today\n🎁 Buy 1, Get 1 FREE\n📍 Dine-in & takeaway\n\n💡 Perfect for lunch with colleagues or friends!',
     category: 'lunch',
     discount: 50,
+    buckets: ['food'],
   },
   {
     id: 'happy-hour',
@@ -43,6 +60,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '🎉 Happy Hour Blitz!\n\nThe best 4 hours of the day just got better.\n\n⏰ 4 PM – 8 PM only\n💰 Massive discounts on everything\n🛍️ No minimum purchase\n\n🔥 Walk in, save big, walk out happy!',
     category: 'happy-hour',
     discount: 35,
+    buckets: ['retail', 'food', 'service'],
   },
   {
     id: 'doorbuster',
@@ -53,6 +71,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '💥 Doorbuster Deal!\n\nOne hero product. One jaw-dropping price. One day.\n\n🏷️ Limited quantity available\n⚡ First 50 customers only\n🚫 No rain checks\n\n🏃 Get here early — this won\'t last!',
     category: 'doorbuster',
     discount: 60,
+    buckets: ['retail'],
   },
   {
     id: 'mystery-deal',
@@ -63,6 +82,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '🎲 Mystery Deal Day!\n\nEvery customer gets a surprise discount. What will YOU get?\n\n🎁 Scratch card at checkout\n💰 Discounts range from 10% to 50%\n✨ Everyone\'s a winner!\n\n🤩 Come try your luck today!',
     category: 'surprise',
     discount: 30,
+    buckets: ['retail', 'food'],
   },
   {
     id: 'sunrise-sale',
@@ -73,6 +93,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '🌅 Early Bird Special!\n\nThe early bird gets the deal. Show up before 11 AM for exclusive savings.\n\n☀️ Valid 8 AM – 11 AM\n💰 Extra discount for morning shoppers\n☕ Start your day with savings\n\n⏰ Morning only — no exceptions!',
     category: 'seasonal',
     discount: 25,
+    buckets: ['retail', 'food', 'service'],
   },
   {
     id: 'stock-clear',
@@ -83,6 +104,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '🏷️ One-Day Clearance Blowout!\n\nMassive markdowns across the store. Today only.\n\n📦 Selected items up to 70% OFF\n🔖 Prices slashed on all categories\n❌ No further discounts apply\n\n💨 When it\'s sold, it\'s sold. No restocking!',
     category: 'clearance',
     discount: 50,
+    buckets: ['retail'],
   },
   {
     id: 'vip-day',
@@ -93,6 +115,30 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '👑 VIP Customer Day!\n\nA special thank-you to our loyal customers.\n\n🎖️ Exclusive one-day pricing\n🎁 Free gift with every purchase over ₹500\n💎 Premium service all day\n\n❤️ Because you deserve the best!',
     category: 'exclusive',
     discount: 20,
+    buckets: ['retail', 'food', 'service', 'pro'],
+  },
+  // Service- & pro-friendly templates so those buckets aren't too sparse.
+  {
+    id: 'free-consultation',
+    name: 'Free Consultation Day',
+    tagline: 'Win new clients with a free first session',
+    heading: 'Free Consultation Today',
+    offer: 'Free 30-min consultation — Today Only!',
+    description: '📅 Free Consultation Day!\n\nBook a complimentary 30-minute session with us today.\n\n✅ No obligation\n✅ Personalized advice\n✅ Limited slots available\n\n💼 Reserve your slot now!',
+    category: 'exclusive',
+    discount: 100,
+    buckets: ['service', 'pro'],
+  },
+  {
+    id: 'first-visit-special',
+    name: 'First-Visit Special',
+    tagline: 'Welcome offer for new customers',
+    heading: 'New Customer? Save Big Today',
+    offer: '<X>% OFF your first visit',
+    description: '🎉 First-Visit Special!\n\nA warm welcome from us — enjoy big savings on your first visit today.\n\n👋 New customers only\n💰 Up to 30% OFF\n📍 In-store only\n\n💡 Show this offer at checkout.',
+    category: 'exclusive',
+    discount: 30,
+    buckets: ['service', 'pro'],
   },
 ];
 
@@ -101,6 +147,8 @@ interface StepDotdTemplateProps {
   onSkip: () => void;
   onBack: () => void;
   theme: 'light' | 'dark';
+  onBuyGetFree?: () => void;
+  storeCategory?: string | null;
 }
 
 const getCategoryStyle = (category: DotdTemplate['category']) => {
@@ -130,10 +178,13 @@ const getCategoryIcon = (category: DotdTemplate['category']) => {
 };
 
 export const StepDotdTemplate: React.FC<StepDotdTemplateProps> = ({
-  onSelectTemplate, onSkip, onBack, theme,
+  onSelectTemplate, onSkip, onBack, theme, onBuyGetFree, storeCategory,
 }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
+  const bucket = bucketForCategory(storeCategory);
+  const visibleTemplates = DOTD_TEMPLATES.filter((tpl) => tpl.buckets.includes(bucket));
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
@@ -143,16 +194,29 @@ export const StepDotdTemplate: React.FC<StepDotdTemplateProps> = ({
   return (
     <div className="flex flex-col min-h-full px-6 pt-6">
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Pick a deal template
+        {t('m_pick_deal_template')}
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        One-day deals that drive instant foot traffic.
+        {t('m_dotd_foot_traffic')}
       </p>
+
+      {/* Buy & Get Free Gift button */}
+      {onBuyGetFree && (
+        <div style={floatIn(250, visible)} className="mb-3">
+          <button
+            onClick={onBuyGetFree}
+            className="w-full h-14 rounded-2xl bg-gradient-to-r from-pink-500 to-rose-500 text-white flex items-center justify-center gap-2.5 text-base font-bold active:scale-[0.98] transition-all shadow-lg shadow-pink-500/30"
+          >
+            <Gift className="w-5 h-5" />
+            {t('m_buy_get_free_gift')}
+          </button>
+        </div>
+      )}
 
       {/* Template grid */}
       <div style={floatIn(300, visible)} className="flex-1 overflow-y-auto max-h-[55vh] -mx-1">
         <div className="grid grid-cols-2 gap-3 px-1 pb-2">
-          {DOTD_TEMPLATES.map((template) => {
+          {visibleTemplates.map((template) => {
             const style = getCategoryStyle(template.category);
             return (
               <button
@@ -178,10 +242,10 @@ export const StepDotdTemplate: React.FC<StepDotdTemplateProps> = ({
                 {/* Bottom stats */}
                 <div className="mt-auto pt-2 flex items-center gap-2">
                   <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/20 text-white">
-                    ~{template.discount}% off
+                    {t('m_approx_off').replace('{0}', String(template.discount))}
                   </span>
                   <span className="text-[10px] font-medium text-white/60">
-                    1 day
+                    {t('m_one_day')}
                   </span>
                 </div>
               </button>
@@ -198,7 +262,7 @@ export const StepDotdTemplate: React.FC<StepDotdTemplateProps> = ({
             isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
           }`}
         >
-          Back
+          {t('m_back')}
         </button>
         <button
           onClick={onSkip}
@@ -206,7 +270,7 @@ export const StepDotdTemplate: React.FC<StepDotdTemplateProps> = ({
             isDark ? 'bg-slate-700 text-white' : 'bg-slate-900 text-white'
           }`}
         >
-          Start from scratch
+          {t('m_start_scratch')}
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>

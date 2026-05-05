@@ -71,6 +71,10 @@ export const merchantOnboardingService = {
       latitude: number;
       longitude: number;
       store_hrs: string;
+      store_phone?: string;
+      store_phone_alt?: string;
+      delivers?: boolean;
+      delivery_radius_km?: number | null;
     }>;
   }) => {
     const { data, error } = await supabase.functions.invoke('complete-merchant-profile', {

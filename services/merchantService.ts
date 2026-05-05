@@ -1,20 +1,57 @@
 
-import { supabase, updateSupabaseSession, supabaseAnonKey, supabaseUrl } from "./supabaseClient"; // Import supabaseUrl
+import { supabase, updateSupabaseSession, supabaseAnonKey, supabaseUrl, ensureFreshToken } from "./supabaseClient";
 import { MerchantStore, MerchantSearchStore } from "../types"; // Import MerchantSearchStore
+import { loadCachedStores, saveCachedStores, clearCachedStores } from "./merchantStoresCache";
+
+// Module-level guard so concurrent callers share one in-flight fetch instead of stampeding the edge function.
+const _inflightStoresByMerchant = new Map<string, Promise<MerchantStore[]>>();
 
 export const merchantService = {
-  // Calls Edge Function
+  /**
+   * Fetch merchant stores. Cached in localStorage with a 1-hour freshness window:
+   *   - Fresh cache (<1 hr): return immediately, no network call.
+   *   - Stale or missing cache: fetch fresh, save, return.
+   *   - Network/auth error: fall back to cached value if any (so a transient JWT
+   *     expiry or offline state doesn't break dependent UI like the deal modal).
+   *   - Cache is busted explicitly on add/update/delete so edits show up immediately.
+   */
   getMerchantStores: async (merchantId: string): Promise<MerchantStore[]> => {
-    console.log(`[merchantService] Fetching stores for merchant ID: ${merchantId}`);
-    // Session is handled by Edge Function's authenticateRequest
-    const { data, error } = await supabase.functions.invoke('get-stores', {
-      body: { merchantId },
-    });
-    if (error) {
-      console.error("Failed to fetch merchant stores via Edge Function:", error);
-      throw new Error('Unable to complete request. Please try again.');
+    const cached = loadCachedStores(merchantId);
+    if (cached?.isFresh) {
+      console.log(`[merchantService] Returning fresh cached stores (${cached.stores.length}, age ${Math.round(cached.ageMs / 1000)}s)`);
+      return cached.stores;
     }
-    return data as MerchantStore[];
+
+    // Coalesce concurrent fetches for the same merchant.
+    const inflight = _inflightStoresByMerchant.get(merchantId);
+    if (inflight) return inflight;
+
+    const fetchPromise = (async () => {
+      console.log(`[merchantService] Fetching stores for merchant ID: ${merchantId}`);
+      try { await ensureFreshToken(); } catch {}
+      try {
+        const { data, error } = await supabase.functions.invoke('get-stores', {
+          body: { merchantId },
+        });
+        if (error) throw error;
+        const stores = (data || []) as MerchantStore[];
+        saveCachedStores(merchantId, stores);
+        return stores;
+      } catch (err: any) {
+        console.warn('[merchantService] get-stores failed:', err?.message || err);
+        // Survive transient failures (expired JWT, dropped connection) by serving stale cache.
+        if (cached) {
+          console.log(`[merchantService] Falling back to stale cached stores (${cached.stores.length}, age ${Math.round(cached.ageMs / 1000)}s)`);
+          return cached.stores;
+        }
+        throw new Error('Unable to complete request. Please try again.');
+      } finally {
+        _inflightStoresByMerchant.delete(merchantId);
+      }
+    })();
+
+    _inflightStoresByMerchant.set(merchantId, fetchPromise);
+    return fetchPromise;
   },
 
   /**
@@ -40,6 +77,7 @@ export const merchantService = {
       body: { action: 'update', merchantId, storeId, data },
     });
     if (error) throw new Error('Unable to complete request. Please try again.');
+    clearCachedStores(merchantId);
     return (res as any).store as MerchantStore;
   },
 
@@ -49,6 +87,7 @@ export const merchantService = {
       body: { action: 'add', merchantId, store },
     });
     if (error) throw new Error('Unable to complete request. Please try again.');
+    clearCachedStores(merchantId);
     return (res as any).store as MerchantStore;
   },
 
@@ -58,6 +97,7 @@ export const merchantService = {
       body: { action: 'delete', merchantId, storeId },
     });
     if (error) throw new Error('Unable to complete request. Please try again.');
+    clearCachedStores(merchantId);
   },
 
   /**

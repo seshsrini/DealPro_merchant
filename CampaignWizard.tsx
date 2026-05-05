@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useReducer, useCallback } from 'react';
+import React, { useState, useEffect, useReducer, useCallback, useMemo, useRef } from 'react';
 import { AppView, Deal, User } from './types';
 import { X, CheckCircle2, Loader2, RotateCcw, Bookmark } from 'lucide-react';
 import { addCampaignService } from './services/addCampaignService';
 import { merchantService } from './services/merchantService';
+import { supabase } from './services/supabaseClient';
+import { campaignDraftService, CampaignDraftKind } from './services/draftService';
 import { campaignTemplatesService, CampaignTemplate } from './services/campaignTemplatesService';
 import { useTranslation } from './contexts/LanguageContext';
 
@@ -16,6 +18,9 @@ import { StepStoreSelect } from './components/campaign-wizard/StepStoreSelect';
 import { StepStartDate } from './components/campaign-wizard/StepStartDate';
 import { StepEndDate } from './components/campaign-wizard/StepEndDate';
 import { StepReview } from './components/campaign-wizard/StepReview';
+import { StepBuyGetFree, FreeGiftItem, emptyGift } from './components/campaign-wizard/StepBuyGetFree';
+import { StepTrustBadges } from './components/campaign-wizard/StepTrustBadges';
+import { StepBannerPlacement } from './components/campaign-wizard/StepBannerPlacement';
 
 // --- Types ---
 interface WizardState {
@@ -34,6 +39,14 @@ interface WizardState {
   selectedVideoFile: File | null;
   existingVideoUrl: string | null;
   imagePriceOverlays: Record<number, { discountPct: string; offerPrice: string }>;
+  trustBadgeIds: string[];
+  skipBannerGeneration: boolean;
+  freeGifts: FreeGiftItem[];
+  // Snapshot of the cover image as uploaded by the merchant. Used to re-bake
+  // the banner cleanly when the merchant changes placement via the layout step.
+  originalImageFile: File | null;
+  // Cover banner text placement chosen by the merchant. 'auto' = heuristic decides.
+  bannerPlacement: 'auto' | 'left' | 'right' | 'top' | 'bottom';
 }
 
 type WizardAction =
@@ -56,6 +69,11 @@ const initialState: WizardState = {
   selectedVideoFile: null,
   existingVideoUrl: null,
   imagePriceOverlays: {},
+  trustBadgeIds: [],
+  skipBannerGeneration: false,
+  freeGifts: [],
+  originalImageFile: null,
+  bannerPlacement: 'auto',
 };
 
 function wizardReducer(state: WizardState, action: WizardAction): WizardState {
@@ -63,7 +81,16 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
     case 'SET_FIELD':
       return { ...state, [action.field]: action.value };
     case 'RESTORE_DRAFT':
-      return { ...state, ...action.draft, selectedImageFile: null, additionalImageFiles: [], selectedVideoFile: null }; // Files can't be serialized
+      // Files can't be serialized — wipe every File-typed field so a stringified `{}` placeholder
+      // doesn't survive the round-trip and confuse downstream code (e.g. bake-source resolution).
+      return {
+        ...state,
+        ...action.draft,
+        selectedImageFile: null,
+        additionalImageFiles: [],
+        selectedVideoFile: null,
+        originalImageFile: null,
+      };
     case 'RESET':
       return initialState;
     default:
@@ -71,9 +98,14 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
   }
 }
 
-// --- Step Definitions ---
-const STEP_LABELS = ['Store', 'Template', 'Image', 'Heading', 'Offer', 'Description', 'Start', 'End', 'Review'];
-const TOTAL_STEPS = STEP_LABELS.length;
+// --- Step sequences ---
+type StepKind = 'store' | 'template' | 'image' | 'freeGifts' | 'heading' | 'offer' | 'description' | 'badges' | 'bannerPlacement' | 'startDate' | 'endDate' | 'review';
+
+const NORMAL_STEPS: StepKind[] = ['store', 'template', 'image', 'heading', 'offer', 'description', 'badges', 'bannerPlacement', 'startDate', 'endDate', 'review'];
+const BUY_GET_FREE_STEPS: StepKind[] = ['store', 'template', 'image', 'freeGifts', 'heading', 'offer', 'description', 'badges', 'bannerPlacement', 'startDate', 'endDate', 'review'];
+
+const NORMAL_LABELS = ['Store', 'Template', 'Image', 'Heading', 'Offer', 'Description', 'Badges', 'Layout', 'Start', 'End', 'Review'];
+const BUY_GET_FREE_LABELS = ['Store', 'Template', 'Image', 'Gifts', 'Heading', 'Offer', 'Description', 'Badges', 'Layout', 'Start', 'End', 'Review'];
 
 // --- Component ---
 interface CampaignWizardProps {
@@ -94,6 +126,23 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
   const [currentStep, setCurrentStep] = useState(0);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('left');
   const [isTransitioning, setIsTransitioning] = useState(false);
+  // When true, "Continue" on any step jumps back to Review instead of next step
+  const [returnToReview, setReturnToReview] = useState(false);
+
+  // "Buy & Get Free Gift" special template mode
+  const [isBuyGetFreeMode, setIsBuyGetFreeMode] = useState(false);
+
+  // Dynamic step sequence
+  const steps = useMemo(() => isBuyGetFreeMode ? BUY_GET_FREE_STEPS : NORMAL_STEPS, [isBuyGetFreeMode]);
+  const stepLabels = useMemo(() => isBuyGetFreeMode ? BUY_GET_FREE_LABELS : NORMAL_LABELS, [isBuyGetFreeMode]);
+  const totalSteps = steps.length;
+
+  // Build edit step map for StepReview
+  const editStepMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    steps.forEach((kind, idx) => { map[kind] = idx; });
+    return map;
+  }, [steps]);
 
   // Data
   const [merchantStores, setMerchantStores] = useState<any[]>([]);
@@ -112,6 +161,20 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
   const [templateSaved, setTemplateSaved] = useState(false);
 
   const DRAFT_KEY = `campaign_wizard_draft_${user.id}`;
+
+  // JWT heartbeat — refresh the access token every 4 minutes while the wizard is open.
+  // Default Supabase JWT TTL is 1 hour; refreshing periodically guarantees the token
+  // is rarely close to expiry, even if the merchant takes a long time on the form
+  // before publishing. Without this, a merchant who spends >55 minutes on the wizard
+  // hits "Session expired" at publish time.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      supabase.auth.refreshSession().catch(err => {
+        console.warn('[CampaignWizard] Heartbeat refresh failed:', err?.message);
+      });
+    }, 4 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Load stores + image library on mount
   useEffect(() => {
@@ -155,6 +218,13 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     if (editDealId && deals.length > 0) {
       const deal = deals.find(d => d.campaign_id === editDealId);
       if (deal) {
+        const freeGifts = ((deal as any).free_gifts || []).map((g: any) => ({
+          imageFile: null, imageUrl: g.image_url || null, name: g.name || '',
+        }));
+        // If deal has free_gifts, enable Buy & Get Free mode
+        if (freeGifts.length > 0) {
+          setIsBuyGetFreeMode(true);
+        }
         dispatch({
           type: 'RESTORE_DRAFT',
           draft: {
@@ -169,6 +239,8 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             additionalImageUrls: deal.media_urls || [],
             existingVideoUrl: deal.video_url || null,
             imagePriceOverlays: ((deal as any).image_price_overlays || {}) as Record<number, { discountPct: string; offerPrice: string }>,
+            trustBadgeIds: (deal as any).trust_badges || [],
+            freeGifts,
           },
         });
         console.log('[CampaignWizard] Pre-populated from deal:', editDealId);
@@ -176,35 +248,138 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     }
   }, [editDealId, deals]);
 
-  // Restore draft for new campaigns only
+  // Resume-prompt modal state — shown when a server-side draft is found at mount.
+  const [resumePromptDraft, setResumePromptDraft] = useState<{
+    payload: any;
+    current_step: number;
+    cover_image_url: string | null;
+    additional_image_urls: string[];
+    free_gift_image_urls: string[];
+    is_buy_get_free: boolean;
+    updated_at: string;
+  } | null>(null);
+
+  // Restore draft for new campaigns only — tries server first, falls back to localStorage.
+  // Server draft wins if found because it's the canonical source (survives device switches).
+  const draftLoadedRef = useRef(false);
   useEffect(() => {
     if (editDealId) return; // Don't restore draft when editing
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        const draft = JSON.parse(saved);
-        if (draft && draft.dealHeading !== undefined) {
-          dispatch({ type: 'RESTORE_DRAFT', draft });
-          const savedStep = localStorage.getItem(DRAFT_KEY + '_step');
-          if (savedStep) {
-            const step = parseInt(savedStep);
-            if (step >= 0 && step < TOTAL_STEPS) setCurrentStep(step);
-          }
-          console.log('[CampaignWizard] Draft restored');
-        }
+    if (draftLoadedRef.current) return;
+    draftLoadedRef.current = true;
+
+    (async () => {
+      // 1. Try server-side draft first (regular kind first, then DOTD-mode if present).
+      // For now CampaignWizard only owns 'regular' and 'buy_get_free_regular' — DOTD lives in DotdWizard.
+      // Probe both kinds and use whichever exists more recently.
+      const [regular, bgfRegular] = await Promise.all([
+        campaignDraftService.load('regular'),
+        campaignDraftService.load('buy_get_free_regular'),
+      ]);
+      const newest = [regular, bgfRegular]
+        .filter(Boolean)
+        .sort((a, b) => new Date(b!.updated_at).getTime() - new Date(a!.updated_at).getTime())[0];
+
+      if (newest) {
+        setResumePromptDraft({
+          payload: newest.payload,
+          current_step: newest.current_step,
+          cover_image_url: newest.cover_image_url,
+          additional_image_urls: newest.additional_image_urls || [],
+          free_gift_image_urls: newest.free_gift_image_urls || [],
+          is_buy_get_free: newest.kind === 'buy_get_free_regular',
+          updated_at: newest.updated_at,
+        });
+        return; // Wait for user choice in the modal — don't auto-restore.
       }
-    } catch {}
+
+      // 2. No server draft — fall back to localStorage.
+      try {
+        const saved = localStorage.getItem(DRAFT_KEY);
+        if (saved) {
+          const draft = JSON.parse(saved);
+          if (draft && draft.dealHeading !== undefined) {
+            const wasBuyGetFree = draft._isBuyGetFreeMode || (draft.freeGifts && draft.freeGifts.some((g: any) => g.imageUrl || g.name));
+            if (wasBuyGetFree) setIsBuyGetFreeMode(true);
+            dispatch({ type: 'RESTORE_DRAFT', draft });
+            const savedStep = localStorage.getItem(DRAFT_KEY + '_step');
+            if (savedStep) {
+              const step = parseInt(savedStep);
+              const maxSteps = wasBuyGetFree ? BUY_GET_FREE_STEPS.length : NORMAL_STEPS.length;
+              if (step >= 0 && step < maxSteps) setCurrentStep(step);
+            }
+            console.log('[CampaignWizard] Draft restored from localStorage, buyGetFreeMode:', wasBuyGetFree);
+          }
+        }
+      } catch {}
+    })();
   }, [DRAFT_KEY, editDealId]);
 
-  // Save draft
+  // Resume-prompt accept: hydrate state from the server draft.
+  const handleResumeDraft = useCallback(() => {
+    if (!resumePromptDraft) return;
+    const d = resumePromptDraft;
+    if (d.is_buy_get_free) setIsBuyGetFreeMode(true);
+    // Hydrate wizard state from the persisted payload + the image URLs from the
+    // dedicated columns (URLs are NOT in the payload — they're top-level on the row).
+    const draftPayload: Partial<WizardState> = {
+      ...d.payload,
+      // URLs from drafts/ folder become the wizard's existing-thumbnail / additional-URLs.
+      existingThumbnail: d.cover_image_url || d.payload?.existingThumbnail || null,
+      additionalImageUrls: d.additional_image_urls.length > 0 ? d.additional_image_urls : (d.payload?.additionalImageUrls || []),
+    };
+    dispatch({ type: 'RESTORE_DRAFT', draft: draftPayload });
+    const maxSteps = d.is_buy_get_free ? BUY_GET_FREE_STEPS.length : NORMAL_STEPS.length;
+    setCurrentStep(Math.min(Math.max(d.current_step, 0), maxSteps - 1));
+    setResumePromptDraft(null);
+    console.log('[CampaignWizard] Resumed server draft from', d.updated_at);
+  }, [resumePromptDraft]);
+
+  // Resume-prompt decline: discard the server draft and start fresh.
+  const handleDiscardServerDraft = useCallback(async () => {
+    if (!resumePromptDraft) return;
+    const kind: CampaignDraftKind = resumePromptDraft.is_buy_get_free ? 'buy_get_free_regular' : 'regular';
+    try {
+      const { orphaned_image_urls } = await campaignDraftService.delete(kind);
+      if (orphaned_image_urls.length > 0) {
+        await addCampaignService.destroyDraftImages(orphaned_image_urls);
+      }
+    } catch { /* best-effort */ }
+    setResumePromptDraft(null);
+  }, [resumePromptDraft]);
+
+  // Save draft — writes to BOTH localStorage (instant fallback) and the server-side
+  // campaign_drafts table (debounced 2 s). Server draft survives device switches and
+  // app uninstall; localStorage survives offline pauses.
   const saveDraft = useCallback(() => {
     if (editDealId) return; // Don't save draft when editing
     try {
-      const { selectedImageFile, additionalImageFiles, selectedVideoFile, ...serializable } = state;
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(serializable));
+      // Strip every File-typed field — JSON.stringify turns a File into "{}" which would later
+      // be rehydrated as a broken truthy value. Excluded fields are restored as null at runtime.
+      const { selectedImageFile, additionalImageFiles, selectedVideoFile, originalImageFile, ...serializable } = state;
+      // Strip File objects from freeGifts for serialization
+      const serializableGifts = state.freeGifts.map(g => ({
+        imageFile: null, imageUrl: g.imageUrl, name: g.name,
+      }));
+      const serializableState = { ...serializable, freeGifts: serializableGifts, _isBuyGetFreeMode: isBuyGetFreeMode };
+
+      // localStorage (instant, offline-safe)
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(serializableState));
       localStorage.setItem(DRAFT_KEY + '_step', String(currentStep));
+
+      // Server (debounced 2 s) — image URLs travel as top-level columns so the
+      // cleanup sweep can find orphaned Cloudinary uploads via SQL.
+      const kind: CampaignDraftKind = isBuyGetFreeMode ? 'buy_get_free_regular' : 'regular';
+      const giftUrls = (state.freeGifts || []).map(g => g.imageUrl).filter(Boolean) as string[];
+      campaignDraftService.scheduleSave({
+        kind,
+        current_step: currentStep,
+        payload: serializableState,
+        cover_image_url: state.existingThumbnail || null,
+        additional_image_urls: state.additionalImageUrls || [],
+        free_gift_image_urls: giftUrls,
+      });
     } catch {}
-  }, [DRAFT_KEY, state, currentStep, editDealId]);
+  }, [DRAFT_KEY, state, currentStep, editDealId, isBuyGetFreeMode]);
 
   // Navigation
   const goToStep = (newStep: number) => {
@@ -219,12 +394,24 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
 
   const handleNext = () => {
     saveDraft();
+    // If we jumped here from Review to edit a section, go back to Review
+    if (returnToReview) {
+      setReturnToReview(false);
+      goToStep(totalSteps - 1); // Review is always the last step
+      return;
+    }
     // In edit mode, skip Template step (step 1) going forward from Store (step 0)
     const nextStep = (editDealId && currentStep === 0) ? 2 : currentStep + 1;
     goToStep(nextStep);
   };
 
   const handleBack = () => {
+    // If we jumped here from Review, cancel the edit and go back to Review
+    if (returnToReview) {
+      setReturnToReview(false);
+      goToStep(totalSteps - 1);
+      return;
+    }
     if (currentStep === 0) {
       setView('merchant_deals');
       return;
@@ -234,10 +421,23 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     goToStep(prevStep);
   };
 
+  // Called from Review page edit pencils — jump to a specific step, then return
+  const handleEditFromReview = (stepIndex: number) => {
+    setReturnToReview(true);
+    goToStep(stepIndex);
+  };
+
   const handlePublishSuccess = async () => {
-    // Clear draft
+    // Clear draft (both localStorage AND server). On publish-success we DO NOT destroy
+    // the drafts/ Cloudinary assets — the published deal references those URLs. The
+    // assets remain in the dealpro-drafts/ folder forever; that's acceptable since
+    // they're still served by Cloudinary's CDN at the same URL.
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
+    try {
+      const kind: CampaignDraftKind = isBuyGetFreeMode ? 'buy_get_free_regular' : 'regular';
+      await campaignDraftService.delete(kind); // ignore returned orphaned_image_urls — they're now in the published deal
+    } catch { /* best-effort */ }
     await refreshDeals();
 
     // For new campaigns, ask if they want to save as template
@@ -303,10 +503,21 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     setView('merchant_deals');
   };
 
-  const handleDiscard = () => {
+  const handleDiscard = async () => {
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
+    // On Start Over, delete the server draft AND destroy any uploaded Cloudinary
+    // draft assets — those images won't survive into a published deal so they're
+    // true orphans. Both calls are best-effort; the cleanup cron is the safety net.
+    try {
+      const kind: CampaignDraftKind = isBuyGetFreeMode ? 'buy_get_free_regular' : 'regular';
+      const { orphaned_image_urls } = await campaignDraftService.delete(kind);
+      if (orphaned_image_urls.length > 0) {
+        await addCampaignService.destroyDraftImages(orphaned_image_urls);
+      }
+    } catch { /* best-effort */ }
     dispatch({ type: 'RESET' });
+    setIsBuyGetFreeMode(false);
     setCurrentStep(0);
     setShowDiscardConfirm(false);
   };
@@ -327,10 +538,21 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     handleNext(); // Move to Image step
   };
 
+  // "Buy & Get Free Gift" template — enters free gift mode
+  const handleBuyGetFreeSelect = () => {
+    setIsBuyGetFreeMode(true);
+    dispatch({ type: 'SET_FIELD', field: 'offerValue', value: 'Buy & Get Free Gift' });
+    if (state.freeGifts.length === 0) {
+      dispatch({ type: 'SET_FIELD', field: 'freeGifts', value: [emptyGift()] });
+    }
+    handleNext(); // Move to Image step (step 2) — normal image upload
+  };
+
   // --- Render Step ---
   const renderStep = () => {
-    switch (currentStep) {
-      case 0:
+    const kind = steps[currentStep];
+    switch (kind) {
+      case 'store':
         return (
           <StepStoreSelect
             stores={merchantStores}
@@ -341,7 +563,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             theme={theme}
           />
         );
-      case 1:
+      case 'template':
         return (
           <StepTemplate
             merchantId={user.id}
@@ -349,9 +571,10 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             onSkip={handleNext}
             onBack={handleBack}
             theme={theme}
+            onBuyGetFree={handleBuyGetFreeSelect}
           />
         );
-      case 2:
+      case 'image':
         return (
           <StepImage
             selectedFile={state.selectedImageFile}
@@ -362,10 +585,20 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             existingVideoUrl={state.existingVideoUrl}
             imageLibrary={imageLibrary}
             isLibraryLoading={isLibraryLoading}
-            onFileSelected={(file) => dispatch({ type: 'SET_FIELD', field: 'selectedImageFile', value: file })}
+            onFileSelected={(file) => {
+              dispatch({ type: 'SET_FIELD', field: 'selectedImageFile', value: file });
+              // Snapshot the freshly uploaded file as the bake source. Locks in the clean
+              // original so re-bakes (toggle, heading edit) don't paint over a prior banner.
+              dispatch({ type: 'SET_FIELD', field: 'originalImageFile', value: file });
+              dispatch({ type: 'SET_FIELD', field: 'bannerPlacement', value: 'auto' });
+            }}
             onExistingSelected={(url, name) => {
               dispatch({ type: 'SET_FIELD', field: 'existingThumbnail', value: url || null });
               dispatch({ type: 'SET_FIELD', field: 'existingImageName', value: name });
+              // URL source — StepReview will fetch and snapshot. If the URL points at a
+              // previously baked banner, the bake is skipped (see source-is-baked check).
+              dispatch({ type: 'SET_FIELD', field: 'originalImageFile', value: null });
+              dispatch({ type: 'SET_FIELD', field: 'bannerPlacement', value: 'auto' });
             }}
             onAdditionalImagesChange={(files, urls) => {
               dispatch({ type: 'SET_FIELD', field: 'additionalImageFiles', value: files });
@@ -380,9 +613,23 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
+            storeName={user.store_name}
+            dealHeading={state.dealHeading}
+            offerValue={state.offerValue}
+            merchantId={user.id}
           />
         );
-      case 3:
+      case 'freeGifts':
+        return (
+          <StepBuyGetFree
+            gifts={state.freeGifts}
+            onChange={(gifts) => dispatch({ type: 'SET_FIELD', field: 'freeGifts', value: gifts })}
+            onNext={handleNext}
+            onBack={handleBack}
+            theme={theme}
+          />
+        );
+      case 'heading':
         return (
           <StepHeading
             value={state.dealHeading}
@@ -392,7 +639,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             theme={theme}
           />
         );
-      case 4:
+      case 'offer':
         return (
           <StepOffer
             value={state.offerValue}
@@ -400,9 +647,10 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
+            storeCategory={user.category}
           />
         );
-      case 5:
+      case 'description':
         return (
           <StepDescription
             value={state.description}
@@ -412,7 +660,33 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             theme={theme}
           />
         );
-      case 6:
+      case 'badges':
+        return (
+          <StepTrustBadges
+            selectedBadgeIds={state.trustBadgeIds}
+            onChange={(ids) => dispatch({ type: 'SET_FIELD', field: 'trustBadgeIds', value: ids })}
+            onNext={handleNext}
+            onBack={handleBack}
+            theme={theme}
+          />
+        );
+      case 'bannerPlacement':
+        return (
+          <StepBannerPlacement
+            originalImageFile={state.originalImageFile || state.selectedImageFile}
+            existingThumbnail={state.existingThumbnail}
+            storeName={merchantStores.find(s => s.id === state.selectedStoreId)?.store_name || user.store_name || ''}
+            dealHeading={state.dealHeading}
+            offerValue={state.offerValue}
+            trustBadgeIds={state.trustBadgeIds}
+            value={state.bannerPlacement}
+            onChange={(p) => dispatch({ type: 'SET_FIELD', field: 'bannerPlacement', value: p })}
+            onNext={handleNext}
+            onBack={handleBack}
+            theme={theme}
+          />
+        );
+      case 'startDate':
         return (
           <StepStartDate
             value={state.startDate}
@@ -422,7 +696,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             theme={theme}
           />
         );
-      case 7:
+      case 'endDate':
         return (
           <StepEndDate
             value={state.endDate}
@@ -433,7 +707,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             theme={theme}
           />
         );
-      case 8:
+      case 'review':
         return (
           <StepReview
             wizardState={state}
@@ -443,7 +717,17 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             onBack={handleBack}
             onPublishSuccess={handlePublishSuccess}
             onPublishError={handlePublishError}
+            onEditSection={handleEditFromReview}
+            onUpdateMainImage={(file) => dispatch({ type: 'SET_FIELD', field: 'selectedImageFile', value: file })}
+            onUpdateOriginalImage={(file) => dispatch({ type: 'SET_FIELD', field: 'originalImageFile', value: file })}
+            onUpdateAdditional={(files, urls, overlays) => {
+              dispatch({ type: 'SET_FIELD', field: 'additionalImageFiles', value: files });
+              dispatch({ type: 'SET_FIELD', field: 'additionalImageUrls', value: urls });
+              dispatch({ type: 'SET_FIELD', field: 'imagePriceOverlays', value: overlays });
+            }}
             theme={theme}
+            editStepMap={editStepMap}
+            isBuyGetFreeMode={isBuyGetFreeMode}
           />
         );
       default:
@@ -463,17 +747,22 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
         >
           <X className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
         </button>
-        <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-white' : 'text-slate-900'}`}>
-          {editDealId ? t('m_edit_campaign') : t('m_new_campaign')}
+        <span className={`text-xs font-semibold uppercase tracking-wider truncate max-w-[55%] text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>
+          {(() => {
+            // Once a store is picked, show its name as the wizard's reference label
+            // so the merchant always knows which store this deal is for. Falls back
+            // to the generic "New / Edit Campaign" label before a store is selected.
+            const selectedStore = merchantStores.find(s => s.id === state.selectedStoreId);
+            if (selectedStore?.store_name) return selectedStore.store_name;
+            return editDealId ? t('m_edit_campaign') : t('m_new_campaign');
+          })()}
         </span>
         <button
           onClick={() => setShowDiscardConfirm(true)}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 ${
-            isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-200'
-          }`}
-          title="Start over"
+          className="px-3 h-9 rounded-lg bg-slate-900 text-white text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
         >
-          <RotateCcw className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+          <RotateCcw className="w-3.5 h-3.5" />
+          {t('m_start_over_btn')}
         </button>
       </div>
 
@@ -482,9 +771,9 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
         isDark ? 'bg-slate-900' : 'bg-white'
       }`}>
         {/* Progress Bar (hide on Review step) */}
-        {currentStep < TOTAL_STEPS - 1 && (
+        {currentStep < totalSteps - 1 && (
           <div className="w-full flex items-center gap-1.5 px-5 pt-3 pb-1.5">
-            {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+            {Array.from({ length: totalSteps }).map((_, i) => (
               <div
                 key={i}
                 className={`h-1.5 rounded-full flex-1 transition-all duration-500 ${
@@ -510,6 +799,44 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Resume Draft Modal — shown on mount if a server-side draft exists. */}
+      {resumePromptDraft && (
+        <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center px-8">
+          <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+            <h3 className={`text-lg font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              You have an unfinished deal
+            </h3>
+            <p className={`text-sm mb-5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              {(() => {
+                const heading = (resumePromptDraft.payload?.dealHeading || '').trim();
+                const when = new Date(resumePromptDraft.updated_at).toLocaleString('en-IN', {
+                  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                });
+                return heading
+                  ? `“${heading}” — last edited ${when}. Resume where you left off, or start fresh?`
+                  : `Last edited ${when}. Resume where you left off, or start fresh?`;
+              })()}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleDiscardServerDraft}
+                className={`flex-1 h-11 rounded-xl text-sm font-semibold active:scale-[0.98] transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                Start fresh
+              </button>
+              <button
+                onClick={handleResumeDraft}
+                className="flex-1 h-11 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+              >
+                Resume
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Discard Confirmation Modal */}
       {showDiscardConfirm && (

@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Grid3X3, CheckCircle2 } from 'lucide-react';
 import { floatIn } from './floatIn';
-import { CATEGORY_SCHEMAS, CategorySchema } from '../../data/formSchema';
+import { UNIVERSAL_CATEGORIES } from '../../services/productLookupService';
 
 interface StepCategoryProps {
   selectedCategory: string;
   selectedSchemaId: string;
-  categories: string[];
   onChange: (category: string, schemaId: string) => void;
   onNext: () => void;
   onBack: () => void;
@@ -14,7 +13,7 @@ interface StepCategoryProps {
 }
 
 export const StepCategory: React.FC<StepCategoryProps> = ({
-  selectedCategory, selectedSchemaId, categories, onChange, onNext, onBack, theme,
+  selectedCategory, selectedSchemaId, onChange, onNext, onBack, theme,
 }) => {
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
@@ -24,19 +23,6 @@ export const StepCategory: React.FC<StepCategoryProps> = ({
     const t = setTimeout(() => setVisible(true), 50);
     return () => clearTimeout(t);
   }, []);
-
-  // Use store categories if available, otherwise fall back to CATEGORY_SCHEMAS
-  const displayCategories: { label: string; schemaId: string }[] =
-    categories.length > 0
-      ? categories.map(cat => {
-          const match = CATEGORY_SCHEMAS.find(s =>
-            cat.toLowerCase().includes(s.id) ||
-            s.label.toLowerCase().includes(cat.toLowerCase()) ||
-            cat.toLowerCase().includes(s.label.toLowerCase().split(' ')[0])
-          );
-          return { label: cat, schemaId: match?.id ?? 'general' };
-        })
-      : CATEGORY_SCHEMAS.map(s => ({ label: s.label, schemaId: s.id }));
 
   const handleSelect = (label: string, schemaId: string) => {
     onChange(label, schemaId);
@@ -55,7 +41,7 @@ export const StepCategory: React.FC<StepCategoryProps> = ({
       </p>
 
       <div style={floatIn(300, visible)} className="space-y-2 flex-1 overflow-y-auto pb-4">
-        {displayCategories.map(({ label, schemaId }) => {
+        {UNIVERSAL_CATEGORIES.map(({ label, schemaId }) => {
           const isSelected = selectedCategory === label;
           return (
             <button

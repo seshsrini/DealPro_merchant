@@ -30,13 +30,16 @@ export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNex
     return () => clearTimeout(t);
   }, []);
 
-  // Show popup tooltip once on mount if value has template placeholders
+  // Reactively show/hide the placeholder tooltip as the user types.
+  const [userDismissedThisSession, setUserDismissedThisSession] = useState(false);
   useEffect(() => {
-    if (hasPlaceholder && !isPlaceholderTooltipDismissed()) {
-      const t = setTimeout(() => setShowPlaceholderHint(true), 500);
+    if (hasPlaceholder && !userDismissedThisSession) {
+      const t = setTimeout(() => setShowPlaceholderHint(true), 300);
       return () => clearTimeout(t);
+    } else if (!hasPlaceholder) {
+      setShowPlaceholderHint(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasPlaceholder, userDismissedThisSession]);
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 350);
@@ -85,7 +88,7 @@ export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNex
       <div style={floatIn(300, visible)}>
         <PlaceholderTooltip
           visible={showPlaceholderHint}
-          onDismiss={() => setShowPlaceholderHint(false)}
+          onDismiss={() => { setShowPlaceholderHint(false); setUserDismissedThisSession(true); }}
           theme={theme}
         />
         <input

@@ -2,21 +2,51 @@ import React, { useRef, useEffect, useState } from 'react';
 import { IndianRupee } from 'lucide-react';
 import { floatIn } from './floatIn';
 
-type StockStatus = 'in_stock' | 'out_of_stock' | 'limited';
+/**
+ * Stock count encoding (matches the products.stock_count column):
+ *   null  → "10+" / Available (default — plenty)
+ *   0     → Out of Stock
+ *   1..10 → exact remaining count (low-stock)
+ */
+export type StockCount = number | null;
 
-const STOCK_OPTIONS: { value: StockStatus; label: string }[] = [
-  { value: 'in_stock', label: 'In Stock' },
-  { value: 'limited', label: 'Limited' },
-  { value: 'out_of_stock', label: 'Out of Stock' },
+// Dropdown <option value="..."> ↔ stock_count value mapping.
+// We use string values because <select> only stores strings; the parent
+// converts back to number | null via parseStockOption().
+const STOCK_OPTIONS: { value: string; label: string }[] = [
+  { value: 'PLENTY',       label: '10+ (Available)' },
+  { value: '10',           label: '10 left' },
+  { value: '9',            label: '9 left' },
+  { value: '8',            label: '8 left' },
+  { value: '7',            label: '7 left' },
+  { value: '6',            label: '6 left' },
+  { value: '5',            label: '5 left' },
+  { value: '4',            label: '4 left' },
+  { value: '3',            label: '3 left' },
+  { value: '2',            label: '2 left' },
+  { value: '1',            label: '1 left' },
+  { value: 'OUT_OF_STOCK', label: 'Out of Stock' },
 ];
+
+export function parseStockOption(value: string): StockCount {
+  if (value === 'PLENTY') return null;
+  if (value === 'OUT_OF_STOCK') return 0;
+  return parseInt(value, 10);
+}
+
+export function stockCountToOption(count: StockCount): string {
+  if (count === null || count === undefined) return 'PLENTY';
+  if (count === 0) return 'OUT_OF_STOCK';
+  return String(count);
+}
 
 interface StepPriceStockProps {
   price: string;
   mrp: string;
-  stock: StockStatus;
+  stock: StockCount;
   onPriceChange: (value: string) => void;
   onMrpChange: (value: string) => void;
-  onStockChange: (value: StockStatus) => void;
+  onStockChange: (value: StockCount) => void;
   onNext: () => void;
   onBack: () => void;
   theme: 'light' | 'dark';
@@ -101,26 +131,23 @@ export const StepPriceStock: React.FC<StepPriceStockProps> = ({
           </div>
         )}
 
-        {/* Stock status */}
+        {/* Stock count */}
         <div>
-          <label className={`block text-xs font-semibold mb-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Stock Status
+          <label className={`block text-xs font-semibold mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            Stock Available
           </label>
-          <div className="flex gap-2 flex-wrap">
+          <select
+            value={stockCountToOption(stock)}
+            onChange={e => onStockChange(parseStockOption(e.target.value))}
+            className={inputClass}
+          >
             {STOCK_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => onStockChange(opt.value)}
-                className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition-all active:scale-[0.98] ${
-                  stock === opt.value
-                    ? isDark ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : 'border-emerald-500 bg-emerald-50 text-emerald-600'
-                    : isDark ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-500'
-                }`}
-              >
-                {opt.label}
-              </button>
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
-          </div>
+          </select>
+          <p className={`mt-2 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            Pick "10+" if you have plenty. Pick a specific count to show a low-stock warning to shoppers.
+          </p>
         </div>
       </div>
 

@@ -1,10 +1,16 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { Eye, Loader2, CheckCircle2, Upload, Rocket, AlertTriangle, TrendingUp, Film, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Eye, Loader2, CheckCircle2, Upload, Rocket, AlertTriangle, TrendingUp, Film, ChevronLeft, ChevronRight, Edit2, Gift } from 'lucide-react';
 import { floatIn } from './floatIn';
 import { addCampaignService } from '../../services/addCampaignService';
 import { campaignOptimizerService, OptimizationResult } from '../../services/campaignOptimizerService';
 import { perfTimer } from '../../services/perfLogger';
 import { useTranslation } from '../../contexts/LanguageContext';
+import { ensureFreshToken, supabase, recoverSessionOrSilentReauth } from '../../services/supabaseClient';
+import { biometricService } from '../../services/biometricService';
+import { userService } from '../../services/userService';
+import { generatePromoBanner, generateFreeGiftsImage, BannerPlacement } from './StepImage';
+import { TRUST_BADGES } from './StepTrustBadges';
+import { FreeGiftItem } from './StepBuyGetFree';
 
 interface MerchantStore {
   id?: string;
@@ -30,6 +36,11 @@ interface WizardState {
   selectedVideoFile: File | null;
   existingVideoUrl: string | null;
   imagePriceOverlays?: Record<number, { discountPct: string; offerPrice: string }>;
+  trustBadgeIds?: string[];
+  skipBannerGeneration?: boolean;
+  freeGifts?: FreeGiftItem[];
+  originalImageFile?: File | null;
+  bannerPlacement?: BannerPlacement;
 }
 
 interface StepReviewProps {
@@ -40,7 +51,17 @@ interface StepReviewProps {
   onBack: () => void;
   onPublishSuccess: () => void;
   onPublishError: (error: string) => void;
+  onEditSection?: (stepIndex: number) => void;
+  onUpdateMainImage?: (file: File) => void;
+  onUpdateOriginalImage?: (file: File | null) => void;
+  onUpdateAdditional?: (
+    files: File[],
+    urls: string[],
+    overlays: Record<number, { discountPct: string; offerPrice: string }>,
+  ) => void;
   theme: 'light' | 'dark';
+  editStepMap?: Record<string, number>;
+  isBuyGetFreeMode?: boolean;
 }
 
 const stripHtml = (html: string): string =>
@@ -54,17 +75,27 @@ const formatDate = (dateStr: string): string => {
 
 export const StepReview: React.FC<StepReviewProps> = ({
   wizardState, user, stores, editingDealId,
-  onBack, onPublishSuccess, onPublishError, theme,
+  onBack, onPublishSuccess, onPublishError, onEditSection, onUpdateMainImage, onUpdateOriginalImage,
+  onUpdateAdditional, theme,
+  editStepMap, isBuyGetFreeMode,
 }) => {
   const isDark = theme === 'dark';
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const publishingRef = useRef(false); // Ref guard to prevent double-submit
+  const [generatingBanner, setGeneratingBanner] = useState(false);
   const [progress, setProgress] = useState<{ step: number; label: string } | null>(null);
   const [optimization, setOptimization] = useState<OptimizationResult | null>(null);
   const [optimizing, setOptimizing] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Resolve edit step indices — use dynamic map if provided, fallback to default
+  const EDIT_STEPS = useMemo(() => {
+    if (editStepMap) return editStepMap;
+    return { store: 0, image: 2, heading: 3, offer: 4, description: 5, badges: 6, startDate: 7, endDate: 8 };
+  }, [editStepMap]);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
@@ -122,6 +153,152 @@ export const StepReview: React.FC<StepReviewProps> = ({
     setCarouselIndex(idx);
   }, []);
 
+  // Auto-generate promo banner on mount (skip for Buy & Get Free mode).
+  // Re-runs whenever the merchant changes bannerPlacement on the Layout step.
+  const bakedForPlacementRef = useRef<BannerPlacement | null>(null);
+  useEffect(() => {
+    if (!onUpdateMainImage || wizardState.skipBannerGeneration) return;
+    const sourceFile = wizardState.selectedImageFile;
+    const sourceUrl = wizardState.existingThumbnail;
+    if (!sourceFile && !sourceUrl) return;
+    const desired: BannerPlacement = wizardState.bannerPlacement ?? 'auto';
+    if (bakedForPlacementRef.current === desired) return;
+    bakedForPlacementRef.current = desired;
+    (async () => {
+      setGeneratingBanner(true);
+      try {
+        // Resolve the source: prefer the preserved original (snapshotted at upload) so re-bakes
+        // don't apply text on top of an already-baked banner.
+        let original = wizardState.originalImageFile;
+        if (!original) {
+          if (sourceFile) {
+            original = sourceFile;
+          } else if (sourceUrl) {
+            const res = await fetch(sourceUrl);
+            const blob = await res.blob();
+            original = new File([blob], 'existing.jpg', { type: blob.type });
+          }
+          if (original && onUpdateOriginalImage) onUpdateOriginalImage(original);
+        }
+        if (!original) return;
+        // Bake-on-bake guard: skip if the source is itself a previously baked banner.
+        const sourceLooksBaked =
+          original.name.startsWith('promo-banner-') ||
+          (sourceUrl && /promo-banner/i.test(sourceUrl));
+        if (sourceLooksBaked) {
+          console.log('[StepReview] Source is already a baked banner — skipping bake to avoid ghost text.');
+          return;
+        }
+        const badgeLabels = (wizardState.trustBadgeIds || [])
+          .map(id => TRUST_BADGES.find(b => b.id === id)?.label)
+          .filter(Boolean) as string[];
+        const banner = await generatePromoBanner(
+          original,
+          store?.store_name || user.store_name || 'Your Store',
+          wizardState.dealHeading || 'Special Deal',
+          wizardState.offerValue || 'Great Offer',
+          badgeLabels,
+          undefined,
+          desired,
+        );
+        onUpdateMainImage(banner);
+      } catch (err) {
+        console.error('[StepReview] Auto banner generation failed:', err);
+      } finally {
+        setGeneratingBanner(false);
+      }
+    })();
+  }, [wizardState.bannerPlacement]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-generate banners for tagged additional images (slots 1..N) — same treatment as cover,
+  // but the offer section uses the per-image tag (discount % / offer price) instead of the deal-wide offer.
+  const additionalBannersGeneratedRef = useRef(false);
+  useEffect(() => {
+    if (additionalBannersGeneratedRef.current || !onUpdateAdditional || wizardState.skipBannerGeneration) return;
+    const overlays = wizardState.imagePriceOverlays || {};
+    const taggedSlots = Object.keys(overlays)
+      .map(Number)
+      .filter(i => i >= 1 && (overlays[i]?.discountPct || overlays[i]?.offerPrice));
+    if (taggedSlots.length === 0) return;
+    additionalBannersGeneratedRef.current = true;
+    (async () => {
+      setGeneratingBanner(true);
+      try {
+        const badgeLabels = (wizardState.trustBadgeIds || [])
+          .map(id => TRUST_BADGES.find(b => b.id === id)?.label)
+          .filter(Boolean) as string[];
+
+        const urls = wizardState.additionalImageUrls;
+        const files = wizardState.additionalImageFiles;
+        // Combined display order: URLs first (slots 1..urls.length), then Files
+        const newUrls: string[] = [];
+        const newFiles: File[] = [];
+        const newOverlays: Record<number, { discountPct: string; offerPrice: string }> = { ...overlays };
+
+        // URLs occupy combined slots 1..urls.length
+        for (let i = 0; i < urls.length; i++) {
+          const slot = i + 1;
+          const ov = overlays[slot];
+          const tagged = ov && (ov.discountPct || ov.offerPrice);
+          if (tagged) {
+            try {
+              const res = await fetch(urls[i]);
+              const blob = await res.blob();
+              const srcFile = new File([blob], `existing-add-${slot}.jpg`, { type: blob.type || 'image/jpeg' });
+              const banner = await generatePromoBanner(
+                srcFile,
+                store?.store_name || user.store_name || 'Your Store',
+                wizardState.dealHeading || 'Special Deal',
+                wizardState.offerValue || 'Great Offer',
+                badgeLabels,
+                { discountPct: ov.discountPct, offerPrice: ov.offerPrice },
+              );
+              newFiles.push(banner);
+              delete newOverlays[slot];
+            } catch (err) {
+              console.warn('[StepReview] Failed to bake tagged URL image, keeping original:', err);
+              newUrls.push(urls[i]);
+            }
+          } else {
+            newUrls.push(urls[i]);
+          }
+        }
+
+        // Files occupy combined slots (urls.length + 1) .. (urls.length + files.length)
+        for (let j = 0; j < files.length; j++) {
+          const slot = urls.length + j + 1;
+          const ov = overlays[slot];
+          const tagged = ov && (ov.discountPct || ov.offerPrice);
+          if (tagged) {
+            try {
+              const banner = await generatePromoBanner(
+                files[j],
+                store?.store_name || user.store_name || 'Your Store',
+                wizardState.dealHeading || 'Special Deal',
+                wizardState.offerValue || 'Great Offer',
+                badgeLabels,
+                { discountPct: ov.discountPct, offerPrice: ov.offerPrice },
+              );
+              newFiles.push(banner);
+              delete newOverlays[slot];
+            } catch (err) {
+              console.warn('[StepReview] Failed to bake tagged file image, keeping original:', err);
+              newFiles.push(files[j]);
+            }
+          } else {
+            newFiles.push(files[j]);
+          }
+        }
+
+        onUpdateAdditional(newFiles, newUrls, newOverlays);
+      } catch (err) {
+        console.error('[StepReview] Additional banner generation failed:', err);
+      } finally {
+        setGeneratingBanner(false);
+      }
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Run optimizer on mount
   useEffect(() => {
     const run = async () => {
@@ -147,20 +324,47 @@ export const StepReview: React.FC<StepReviewProps> = ({
 
   const store = stores.find(s => s.id === wizardState.selectedStoreId);
 
+  // Free gifts with valid data
+  const validGifts = (wizardState.freeGifts || []).filter(g => (g.imageFile || g.imageUrl) && g.name.trim());
+
   const handlePublish = async () => {
+    if (publishingRef.current) return; // Prevent double-submit
+    publishingRef.current = true;
     const timer = perfTimer('save_campaign', 'add_deal');
     setPublishing(true);
     try {
+      // Phase 0: Recover a working session before the multi-step publish.
+      // Tries refreshSession() first; if the refresh token is also dead (e.g. user
+      // backgrounded the app for hours), falls back to silent re-auth using the
+      // cached merchant phone. This eliminates "session expired" at publish time
+      // unless the cached phone itself is gone (truly logged out).
+      const recovered = await recoverSessionOrSilentReauth({
+        getSavedUser: () => biometricService.getSavedUser(),
+        reAuth: (phone, cc) => userService.merchantOtpLogin(phone, cc),
+      });
+      if (!recovered) {
+        // Last resort — try ensureFreshToken from cache, then proceed and let the
+        // per-call invoke wrapper's 401 retry catch any straggler.
+        try { await ensureFreshToken(); } catch {
+          console.warn('[StepReview] All session recovery paths failed, proceeding anyway');
+        }
+      }
+
       // Phase 1: Content + Image moderation
       setProgress({ step: 1, label: 'Checking content...' });
       timer.mark('moderation_start');
       const plainDesc = stripHtml(wizardState.description);
+      // Image profanity + copyright are now run at the StepImage "Continue" step
+      // (upload-time gate). At publish we only re-run the TEXT moderation since the
+      // heading/offer/description can be edited after leaving the image step.
       const moderationPromises: Promise<{ flagged: boolean; reason: string }>[] = [
         addCampaignService.moderateContent(wizardState.dealHeading, wizardState.offerValue, plainDesc),
       ];
-      const allNewFiles = [wizardState.selectedImageFile, ...wizardState.additionalImageFiles].filter(Boolean) as File[];
-      for (const file of allNewFiles) {
-        moderationPromises.push(addCampaignService.moderateImage(file));
+      // Also moderate gift images
+      for (const gift of validGifts) {
+        if (gift.imageFile) {
+          moderationPromises.push(addCampaignService.moderateImage(gift.imageFile));
+        }
       }
       const results = await Promise.all(moderationPromises);
       for (const result of results) {
@@ -223,12 +427,43 @@ export const StepReview: React.FC<StepReviewProps> = ({
         }
       }
 
+      // Upload free gift images
+      const freeGiftsPayload: { image_url: string; name: string }[] = [];
+      if (validGifts.length > 0) {
+        setProgress({ step: 2, label: 'Uploading gift images...' });
+        for (const gift of validGifts) {
+          let giftImageUrl = gift.imageUrl;
+          if (gift.imageFile) {
+            try {
+              const giftUpload = await addCampaignService.uploadDealImage(user.id, gift.imageFile);
+              giftImageUrl = giftUpload.publicUrl;
+            } catch {
+              console.warn('[StepReview] Failed to upload gift image, using existing URL');
+            }
+          }
+          if (giftImageUrl) {
+            freeGiftsPayload.push({ image_url: giftImageUrl, name: gift.name.trim() });
+          }
+        }
+
+        // Auto-generate "Free Gifts" showcase image and add to media
+        try {
+          setProgress({ step: 2, label: 'Creating gifts showcase...' });
+          const giftsWithUrls = freeGiftsPayload.map(g => ({ imageUrl: g.image_url, name: g.name }));
+          const giftsImage = await generateFreeGiftsImage(giftsWithUrls, store?.store_name || user.store_name || 'Store');
+          const giftsUpload = await addCampaignService.uploadDealImage(user.id, giftsImage);
+          mediaUrls.push(giftsUpload.publicUrl);
+        } catch (err) {
+          console.warn('[StepReview] Failed to generate gifts showcase image:', err);
+        }
+      }
+
       // Phase 3: Create/Update campaign
       setProgress({ step: 3, label: editingDealId ? 'Updating deal...' : 'Publishing deal...' });
       timer.mark('campaign_create');
       const payload: Record<string, any> = {
         merchant_id: user.id,
-        shop_name: user.store_name,
+        shop_name: store?.store_name || user.store_name,
         deal_heading: wizardState.dealHeading,
         offer_value: wizardState.offerValue,
         category: user.category,
@@ -240,10 +475,12 @@ export const StepReview: React.FC<StepReviewProps> = ({
         image_name: finalImageName,
         latlong: store ? `${store.latitude}, ${store.longitude}` : '0.0, 0.0',
         is_deal_of_the_day: false,
+        trust_badges: wizardState.trustBadgeIds || [],
       };
 
       if (mediaUrls.length > 0) payload.media_urls = mediaUrls;
       if (finalVideoUrl) payload.video_url = finalVideoUrl;
+      if (freeGiftsPayload.length > 0) payload.free_gifts = freeGiftsPayload;
 
       // Image price overlays — only include non-empty overlays
       if (wizardState.imagePriceOverlays) {
@@ -271,7 +508,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
       // Background translation (fire-and-forget)
       addCampaignService.translateCampaignData(
         wizardState.dealHeading, wizardState.offerValue,
-        wizardState.description, user.store_name
+        wizardState.description, store?.store_name || user.store_name
       ).then(translations => {
         if (translations && campaignId) {
           addCampaignService.updateCampaign(campaignId, {
@@ -295,6 +532,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
       }
     } finally {
       setPublishing(false);
+      publishingRef.current = false;
       setProgress(null);
     }
   };
@@ -317,103 +555,185 @@ export const StepReview: React.FC<StepReviewProps> = ({
         </p>
       </div>
 
-      {/* Deal Card Preview with Media Carousel */}
-      <div style={floatIn(150, visible)} className={`rounded-2xl overflow-hidden border mb-5 ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}>
-        {totalMedia > 0 && (
-          <div className="relative">
-            {/* Horizontal scroll-snap carousel */}
-            <div
-              ref={scrollRef}
-              onScroll={handleScroll}
-              className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
-            >
-              {allPreviews.map((item, i) => (
-                <div key={i} className="w-full flex-shrink-0 snap-center relative">
-                  {item.isVideo ? (
-                    <video
-                      src={item.url}
-                      className="w-full h-44 object-cover bg-black"
-                      controls
-                      muted
-                      playsInline
-                    />
-                  ) : (
-                    <img src={item.url} alt={`Media ${i + 1}`} className="w-full h-44 object-cover" />
-                  )}
-                  {/* Video badge */}
-                  {item.isVideo && (
-                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 flex items-center gap-1">
-                      <Film className="w-3 h-3 text-white" />
-                      <span className="text-[10px] font-semibold text-white">{t('m_video')}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Counter badge */}
-            {totalMedia > 1 && (
-              <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/60">
-                <span className="text-[10px] font-semibold text-white">{carouselIndex + 1}/{totalMedia}</span>
+      {/* Consumer-style Deal Card Preview */}
+      <div style={floatIn(150, visible)}>
+        <p className={`text-[10px] font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+          Consumer Preview
+        </p>
+        <div className={`rounded-none overflow-hidden ${isDark ? 'bg-slate-900/50' : 'bg-white'}`}>
+          {/* Image — square aspect like consumer feed */}
+          {totalMedia > 0 && (
+            <div className="relative">
+              <div
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+              >
+                {allPreviews.map((item, i) => (
+                  <div key={i} className="w-full flex-shrink-0 snap-center relative">
+                    {item.isVideo ? (
+                      <video src={item.url} className="w-full aspect-square object-cover bg-black" controls muted playsInline />
+                    ) : (
+                      <img src={item.url} alt={`Media ${i + 1}`} className="w-full aspect-square object-cover" />
+                    )}
+                    {item.isVideo && (
+                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 flex items-center gap-1">
+                        <Film className="w-3 h-3 text-white" />
+                        <span className="text-[10px] font-semibold text-white">{t('m_video')}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            )}
+              {totalMedia > 1 && (
+                <>
+                  {carouselIndex > 0 && (
+                    <button onClick={() => scrollToIndex(carouselIndex - 1)} className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center"><ChevronLeft className="w-4 h-4 text-white" /></button>
+                  )}
+                  {carouselIndex < totalMedia - 1 && (
+                    <button onClick={() => scrollToIndex(carouselIndex + 1)} className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center"><ChevronRight className="w-4 h-4 text-white" /></button>
+                  )}
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+                    {allPreviews.map((_, i) => (
+                      <div key={i} className={`h-1.5 rounded-full transition-all ${i === carouselIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/40'}`} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
-            {/* Arrow buttons (overlaid) */}
-            {totalMedia > 1 && carouselIndex > 0 && (
-              <button
-                onClick={() => scrollToIndex(carouselIndex - 1)}
-                className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center active:scale-90 transition-transform"
-              >
-                <ChevronLeft className="w-4 h-4 text-white" />
-              </button>
-            )}
-            {totalMedia > 1 && carouselIndex < totalMedia - 1 && (
-              <button
-                onClick={() => scrollToIndex(carouselIndex + 1)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center active:scale-90 transition-transform"
-              >
-                <ChevronRight className="w-4 h-4 text-white" />
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Dot indicators — BELOW the image, outside the media area */}
-        {totalMedia > 1 && (
-          <div className="flex items-center justify-center gap-2 py-2.5">
-            {allPreviews.map((item, i) => (
-              <button
-                key={i}
-                onClick={() => scrollToIndex(i)}
-                className={`rounded-full transition-all duration-300 ${
-                  i === carouselIndex
-                    ? `w-5 h-2 ${item.isVideo ? 'bg-indigo-500' : 'bg-blue-500'}`
-                    : `w-2 h-2 ${isDark ? 'bg-slate-600' : 'bg-slate-300'}`
-                }`}
-              />
-            ))}
-          </div>
-        )}
-
-        <div className={`p-4 ${totalMedia > 1 ? 'pt-1' : ''}`}>
-          <div className="flex items-start justify-between mb-2">
-            <h3 className={`font-bold text-base flex-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              {wizardState.dealHeading}
+          {/* Text content — matches consumer deal card exactly */}
+          <div className="p-3">
+            <p className={`text-xs font-normal mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              {store?.store_name || user.store_name}
+            </p>
+            <h3 className={`text-sm font-normal line-clamp-2 mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              {wizardState.dealHeading || 'Deal Heading'}
             </h3>
-            <span className="ml-2 px-2.5 py-1 rounded-lg bg-emerald-500 text-white text-xs font-bold shrink-0">
-              {wizardState.offerValue}
-            </span>
+            <p className="text-sm font-semibold text-yellow-500 mb-1">
+              {wizardState.offerValue || 'Offer Value'}
+            </p>
+            <div className={`flex items-center gap-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              <span className="text-xs font-normal">
+                Valid till {formatDate(wizardState.endDate) || '—'}
+              </span>
+            </div>
           </div>
-          <p className={`text-xs line-clamp-2 mb-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            {stripHtml(wizardState.description)}
-          </p>
-          <div className={`flex items-center justify-between text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-            <span>{store?.store_name || 'Store'}, {store?.city}</span>
-            <span>{formatDate(wizardState.startDate)} - {formatDate(wizardState.endDate)}</span>
-          </div>
+
+          {/* Free Gifts Preview */}
+          {validGifts.length > 0 && (
+            <div className={`px-3 pb-3 pt-1 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Gift className="w-3.5 h-3.5 text-pink-500" />
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-pink-400' : 'text-pink-600'}`}>
+                  Free Gifts Included
+                </span>
+              </div>
+              <div className="flex gap-3 overflow-x-auto">
+                {validGifts.map((gift, i) => (
+                  <div key={i} className="flex flex-col items-center shrink-0" style={{ width: 72 }}>
+                    <div className={`w-16 h-16 rounded-xl overflow-hidden border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+                      {gift.imageUrl && (
+                        <img src={gift.imageUrl} alt={gift.name} className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                    <p className={`text-[10px] font-medium text-center mt-1 leading-tight line-clamp-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                      {gift.name}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Spacer */}
+      <div className="mb-5" />
+
+      {/* Editable Section Summary */}
+      {onEditSection && (
+        <div style={floatIn(225, visible)} className={`rounded-2xl border mb-5 divide-y ${isDark ? 'border-slate-700 bg-slate-800/50 divide-slate-700' : 'border-slate-200 bg-slate-50 divide-slate-200'}`}>
+          {/* Store */}
+          <button onClick={() => onEditSection(EDIT_STEPS.store)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+            <div className="flex-1 min-w-0">
+              <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Store</p>
+              <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{store?.store_name || 'Not selected'}{store?.city ? `, ${store.city}` : ''}</p>
+            </div>
+            <Edit2 className={`w-3.5 h-3.5 shrink-0 ml-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          </button>
+
+          {/* Image */}
+          <button onClick={() => onEditSection(EDIT_STEPS.image)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+            <div className="flex-1 min-w-0">
+              <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Media</p>
+              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{totalMedia} {totalMedia === 1 ? 'photo' : 'photos/videos'}</p>
+            </div>
+            <Edit2 className={`w-3.5 h-3.5 shrink-0 ml-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          </button>
+
+          {/* Free Gifts (Buy & Get Free mode only) */}
+          {isBuyGetFreeMode && EDIT_STEPS.freeGifts !== undefined && (
+            <button onClick={() => onEditSection(EDIT_STEPS.freeGifts)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+              <div className="flex-1 min-w-0">
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Free Gifts</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {validGifts.length} {validGifts.length === 1 ? 'gift' : 'gifts'}
+                </p>
+              </div>
+              <Edit2 className={`w-3.5 h-3.5 shrink-0 ml-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+            </button>
+          )}
+
+          {/* Heading */}
+          <button onClick={() => onEditSection(EDIT_STEPS.heading)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+            <div className="flex-1 min-w-0">
+              <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Heading</p>
+              <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{wizardState.dealHeading || 'Not set'}</p>
+            </div>
+            <Edit2 className={`w-3.5 h-3.5 shrink-0 ml-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          </button>
+
+          {/* Offer */}
+          <button onClick={() => onEditSection(EDIT_STEPS.offer)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+            <div className="flex-1 min-w-0">
+              <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Offer</p>
+              <p className={`text-sm font-medium truncate text-emerald-500`}>{wizardState.offerValue || 'Not set'}</p>
+            </div>
+            <Edit2 className={`w-3.5 h-3.5 shrink-0 ml-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          </button>
+
+          {/* Description */}
+          <button onClick={() => onEditSection(EDIT_STEPS.description)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+            <div className="flex-1 min-w-0">
+              <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Description</p>
+              <p className={`text-xs line-clamp-1 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{stripHtml(wizardState.description) || 'Not set'}</p>
+            </div>
+            <Edit2 className={`w-3.5 h-3.5 shrink-0 ml-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          </button>
+
+          {/* Dates */}
+          <div className="flex">
+            <button onClick={() => onEditSection(EDIT_STEPS.startDate)} className="flex-1 flex items-center justify-between px-4 py-3 text-left">
+              <div>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Start</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{formatDate(wizardState.startDate) || 'Not set'}</p>
+              </div>
+              <Edit2 className={`w-3.5 h-3.5 shrink-0 ml-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+            </button>
+            <div className={`w-px ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`} />
+            <button onClick={() => onEditSection(EDIT_STEPS.endDate)} className="flex-1 flex items-center justify-between px-4 py-3 text-left">
+              <div>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>End</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{formatDate(wizardState.endDate) || 'Not set'}</p>
+              </div>
+              <Edit2 className={`w-3.5 h-3.5 shrink-0 ml-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Campaign Optimizer */}
       <div style={floatIn(300, visible)} className={`rounded-2xl p-4 border mb-5 ${isDark ? 'border-slate-700 bg-slate-800/50' : 'border-slate-200 bg-slate-50'}`}>

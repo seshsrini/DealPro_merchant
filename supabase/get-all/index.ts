@@ -140,6 +140,11 @@ Deno.serve(async (req) => {
         city: d.merchant_stores?.city || d.city || '',
         state: d.merchant_stores?.state || d.state || '',
         image_name: d.image_name,
+        media_urls: d.media_urls || [],
+        video_url: d.video_url || null,
+        image_price_overlays: d.image_price_overlays || {},
+        trust_badges: d.trust_badges || [],
+        free_gifts: d.free_gifts || [],
         is_deal_of_the_day: d.is_deal_of_the_day || false, // Include Deal of the Day flag
         rating: merchantRatings.get(d.merchant_id) || 0
       };

@@ -17,11 +17,14 @@ Deno.serve(async (req) => {
 
     const authHeader = req.headers.get('Authorization');
     const jwt = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
-    if (!jwt) throw new Error('No token provided');
+    if (!jwt) throw new Error('Unauthorized: No access token provided.');
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
     const { data: { user }, error: authError } = await adminClient.auth.getUser(jwt);
-    if (authError || !user) throw new Error('Unauthorized');
+    if (authError || !user) {
+      const reason = /jwt expired|expired/i.test(authError?.message || '') ? 'expired' : 'invalid';
+      throw new Error(`Unauthorized: token ${reason}`);
+    }
 
     const { merchantId } = await req.json();
     if (merchantId !== user.id) throw new Error('Forbidden');
@@ -41,10 +44,15 @@ Deno.serve(async (req) => {
     });
 
   } catch (error: any) {
-    console.error('[EF get-total-lifetime-clicks] Error:', error.message);
+    const isAuth = error?.message?.includes('Unauthorized');
+    if (isAuth) {
+      console.warn('[EF get-total-lifetime-clicks] Auth rejected:', error.message);
+    } else {
+      console.error('[EF get-total-lifetime-clicks] Error:', error.message);
+    }
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+      status: isAuth ? 401 : 400,
     });
   }
 });

@@ -28,7 +28,10 @@ Deno.serve(async (req) => {
     // Use a temporary client to verify the user identity via JWT
     const authClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!);
     const { data: { user }, error: authError } = await authClient.auth.getUser(jwt);
-    if (authError || !user) throw new Error('Unauthorized: Invalid token.');
+    if (authError || !user) {
+      const reason = /jwt expired|expired/i.test(authError?.message || '') ? 'expired' : 'invalid';
+      throw new Error(`Unauthorized: token ${reason}`);
+    }
 
     // 4. Parse & Validate Body
     const { merchantId } = await req.json();
@@ -62,10 +65,15 @@ Deno.serve(async (req) => {
     });
 
   } catch (error: any) {
-    console.error('[EF get-total-lifetime-redemptions] Error:', error.message);
+    const isAuth = error?.message?.includes('Unauthorized');
+    if (isAuth) {
+      console.warn('[EF get-total-lifetime-redemptions] Auth rejected:', error.message);
+    } else {
+      console.error('[EF get-total-lifetime-redemptions] Error:', error.message);
+    }
     return new Response(JSON.stringify({ error: error.message || 'Internal Server Error' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+      status: isAuth ? 401 : 400,
     });
   }
 });

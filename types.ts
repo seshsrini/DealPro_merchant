@@ -57,6 +57,10 @@ export interface MerchantStore {
   longitude: number;
   store_hrs?: string;
   store_category?: string;
+  store_phone?: string;
+  store_phone_alt?: string;
+  delivers?: boolean;
+  delivery_radius_km?: number | null;
   localized_shop_name?: Record<string, string>;
   active_status?: string; // 'active' | 'disabled' (soft delete)
 }
@@ -125,6 +129,7 @@ export interface Deal {
   media_urls?: string[];   // Up to 5 campaign images
   video_url?: string;      // Optional campaign video
   image_price_overlays?: Record<string, { discountPct: string; offerPrice: string }>;
+  free_gifts?: { image_url: string; name: string }[];
   created_at?: string;
 
   // Added to reflect the joined structure from get-by-status Edge Function
@@ -241,10 +246,14 @@ export interface StoreLocation {
   city: string;
   landmark: string;
   store_category: string;
+  store_phone: string;
+  store_phone_alt: string;
   coords: { latitude: number, longitude: number } | null;
   isGeocoding: boolean;
   shift1: string;
   shift2: string;
   is24hrs: boolean;
   isPincodeSearching: boolean;
+  delivers: boolean;
+  delivery_radius_km: number | null;
 }

@@ -4,6 +4,7 @@ import { merchantOnboardingService } from './services/merchantOnboardingService'
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { encryptionService, auditLogger } from './services/encryptionService';
 import { biometricService } from './services/biometricService';
+import { signupDraftService } from './services/draftService';
 import { Loader2 } from 'lucide-react';
 
 // Step components
@@ -47,8 +48,10 @@ type WizardAction =
 
 const createEmptyStore = (): StoreLocation => ({
   store_name: '', street: '', pincode: '', locality: '', state: '', city: '',
-  landmark: '', store_category: '', coords: null, isGeocoding: false,
+  landmark: '', store_category: '', store_phone: '', store_phone_alt: '',
+  coords: null, isGeocoding: false,
   shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, isPincodeSearching: false,
+  delivers: false, delivery_radius_km: null,
 });
 
 const initialState: WizardState = {
@@ -127,6 +130,28 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     if (user.terms_accepted) dispatch({ type: 'SET_FIELD', field: 'termsAccepted', value: true });
     if (user.privacy_accepted) dispatch({ type: 'SET_FIELD', field: 'privacyAccepted', value: true });
 
+    // Try to load any server-side onboarding draft (typed-but-unsaved fields).
+    // Best-effort: silently merge on top of profile pre-fill. Never blocks navigation.
+    (async () => {
+      try {
+        const draft = await signupDraftService.load();
+        if (draft && draft.payload && typeof draft.payload === 'object') {
+          // Apply each field from the payload — overwrites profile pre-fill so the
+          // merchant sees what they last typed.
+          for (const [field, value] of Object.entries(draft.payload)) {
+            if (value === undefined || value === null) continue;
+            dispatch({ type: 'SET_FIELD', field: field as any, value });
+          }
+          if (Number.isInteger(draft.current_step) && draft.current_step > 0) {
+            // Only honor a draft step if it's further along than the determined start step.
+            // determineStartStep below will run after; we prefer whichever is later.
+            setCurrentStep(prev => Math.max(prev, draft.current_step));
+          }
+          console.log('[MerchantOnboarding] Server signup draft applied (step', draft.current_step, ')');
+        }
+      } catch { /* best-effort */ }
+    })();
+
     // If profile is already complete but subscription is missing/expired,
     // jump directly to subscription step (step 10).
     // For brand-new merchants whose profile is incomplete, fall through to
@@ -161,7 +186,9 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       else if (user.full_name && user.store_name && hasStores && user.business_type && user.terms_accepted && user.privacy_accepted) { startStep = 7; } // Everything filled — show review
 
       if (startStep > 0) {
-        setCurrentStep(startStep);
+        // Use Math.max so we don't clobber a higher step that the server-draft
+        // load (running async in parallel above) may have already set.
+        setCurrentStep(prev => Math.max(prev, startStep));
         console.log(`[MerchantOnboarding] Pre-filled from profile, starting at step ${startStep} (${STEP_LABELS[startStep]}), hasStores: ${hasStores}`);
       }
     };
@@ -169,12 +196,19 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     determineStartStep();
   }, [DRAFT_KEY]);
 
-  // Save draft
+  // Save draft — both localStorage (instant) and server (debounced 2 s).
+  // The merchant_profiles / merchant_stores tables already accumulate completed-step
+  // data via saveStepProgress(). signup_drafts captures the IN-PROGRESS step state
+  // (partially typed fields) and the current step number for resume positioning.
   const saveDraft = useCallback(() => {
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
+      signupDraftService.scheduleSave({
+        current_step: currentStep,
+        payload: state,
+      });
     } catch {}
-  }, [DRAFT_KEY, state]);
+  }, [DRAFT_KEY, state, currentStep]);
 
   // Navigation
   const goToStep = (newStep: number) => {
@@ -231,6 +265,10 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
               latitude:       s.coords?.latitude  || 0,
               longitude:      s.coords?.longitude || 0,
               store_hrs:      s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`,
+              store_phone:    s.store_phone || null,
+              store_phone_alt: s.store_phone_alt || null,
+              delivers:       s.delivers || false,
+              delivery_radius_km: s.delivers && s.delivery_radius_km != null ? Number(s.delivery_radius_km) : null,
             })),
           });
         }
@@ -356,11 +394,16 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             latitude:       s.coords?.latitude || 0,
             longitude:      s.coords?.longitude || 0,
             store_hrs:      s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`,
+            store_phone:    s.store_phone || null,
+            store_phone_alt: s.store_phone_alt || null,
+            delivers:       s.delivers || false,
+            delivery_radius_km: s.delivers && s.delivery_radius_km != null ? Number(s.delivery_radius_km) : null,
           })),
       });
 
-      // Clear draft
+      // Clear draft (localStorage + server-side signup_drafts)
       localStorage.removeItem(DRAFT_KEY);
+      try { await signupDraftService.delete(); } catch { /* best-effort */ }
 
       // Update user state with ALL profile-completeness fields
       const updatedUser = {

@@ -237,7 +237,8 @@ Deno.serve(async (req) => {
       long_description, latlong, start_date, end_date, store_id,
       image_url, image_name, media_urls, video_url, image_price_overlays,
       localized_heading, localized_offer,
-      localized_description, localized_shop_name, is_deal_of_the_day
+      localized_description, localized_shop_name, is_deal_of_the_day,
+      trust_badges, free_gifts
     } = body;
 
     // Validate Input Data
@@ -362,6 +363,12 @@ Deno.serve(async (req) => {
     if (video_url) campaignPayload.video_url = video_url;
     if (image_price_overlays && typeof image_price_overlays === 'object' && Object.keys(image_price_overlays).length > 0) {
       campaignPayload.image_price_overlays = image_price_overlays;
+    }
+    if (trust_badges && Array.isArray(trust_badges)) {
+      campaignPayload.trust_badges = trust_badges;
+    }
+    if (free_gifts && Array.isArray(free_gifts) && free_gifts.length > 0) {
+      campaignPayload.free_gifts = free_gifts;
     }
 
     const { data, error } = await supabase

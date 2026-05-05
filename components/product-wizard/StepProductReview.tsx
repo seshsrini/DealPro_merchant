@@ -12,15 +12,18 @@ async function callManageProducts(body: Record<string, unknown>) {
 }
 
 interface ProductWizardState {
+  storeIds: string[];
   name: string;
   brand: string;
   imageUrl: string | null;
+  additionalImages: string[];
+  videoUrl: string | null;
   category: string;
   schemaId: string;
   specs: Record<string, string>;
   price: string;
   mrp: string;
-  stock: 'in_stock' | 'out_of_stock' | 'limited';
+  stockCount: number | null;
 }
 
 interface StepProductReviewProps {
@@ -33,11 +36,11 @@ interface StepProductReviewProps {
   theme: 'light' | 'dark';
 }
 
-const STOCK_LABELS: Record<string, { label: string; color: string }> = {
-  in_stock: { label: 'In Stock', color: 'text-emerald-500' },
-  limited: { label: 'Limited', color: 'text-amber-500' },
-  out_of_stock: { label: 'Out of Stock', color: 'text-red-500' },
-};
+function describeStock(count: number | null): { label: string; color: string } {
+  if (count === null) return { label: 'Available',            color: 'text-emerald-500' };
+  if (count === 0)    return { label: 'Out of Stock',         color: 'text-red-500' };
+  return                     { label: `Only ${count} left`,   color: 'text-red-500' };
+}
 
 export const StepProductReview: React.FC<StepProductReviewProps> = ({
   wizardState, user, editingId, onBack, onSaveSuccess, onSaveError, theme,
@@ -60,7 +63,7 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
     ? Math.round((1 - parseFloat(wizardState.price) / parseFloat(wizardState.mrp)) * 100)
     : 0;
 
-  const stockMeta = STOCK_LABELS[wizardState.stock] || STOCK_LABELS.in_stock;
+  const stockMeta = describeStock(wizardState.stockCount);
 
   const handleSave = () => {
     if (!editingId) {
@@ -87,13 +90,25 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
 
       // Phase 2: Save product
       setProgress(editingId ? 'Updating product...' : 'Adding to catalogue...');
-      const { brand, price, mrp, stock, schemaId, specs } = wizardState;
+      const { brand, price, mrp, stockCount, schemaId, specs, additionalImages, videoUrl } = wizardState;
+
+      // Extract AI-generated description (saved as a spec by the photo step)
+      // and pass it as a top-level field. Strip it from specs to avoid duplication.
+      const { ai_description, ...remainingSpecs } = specs as Record<string, string>;
+      const description = ai_description || undefined;
+
+      // stock is no longer nested in attributes — it's now its own column.
       const row = {
         name: wizardState.name,
         category: wizardState.category.slice(0, 50),
         image_url: wizardState.imageUrl,
+        additional_images: additionalImages,
+        video_url: videoUrl,
         merchant_id: user.id,
-        attributes: { brand, price, mrp, stock, schemaId, ...specs },
+        attributes: { brand, price, mrp, schemaId, ...remainingSpecs },
+        description,
+        stock_count: stockCount,
+        store_ids: wizardState.storeIds,
         is_active: true,
       };
 
@@ -105,7 +120,12 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
           name: row.name,
           category: row.category,
           image_url: row.image_url,
+          additional_images: row.additional_images,
+          video_url: row.video_url,
           attributes: row.attributes,
+          description: row.description,
+          stock_count: row.stock_count,
+          store_ids: row.store_ids,
         });
       } else {
         await callManageProducts({
@@ -114,7 +134,12 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
           name: row.name,
           category: row.category,
           image_url: row.image_url,
+          additional_images: row.additional_images,
+          video_url: row.video_url,
           attributes: row.attributes,
+          description: row.description,
+          stock_count: row.stock_count,
+          store_ids: row.store_ids,
           merchant_consent: true,
         });
       }

@@ -65,7 +65,6 @@ export const CATEGORY_SCHEMAS: CategorySchema[] = [
       { key: 'sub_category',label: 'Type',         type: 'select', options: ['Smartphone', 'Laptop', 'TV', 'Tablet', 'Headphones', 'Camera', 'Refrigerator', 'Washing Machine', 'AC', 'Other'] },
       { key: 'warranty',    label: 'Warranty',     type: 'select', options: ['No Warranty', '3 Months', '6 Months', '1 Year', '2 Years', '3 Years', '5 Years'] },
       { key: 'color',       label: 'Color / Variant', type: 'text', placeholder: 'e.g. Midnight Black' },
-      { key: 'mrp',         label: 'MRP',          type: 'number', placeholder: '0', unit: '₹' },
     ],
   },
   {

@@ -191,7 +191,19 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
     />
   );
   else {
-    currentView = null;
+    // Fallback: any unknown/consumer view (e.g., 'home', 'splash', 'detail') for a logged-in merchant
+    // should default to the dashboard so the screen never goes blank.
+    console.warn('[MerchantStack] Unknown view for merchant:', view, '— defaulting to dashboard');
+    currentView = (
+      <MerchantDashboard
+        user={user}
+        deals={deals}
+        loading={loading}
+        setView={setView}
+        setDealIdToEdit={setDealIdToEdit}
+        theme={theme}
+      />
+    );
   }
 
   // Render current view with global AI Assistant and Feature Tour

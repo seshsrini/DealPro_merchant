@@ -23,7 +23,9 @@ import {
   Calendar,
   CheckCircle2,
   Star,
-  Pin
+  Pin,
+  Phone,
+  Truck
 } from 'lucide-react';
 
 interface CampaignDetailsProps {
@@ -51,6 +53,12 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
   const storeAddress = deal.address || deal.location || 'Address not registered';
   const landmark = deal.landmark || 'No landmark specified';
   const storeHrs = deal.storeHrs || 'Timing not available';
+  const storeDetails = (deal as any).store_details || {};
+  const storePhone = (deal as any).storePhone || storeDetails.store_phone || null;
+  const storePhoneAlt = (deal as any).storePhoneAlt || storeDetails.store_phone_alt || null;
+  const delivers = (deal as any).delivers ?? storeDetails.delivers ?? false;
+  const deliveryRadiusKm =
+    (deal as any).delivery_radius_km ?? storeDetails.delivery_radius_km ?? null;
 
   const [showAlreadyClaimedPopup, setShowAlreadyClaimedPopup] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
@@ -201,14 +209,40 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
        <div className="px-6 -mt-16 relative z-10 space-y-6">
           {/* Main Content Card */}
           <div className={`relative p-6 pb-28 rounded-xl border ${isDark ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200"}`}>
-             <div className="space-y-4 mb-6">
+             <div className="mb-6">
+                {/* Top row: text left, delivery banner right (matches consumer format) */}
                 {/* Shop name */}
-                <p className="text-blue-500 text-xs font-medium">{shopName}</p>
+                <p className="text-blue-500 text-xs font-medium mb-4">{shopName}</p>
 
                 {/* Deal heading */}
-                <h2 className={`text-2xl font-semibold leading-tight ${isDark ? "text-white" : "text-slate-900"}`}>
+                <h2 className={`text-2xl font-semibold leading-tight mb-4 ${isDark ? "text-white" : "text-slate-900"}`}>
                    {heading}
                 </h2>
+
+                {/* Delivery info — clean left-aligned card (matches consumer side) */}
+                {delivers && (
+                  <div className={`mb-4 flex items-start gap-3 p-3 rounded-xl border ${
+                    isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50/60 border-emerald-200'
+                  }`}>
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                      isDark ? 'bg-emerald-500/15' : 'bg-emerald-100'
+                    }`}>
+                      <Truck className={`w-5 h-5 ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                        {deliveryRadiusKm
+                          ? deliveryRadiusKm >= 10
+                            ? 'City-wide delivery available'
+                            : `Delivery available within ${deliveryRadiusKm} km`
+                          : 'Delivery available — contact store'}
+                      </p>
+                      <p className={`text-[11px] mt-0.5 leading-snug ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        Delivered by the merchant or their partner; DealPro is not liable.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Offer and validity badges */}
                 <div className="flex flex-wrap gap-2">
@@ -354,6 +388,26 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                       <p className={`text-sm font-medium leading-relaxed ${isDark ? "text-white" : "text-slate-900"}`}>{storeHrs}</p>
                    </div>
                 </div>
+
+                {storePhone && (
+                  <div className="flex items-start gap-4 p-3 rounded-lg">
+                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isDark ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
+                       <Phone className="w-5 h-5 text-indigo-500" />
+                     </div>
+                     <div className="flex-1">
+                        <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Phone</p>
+                        <p className={`text-sm font-medium leading-relaxed ${isDark ? "text-white" : "text-slate-900"}`}>
+                           <a href={`tel:${storePhone}`} className="text-blue-500 font-medium">{storePhone}</a>
+                           {storePhoneAlt && (
+                             <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
+                               {' / '}
+                               <a href={`tel:${storePhoneAlt}`} className="text-blue-500 font-medium">{storePhoneAlt}</a>
+                             </span>
+                           )}
+                        </p>
+                     </div>
+                  </div>
+                )}
              </div>
           </div>
 

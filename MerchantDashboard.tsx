@@ -8,6 +8,7 @@ import { mDashboardService } from './services/mDashboardService';
 import { perfTimer } from './services/perfLogger';
 import { NotificationBadge } from './components/NotificationBadge';
 import { getUpcomingFestivals, getDaysUntilDate, FestivalEvent } from './components/festivalCalendar';
+import { MediaLightbox } from './components/MediaLightbox';
 import {
   Store,
   Plus,
@@ -28,7 +29,10 @@ import {
   Calendar,
   MapPin,
   Edit2,
+  Gift,
+  Truck,
 } from 'lucide-react';
+import { pickBadgeCornerForImage, BadgeCorner } from './utils/badgeCornerForImage';
 
 type CampaignTab = 'active' | 'expired';
 
@@ -132,10 +136,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
   const [upcomingEvents, setUpcomingEvents] = useState<FestivalEvent[]>([]);
 
-  // Per-deal click & redemption counts
+  // Per-deal click, claim & redemption counts
   const [clickCounts, setClickCounts] = useState<Record<string, number>>({});
+  const [claimClickCounts, setClaimClickCounts] = useState<Record<string, number>>({});
   const [redeemCounts, setRedeemCounts] = useState<Record<string, number>>({});
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxSlides, setLightboxSlides] = useState<Array<{ kind: 'image' | 'video'; url: string }>>([]);
 
   const getDealImage = (deal: Deal) => (deal as any).image_url || deal.thumbnail || '';
 
@@ -181,19 +188,33 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     Promise.all([
       mDashboardService.getCampaignSpecificClicks(ids),
       mDashboardService.getCampaignSpecificRedemptions(user.id, ids),
-    ]).then(([clicks, redemptions]) => {
-      setClickCounts(clicks);
+    ]).then(([clicksData, redemptions]) => {
+      setClickCounts(clicksData.views);
+      setClaimClickCounts(clicksData.claimClicks);
       setRedeemCounts(redemptions);
       timer.end('stats_rendered');
     }).catch(() => { timer.end('error'); });
   }, [activeDeals, user?.id]);
 
-  // Fetch merchant stores → extract states → compute upcoming festivals
+  // Fetch merchant stores → extract states → compute upcoming festivals + cache stores for delivery lookup
+  const [merchantStores, setMerchantStores] = useState<any[]>([]);
+
+  // DOTD badge corner — picked dynamically from the selected deal's cover image so
+  // it doesn't sit on top of the merchant's chosen baked text band.
+  const [dotdBadgeCorner, setDotdBadgeCorner] = useState<BadgeCorner>('tl');
+  useEffect(() => {
+    const url = selectedDeal ? (getDealImage(selectedDeal) || '') : '';
+    if (!url) { setDotdBadgeCorner('tl'); return; }
+    let cancelled = false;
+    pickBadgeCornerForImage(url).then(c => { if (!cancelled) setDotdBadgeCorner(c); });
+    return () => { cancelled = true; };
+  }, [selectedDeal]);
   useEffect(() => {
     if (!user?.id) return;
     const timer = perfTimer('load_merchant_stores', 'merchant_dashboard');
     timer.mark('stores_call');
     merchantService.getMerchantStores(user.id).then(stores => {
+      setMerchantStores(stores || []);
       const states = [...new Set((stores || []).map(s => s.state).filter(Boolean))];
       setUpcomingEvents(getUpcomingFestivals(states.length > 0 ? states : ['all']));
       timer.end('festivals_computed');
@@ -449,13 +470,17 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     <p className={`text-[10px] font-semibold mt-0.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
                       {deal.offerValue || (deal as any).offer_value}
                     </p>
-                    {/* Clicks & Claims */}
+                    {/* Views, Claims & Redeemed */}
                     <div className={`flex items-center gap-3 mt-1.5 pt-1.5 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
-                      <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`} title="Views">
                         <MousePointer2 className="w-3 h-3" />
                         {clickCounts[deal.campaign_id] || 0}
                       </span>
-                      <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                      <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`} title="Claims">
+                        <Megaphone className="w-3 h-3" />
+                        {claimClickCounts[deal.campaign_id] || 0}
+                      </span>
+                      <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} title="Redeemed">
                         <TicketCheck className="w-3 h-3" />
                         {redeemCounts[deal.campaign_id] || 0}
                       </span>
@@ -573,9 +598,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
         )}
       </div>
 
-      {/* Deal Detail Modal */}
+      {/* Deal Detail Modal — Consumer-style full-screen preview */}
       {selectedDeal && (() => {
-        const deal = selectedDeal;
+        // Merge delivery info from the matching merchant store (works without redeploying get-by-merchant)
+        const dealStore = merchantStores.find(s => s.id === (selectedDeal as any).store_id);
+        const deal: Deal = {
+          ...selectedDeal,
+          ...(dealStore ? {
+            delivers: (selectedDeal as any).delivers ?? dealStore.delivers ?? false,
+            delivery_radius_km: (selectedDeal as any).delivery_radius_km ?? dealStore.delivery_radius_km ?? null,
+            storePhone: (selectedDeal as any).storePhone ?? dealStore.store_phone ?? null,
+            storePhoneAlt: (selectedDeal as any).storePhoneAlt ?? dealStore.store_phone_alt ?? null,
+          } : {}),
+        } as Deal;
         const allMedia: { url: string; isVideo: boolean }[] = [];
         const mainImg = getDealImage(deal);
         if (mainImg) allMedia.push({ url: mainImg, isVideo: false });
@@ -597,152 +632,252 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
           .replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
 
         return (
-          <div className="fixed inset-0 z-[300] bg-black/70 flex items-end sm:items-center justify-center" onClick={() => setSelectedDeal(null)}>
-            <div
-              onClick={e => e.stopPropagation()}
-              className={`w-full sm:max-w-md max-h-[90vh] rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col ${isDark ? 'bg-slate-900' : 'bg-white'}`}
+          <div className="fixed inset-0 z-[300] overflow-y-auto" style={{ background: isDark ? '#0f172a' : '#ffffff' }}>
+            {/* Close button */}
+            <button
+              onClick={() => setSelectedDeal(null)}
+              className="fixed top-4 right-4 z-[350] w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-all shadow-lg"
             >
-              {/* Media Carousel */}
-              {totalMedia > 0 ? (
-                <>
-                  <div className="relative shrink-0">
-                    <div
-                      id="dashboard-deal-carousel"
-                      onScroll={(e) => {
-                        const el = e.currentTarget;
-                        const idx = Math.round(el.scrollLeft / el.clientWidth);
-                        // Update dot via DOM (avoids re-render)
-                        el.dataset.activeIdx = String(Math.min(idx, totalMedia - 1));
-                        document.querySelectorAll('.dash-carousel-dot').forEach((dot, i) => {
-                          if (i === idx) {
-                            dot.className = `dash-carousel-dot rounded-full transition-all duration-300 w-5 h-2 ${allMedia[i]?.isVideo ? 'bg-indigo-500' : 'bg-blue-500'}`;
-                          } else {
-                            dot.className = `dash-carousel-dot rounded-full transition-all duration-300 w-2 h-2 ${isDark ? 'bg-slate-600' : 'bg-slate-300'}`;
-                          }
-                        });
-                      }}
-                      className="flex overflow-x-auto snap-x snap-mandatory"
-                      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
-                    >
-                      {allMedia.map((item, i) => {
-                        const overlay = priceOverlays[String(i)];
-                        const hasOverlay = overlay && (overlay.discountPct || overlay.offerPrice);
-                        const mrp = overlay?.offerPrice ? Math.round(parseFloat(overlay.offerPrice) * 1.3) : null;
-                        return (
-                          <div key={i} className="w-full flex-shrink-0 snap-center relative">
-                            {item.isVideo ? (
-                              <video src={item.url} className="w-full h-56 object-cover bg-black" controls muted playsInline />
-                            ) : (
-                              <img src={item.url} alt="" className="w-full h-56 object-cover" draggable={false} />
-                            )}
-                            {hasOverlay && !item.isVideo && (
-                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-8 pb-3 px-4">
-                                {overlay.discountPct && (
-                                  <div className="inline-block bg-red-500 text-white text-xs font-black px-2 py-1 rounded mb-1.5">
-                                    {overlay.discountPct}% OFF
-                                  </div>
-                                )}
-                                <div className="flex items-baseline gap-2">
-                                  {overlay.offerPrice && (
-                                    <span className="text-white text-2xl font-black drop-shadow-lg">₹{overlay.offerPrice}</span>
-                                  )}
-                                  {mrp && (
-                                    <span className="text-white/60 text-sm line-through">₹{mrp}</span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
+              <X className="w-5 h-5 text-white" />
+            </button>
+
+            {/* Consumer Preview badge */}
+            <div className="fixed top-5 left-4 z-[350] px-2.5 py-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider">
+              Consumer Preview
+            </div>
+
+            {/* Image — square aspect like consumer */}
+            {totalMedia > 0 && (
+              <div className={`relative aspect-square overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide w-full h-full" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                  {allMedia.map((item, i) => {
+                    const overlay = priceOverlays[String(i)];
+                    const hasOverlay = overlay && (overlay.discountPct || overlay.offerPrice);
+                    const mrp = overlay?.offerPrice ? Math.round(parseFloat(overlay.offerPrice) * 1.3) : null;
+                    return (
+                      <div key={i} className="w-full h-full flex-shrink-0 snap-center relative">
+                        {item.isVideo ? (
+                          <video src={item.url} className="w-full h-full object-cover bg-black" controls muted playsInline />
+                        ) : (
+                          <button type="button" onClick={() => { setLightboxSlides(allMedia.map(m => ({ kind: m.isVideo ? 'video' as const : 'image' as const, url: m.url }))); setLightboxOpen(true); }} className="w-full h-full">
+                            <img src={item.url} alt="" className="w-full h-full object-cover" />
+                          </button>
+                        )}
+                        {hasOverlay && !item.isVideo && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-8 pb-3 px-4">
+                            {overlay.discountPct && <div className="inline-block bg-red-500 text-white text-xs font-black px-2 py-1 rounded mb-1.5">{overlay.discountPct}% OFF</div>}
+                            <div className="flex items-baseline gap-2">
+                              {overlay.offerPrice && <span className="text-white text-2xl font-black">₹{overlay.offerPrice}</span>}
+                              {mrp && <span className="text-white/60 text-sm line-through">₹{mrp}</span>}
+                            </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                    {/* Close */}
-                    <button onClick={() => setSelectedDeal(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center">
-                      <X className="w-4 h-4 text-white" />
-                    </button>
-                    {/* Counter */}
-                    {totalMedia > 1 && (
-                      <div className="absolute top-3 right-14 px-2 py-0.5 rounded-md bg-black/50">
-                        <span className="text-[10px] font-semibold text-white">1/{totalMedia}</span>
+                        )}
                       </div>
-                    )}
-                    {/* DOTD badge */}
-                    {deal.is_deal_of_the_day && (
-                      <div className="absolute top-3 left-3 flex items-center gap-1 bg-amber-500 text-white px-2 py-1 rounded-lg text-xs font-bold">
-                        <Zap className="w-3 h-3" /> DOTD
-                      </div>
-                    )}
+                    );
+                  })}
+                </div>
+                {deal.is_deal_of_the_day && (
+                  <div className={`absolute flex items-center gap-1 bg-amber-500 text-white px-2 py-1 rounded-lg text-xs font-bold transition-all ${
+                    // Custom offsets for the merchant view: top corners cleared the Consumer
+                    // Preview pill (top-14); bottom corners cleared the carousel dots (bottom-12).
+                    {
+                      tl: 'top-14 left-3',
+                      tr: 'top-14 right-3',
+                      bl: 'bottom-12 left-3',
+                      br: 'bottom-12 right-3',
+                    }[dotdBadgeCorner]
+                  }`}>
+                    <Zap className="w-3 h-3" /> DOTD
                   </div>
-                  {/* Dot indicators below image */}
-                  {totalMedia > 1 && (
-                    <div className="flex items-center justify-center gap-2 py-2.5">
-                      {allMedia.map((item, i) => (
-                        <button
-                          key={i}
-                          onClick={() => {
-                            const el = document.getElementById('dashboard-deal-carousel');
-                            if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
-                          }}
-                          className={`dash-carousel-dot rounded-full transition-all duration-300 ${
-                            i === 0
-                              ? `w-5 h-2 ${item.isVideo ? 'bg-indigo-500' : 'bg-blue-500'}`
-                              : `w-2 h-2 ${isDark ? 'bg-slate-600' : 'bg-slate-300'}`
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="relative shrink-0">
-                  <div className={`w-full h-32 flex items-center justify-center ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
-                    <Megaphone className={`w-10 h-10 ${isDark ? 'text-slate-700' : 'text-slate-300'}`} />
+                )}
+                {totalMedia > 1 && (
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                    {allMedia.map((_, i) => (
+                      <div key={i} className="h-1.5 w-1.5 rounded-full bg-white/50 first:w-4 first:bg-white" />
+                    ))}
                   </div>
-                  <button onClick={() => setSelectedDeal(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center">
-                    <X className="w-4 h-4 text-white" />
-                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Content — consumer-style */}
+            <div className="px-4 py-6">
+              {/* Store name */}
+              <p className={`text-xs font-normal mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                {deal.shopName}
+              </p>
+
+              {/* Heading */}
+              <h1 className={`text-xl font-semibold mb-3 leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {deal.deal_heading || deal.details}
+              </h1>
+
+              {/* Category */}
+              {deal.category && (
+                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full mb-4 ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{deal.category}</span>
                 </div>
               )}
 
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-                <div>
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className={`text-lg font-bold flex-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      {deal.deal_heading || deal.details}
-                    </h2>
-                    <span className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-bold">
-                      {deal.offerValue || (deal as any).offer_value}
-                    </span>
+              {/* Delivery info — clean left-aligned card (matches consumer side) */}
+              {(deal as any).delivers && (
+                <div className={`mb-4 flex items-start gap-3 p-3 rounded-xl border ${
+                  isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50/60 border-emerald-200'
+                }`}>
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                    isDark ? 'bg-emerald-500/15' : 'bg-emerald-100'
+                  }`}>
+                    <Truck className={`w-5 h-5 ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`} />
                   </div>
-                  <p className={`text-xs mt-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{deal.shopName}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                      {(deal as any).delivery_radius_km
+                        ? (deal as any).delivery_radius_km >= 10
+                          ? 'City-wide delivery available'
+                          : `Delivery available within ${(deal as any).delivery_radius_km} km`
+                        : 'Delivery available — contact store'}
+                    </p>
+                    <p className={`text-[11px] mt-0.5 leading-snug ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      Delivered by the merchant or their partner; DealPro is not liable.
+                    </p>
+                  </div>
                 </div>
+              )}
 
-                {deal.start_date && deal.end_date && (
-                  <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    <Calendar className="w-3.5 h-3.5" />
-                    {formatDateUTC(deal.start_date)} — {formatDateUTC(deal.end_date)}
-                  </div>
+              {/* Rating */}
+              <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center">
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <svg key={star} className={`w-4 h-4 ${star <= Math.floor((deal as any).averageRating || 0) ? 'text-yellow-500' : isDark ? 'text-slate-600' : 'text-slate-300'}`} fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  ))}
+                </div>
+                <span className={`text-sm font-normal ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  {(deal as any).averageRating > 0 ? `${((deal as any).averageRating).toFixed(1)} (${(deal as any).ratingCount || 0} reviews)` : 'No reviews yet'}
+                </span>
+              </div>
+
+              {/* Offer */}
+              <div className="mb-6">
+                <p className="text-2xl font-semibold text-yellow-600 mb-1">
+                  {deal.offerValue || (deal as any).offer_value}
+                </p>
+                {deal.end_date && (
+                  <p className={`text-sm font-normal ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Valid till {formatDateUTC(deal.end_date)}
+                  </p>
                 )}
+              </div>
 
-                {deal.address && (
-                  <div className={`flex items-start gap-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span>{deal.address}</span>
+              {/* Free Gifts */}
+              {(deal as any).free_gifts && (deal as any).free_gifts.length > 0 && (
+                <div className={`mb-6 p-4 rounded-xl border ${isDark ? 'border-pink-500/20 bg-pink-500/5' : 'border-pink-200 bg-pink-50/50'}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Gift className="w-4 h-4 text-pink-500" />
+                    <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-pink-400' : 'text-pink-600'}`}>Free Gifts Included</span>
                   </div>
-                )}
+                  <div className="flex gap-4 overflow-x-auto pb-1">
+                    {(deal as any).free_gifts.map((gift: { image_url: string; name: string }, i: number) => (
+                      <div key={i} className="flex flex-col items-center shrink-0" style={{ width: 80 }}>
+                        <div className={`w-[72px] h-[72px] rounded-xl overflow-hidden border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
+                          <img src={gift.image_url} alt={gift.name} className="w-full h-full object-cover" />
+                        </div>
+                        <p className={`text-[11px] font-medium text-center mt-1.5 leading-tight line-clamp-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{gift.name}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                {plainDesc && (
-                  <div>
-                    <p className={`text-xs font-semibold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Description</p>
+              {/* Redeem button placeholder */}
+              <div className="w-full h-14 rounded-xl bg-slate-900 text-white flex items-center justify-center text-sm font-medium mb-6 opacity-40 cursor-not-allowed">
+                Get Before It's Gone!
+              </div>
+
+              {/* Redeem instructions */}
+              <div className={`flex items-start gap-3 p-3 rounded-lg mb-4 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
+                <span className={`text-sm font-normal leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                  Show the claim QR code at the store to redeem this deal. The merchant will scan it to verify.
+                </span>
+              </div>
+
+              {/* Details */}
+              {plainDesc && (
+                <div className="mb-4">
+                  <div className={`w-full h-14 flex items-center gap-3 px-4 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                    <Sparkles className="w-5 h-5 text-slate-400" />
+                    <span className={`text-sm font-normal ${isDark ? 'text-white' : 'text-slate-900'}`}>Details</span>
+                  </div>
+                  <div className={`px-4 py-4 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
                     <p className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{plainDesc}</p>
                   </div>
-                )}
+                </div>
+              )}
 
-                <div className={`grid grid-cols-2 gap-2 p-3 rounded-xl ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+              {/* Store Info */}
+              <div className="mb-4">
+                <div className={`w-full h-14 flex items-center gap-3 px-4 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                  <Store className="w-5 h-5 text-slate-400" />
+                  <span className={`text-sm font-normal ${isDark ? 'text-white' : 'text-slate-900'}`}>Store Info</span>
+                </div>
+                <div className={`px-4 py-4 space-y-3 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
+                  {deal.shopName && (
+                    <div>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Store Name</p>
+                      <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{deal.shopName}</p>
+                    </div>
+                  )}
+                  {deal.address && (
+                    <div>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Address</p>
+                      <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{deal.address}</p>
+                    </div>
+                  )}
+                  {deal.landmark && (
+                    <div>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Landmark</p>
+                      <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{deal.landmark}</p>
+                    </div>
+                  )}
+                  {(deal as any).storePhone && (
+                    <div>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Phone</p>
+                      <a href={`tel:${(deal as any).storePhone}`} className="text-sm text-blue-500 font-medium">{(deal as any).storePhone}</a>
+                      {(deal as any).storePhoneAlt && (
+                        <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                          {' / '}
+                          <a href={`tel:${(deal as any).storePhoneAlt}`} className="text-blue-500 font-medium">{(deal as any).storePhoneAlt}</a>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {(deal as any).storeHrs && (
+                    <div>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Store Hours</p>
+                      <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{(deal as any).storeHrs}</p>
+                    </div>
+                  )}
+                  {deal.start_date && deal.end_date && (
+                    <div>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Campaign Period</p>
+                      <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{formatDateUTC(deal.start_date)} — {formatDateUTC(deal.end_date)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Campaign Performance */}
+              <div className={`rounded-xl border p-4 mb-4 ${isDark ? 'border-slate-700 bg-slate-800/50' : 'border-slate-200 bg-slate-50'}`}>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Campaign Performance</p>
+                <div className="grid grid-cols-3 gap-2">
                   <div className="text-center">
                     <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{clickCounts[deal.campaign_id] || 0}</p>
                     <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_clicks')}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className={`text-lg font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{claimClickCounts[deal.campaign_id] || 0}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Claims</p>
                   </div>
                   <div className="text-center">
                     <p className={`text-lg font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{redeemCounts[deal.campaign_id] || 0}</p>
@@ -750,10 +885,28 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Close */}
+              <button
+                onClick={() => setSelectedDeal(null)}
+                className={`w-full h-12 rounded-xl text-sm font-medium active:scale-[0.98] transition-all ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}
+              >
+                Close Preview
+              </button>
+
+              <div className="pb-8" />
             </div>
           </div>
         );
       })()}
+
+      {/* Full-screen media lightbox with pinch-to-zoom */}
+      {lightboxOpen && lightboxSlides.length > 0 && (
+        <MediaLightbox
+          slides={lightboxSlides}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   );
 };

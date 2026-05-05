@@ -11,9 +11,26 @@ interface StepOfferProps {
   onNext: () => void;
   onBack: () => void;
   theme: 'light' | 'dark';
+  storeCategory?: string | null;
 }
 
-export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, onBack, theme }) => {
+// Bucket the merchant's store category to a suggestion set. Falls back to
+// retail-style discount chips when no category or an unknown one is given,
+// so the experience is never worse than the original.
+type OfferBucket = 'retail' | 'food' | 'service' | 'pro';
+function bucketForCategory(category?: string | null): OfferBucket {
+  const c = (category || '').toLowerCase();
+  if (!c) return 'retail';
+  // Food-style merchants
+  if (/restaurant|dining|cafe|bakery|chaat|juice|ice cream|tiffin|catering/.test(c)) return 'food';
+  // Knowledge-/appointment-driven merchants where premium framing fits
+  if (/professional|education|training|real estate|consult|legal|law|account|finance/.test(c)) return 'pro';
+  // Visit-/session-driven services
+  if (/salon|beauty|parlor|automotive|pharmacy|healthcare|travel|tour|entertainment|games|fitness|optical|tailor|boutique|pet/.test(c)) return 'service';
+  return 'retail';
+}
+
+export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, onBack, theme, storeCategory }) => {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const isDark = theme === 'dark';
@@ -30,12 +47,17 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
     return () => clearTimeout(t);
   }, []);
 
+  // Reactively show/hide the placeholder tooltip as the user types.
+  // "Don't show again" only applies to the initial auto-popup on mount.
+  const [userDismissedThisSession, setUserDismissedThisSession] = useState(false);
   useEffect(() => {
-    if (hasPlaceholder && !isPlaceholderTooltipDismissed()) {
-      const t = setTimeout(() => setShowPlaceholderHint(true), 500);
+    if (hasPlaceholder && !userDismissedThisSession) {
+      const t = setTimeout(() => setShowPlaceholderHint(true), 300);
       return () => clearTimeout(t);
+    } else if (!hasPlaceholder) {
+      setShowPlaceholderHint(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasPlaceholder, userDismissedThisSession]);
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 350);
@@ -84,7 +106,7 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
       <div style={floatIn(300, visible)}>
         <PlaceholderTooltip
           visible={showPlaceholderHint}
-          onDismiss={() => setShowPlaceholderHint(false)}
+          onDismiss={() => { setShowPlaceholderHint(false); setUserDismissedThisSession(true); }}
           theme={theme}
         />
         <input
@@ -130,14 +152,16 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
           {t('m_tap_to_use')}
         </p>
         <div className="grid grid-cols-2 gap-2">
-          {[
-            t('m_offer_q1'),
-            t('m_offer_q2'),
-            t('m_offer_q3'),
-            t('m_offer_q4'),
-            t('m_offer_q5'),
-            t('m_offer_q6'),
-          ].map((chip) => (
+          {(() => {
+            const bucket = bucketForCategory(storeCategory);
+            const keys: Record<OfferBucket, string[]> = {
+              retail: ['m_offer_q1', 'm_offer_q2', 'm_offer_q3', 'm_offer_q4', 'm_offer_q6'],
+              food:   ['m_offer_food_1', 'm_offer_food_2', 'm_offer_food_3', 'm_offer_food_4', 'm_offer_food_5'],
+              service:['m_offer_service_1', 'm_offer_service_2', 'm_offer_service_3', 'm_offer_service_4', 'm_offer_service_5'],
+              pro:    ['m_offer_pro_1', 'm_offer_pro_2', 'm_offer_pro_3', 'm_offer_pro_4', 'm_offer_pro_5'],
+            };
+            return keys[bucket].map((k) => t(k));
+          })().map((chip) => (
             <button
               key={chip}
               onClick={() => {

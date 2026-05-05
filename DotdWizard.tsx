@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useReducer, useCallback } from 'react';
+import React, { useState, useEffect, useReducer, useCallback, useMemo, useRef } from 'react';
 import { AppView, User } from './types';
 import { X, CheckCircle2, Loader2, RotateCcw, AlertTriangle, Bookmark } from 'lucide-react';
 import { addCampaignService } from './services/addCampaignService';
 import { merchantService } from './services/merchantService';
+import { supabase } from './services/supabaseClient';
+import { campaignDraftService, CampaignDraftKind } from './services/draftService';
 import { campaignTemplatesService } from './services/campaignTemplatesService';
 import { useTranslation } from './contexts/LanguageContext';
 
@@ -17,6 +19,9 @@ import { StepStoreSelect } from './components/campaign-wizard/StepStoreSelect';
 import { StepDotdTemplate, DotdTemplate } from './components/dotd-wizard/StepDotdTemplate';
 import { StepDotdDate } from './components/dotd-wizard/StepDotdDate';
 import { StepDotdReview } from './components/dotd-wizard/StepDotdReview';
+import { StepTrustBadges } from './components/campaign-wizard/StepTrustBadges';
+import { StepBuyGetFree, FreeGiftItem, emptyGift } from './components/campaign-wizard/StepBuyGetFree';
+import { StepBannerPlacement } from './components/campaign-wizard/StepBannerPlacement';
 
 // --- Types ---
 interface DotdWizardState {
@@ -34,6 +39,10 @@ interface DotdWizardState {
   selectedVideoFile: File | null;
   existingVideoUrl: string | null;
   imagePriceOverlays: Record<number, { discountPct: string; offerPrice: string }>;
+  trustBadgeIds: string[];
+  freeGifts: FreeGiftItem[];
+  originalImageFile: File | null;
+  bannerPlacement: 'auto' | 'left' | 'right' | 'top' | 'bottom';
 }
 
 type DotdAction =
@@ -55,6 +64,10 @@ const initialState: DotdWizardState = {
   selectedVideoFile: null,
   existingVideoUrl: null,
   imagePriceOverlays: {},
+  trustBadgeIds: [],
+  freeGifts: [],
+  originalImageFile: null,
+  bannerPlacement: 'auto',
 };
 
 function dotdReducer(state: DotdWizardState, action: DotdAction): DotdWizardState {
@@ -62,7 +75,14 @@ function dotdReducer(state: DotdWizardState, action: DotdAction): DotdWizardStat
     case 'SET_FIELD':
       return { ...state, [action.field]: action.value };
     case 'RESTORE_DRAFT':
-      return { ...state, ...action.draft, selectedImageFile: null, additionalImageFiles: [], selectedVideoFile: null };
+      return {
+        ...state,
+        ...action.draft,
+        selectedImageFile: null,
+        additionalImageFiles: [],
+        selectedVideoFile: null,
+        originalImageFile: null,
+      };
     case 'RESET':
       return initialState;
     default:
@@ -70,9 +90,14 @@ function dotdReducer(state: DotdWizardState, action: DotdAction): DotdWizardStat
   }
 }
 
-// Steps: Store → Template → Image → Heading → Offer → Description → Date → Review
-const STEP_LABELS = ['Store', 'Template', 'Image', 'Heading', 'Offer', 'Description', 'Date', 'Review'];
-const TOTAL_STEPS = STEP_LABELS.length;
+// --- Step sequences ---
+type StepKind = 'store' | 'template' | 'image' | 'freeGifts' | 'heading' | 'offer' | 'description' | 'badges' | 'bannerPlacement' | 'date' | 'review';
+
+const NORMAL_STEPS: StepKind[] = ['store', 'template', 'image', 'heading', 'offer', 'description', 'badges', 'bannerPlacement', 'date', 'review'];
+const BUY_GET_FREE_STEPS: StepKind[] = ['store', 'template', 'image', 'freeGifts', 'heading', 'offer', 'description', 'badges', 'bannerPlacement', 'date', 'review'];
+
+const NORMAL_LABELS = ['Store', 'Template', 'Image', 'Heading', 'Offer', 'Description', 'Badges', 'Layout', 'Date', 'Review'];
+const BUY_GET_FREE_LABELS = ['Store', 'Template', 'Image', 'Gifts', 'Heading', 'Offer', 'Description', 'Badges', 'Layout', 'Date', 'Review'];
 
 // --- Component ---
 interface DotdWizardProps {
@@ -88,6 +113,21 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   const [currentStep, setCurrentStep] = useState(0);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('left');
   const [isTransitioning, setIsTransitioning] = useState(false);
+
+  // "Buy & Get Free Gift" mode
+  const [isBuyGetFreeMode, setIsBuyGetFreeMode] = useState(false);
+
+  // Dynamic step sequence
+  const steps = useMemo(() => isBuyGetFreeMode ? BUY_GET_FREE_STEPS : NORMAL_STEPS, [isBuyGetFreeMode]);
+  const stepLabels = useMemo(() => isBuyGetFreeMode ? BUY_GET_FREE_LABELS : NORMAL_LABELS, [isBuyGetFreeMode]);
+  const totalSteps = steps.length;
+
+  // Build edit step map for StepDotdReview
+  const editStepMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    steps.forEach((kind, idx) => { map[kind] = idx; });
+    return map;
+  }, [steps]);
 
   // Data
   const [merchantStores, setMerchantStores] = useState<any[]>([]);
@@ -106,14 +146,25 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateSaved, setTemplateSaved] = useState(false);
 
-  // Field name → wizard step index
-  const FIELD_TO_STEP: Record<string, number> = {
-    deal_heading: 3, localized_heading: 3,
-    offer_value: 4,  localized_offer: 4,
-    long_description: 5, localized_description: 5,
+  // Field name → step kind for moderation redirect
+  const FIELD_TO_STEP_KIND: Record<string, StepKind> = {
+    deal_heading: 'heading', localized_heading: 'heading',
+    offer_value: 'offer', localized_offer: 'offer',
+    long_description: 'description', localized_description: 'description',
   };
 
   const DRAFT_KEY = `dotd_wizard_draft_${user.id}`;
+
+  // JWT heartbeat — refresh the access token every 4 minutes while the wizard is open.
+  // Without this, a merchant who spends >55 minutes on the form hits "Session expired" at publish.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      supabase.auth.refreshSession().catch(err => {
+        console.warn('[DotdWizard] Heartbeat refresh failed:', err?.message);
+      });
+    }, 4 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Load stores + image library on mount
   useEffect(() => {
@@ -151,33 +202,116 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
     loadData();
   }, [user.id]);
 
-  // Restore draft
+  // Resume-prompt modal state — shown when a server-side draft is found at mount.
+  const [resumePromptDraft, setResumePromptDraft] = useState<{
+    payload: any;
+    current_step: number;
+    cover_image_url: string | null;
+    additional_image_urls: string[];
+    free_gift_image_urls: string[];
+    is_buy_get_free: boolean;
+    updated_at: string;
+  } | null>(null);
+
+  // Restore draft — server first (canonical), localStorage fallback.
+  const draftLoadedRef = useRef(false);
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        const draft = JSON.parse(saved);
-        if (draft && draft.dealHeading !== undefined) {
-          dispatch({ type: 'RESTORE_DRAFT', draft });
-          const savedStep = localStorage.getItem(DRAFT_KEY + '_step');
-          if (savedStep) {
-            const step = parseInt(savedStep);
-            if (step >= 0 && step < TOTAL_STEPS) setCurrentStep(step);
-          }
-          console.log('[DotdWizard] Draft restored');
-        }
+    if (draftLoadedRef.current) return;
+    draftLoadedRef.current = true;
+
+    (async () => {
+      const [dotd, bgfDotd] = await Promise.all([
+        campaignDraftService.load('dotd'),
+        campaignDraftService.load('buy_get_free_dotd'),
+      ]);
+      const newest = [dotd, bgfDotd]
+        .filter(Boolean)
+        .sort((a, b) => new Date(b!.updated_at).getTime() - new Date(a!.updated_at).getTime())[0];
+
+      if (newest) {
+        setResumePromptDraft({
+          payload: newest.payload,
+          current_step: newest.current_step,
+          cover_image_url: newest.cover_image_url,
+          additional_image_urls: newest.additional_image_urls || [],
+          free_gift_image_urls: newest.free_gift_image_urls || [],
+          is_buy_get_free: newest.kind === 'buy_get_free_dotd',
+          updated_at: newest.updated_at,
+        });
+        return;
       }
-    } catch {}
+
+      try {
+        const saved = localStorage.getItem(DRAFT_KEY);
+        if (saved) {
+          const draft = JSON.parse(saved);
+          if (draft && draft.dealHeading !== undefined) {
+            const wasBuyGetFree = draft._isBuyGetFreeMode || (draft.freeGifts && draft.freeGifts.some((g: any) => g.imageUrl || g.name));
+            if (wasBuyGetFree) setIsBuyGetFreeMode(true);
+            dispatch({ type: 'RESTORE_DRAFT', draft });
+            const savedStep = localStorage.getItem(DRAFT_KEY + '_step');
+            if (savedStep) {
+              const step = parseInt(savedStep);
+              const maxSteps = wasBuyGetFree ? BUY_GET_FREE_STEPS.length : NORMAL_STEPS.length;
+              if (step >= 0 && step < maxSteps) setCurrentStep(step);
+            }
+            console.log('[DotdWizard] Draft restored from localStorage, buyGetFreeMode:', wasBuyGetFree);
+          }
+        }
+      } catch {}
+    })();
   }, [DRAFT_KEY]);
 
-  // Save draft
+  const handleResumeDraft = useCallback(() => {
+    if (!resumePromptDraft) return;
+    const d = resumePromptDraft;
+    if (d.is_buy_get_free) setIsBuyGetFreeMode(true);
+    const draftPayload: Partial<DotdWizardState> = {
+      ...d.payload,
+      existingThumbnail: d.cover_image_url || d.payload?.existingThumbnail || null,
+      additionalImageUrls: d.additional_image_urls.length > 0 ? d.additional_image_urls : (d.payload?.additionalImageUrls || []),
+    };
+    dispatch({ type: 'RESTORE_DRAFT', draft: draftPayload });
+    const maxSteps = d.is_buy_get_free ? BUY_GET_FREE_STEPS.length : NORMAL_STEPS.length;
+    setCurrentStep(Math.min(Math.max(d.current_step, 0), maxSteps - 1));
+    setResumePromptDraft(null);
+  }, [resumePromptDraft]);
+
+  const handleDiscardServerDraft = useCallback(async () => {
+    if (!resumePromptDraft) return;
+    const kind: CampaignDraftKind = resumePromptDraft.is_buy_get_free ? 'buy_get_free_dotd' : 'dotd';
+    try {
+      const { orphaned_image_urls } = await campaignDraftService.delete(kind);
+      if (orphaned_image_urls.length > 0) {
+        await addCampaignService.destroyDraftImages(orphaned_image_urls);
+      }
+    } catch { /* best-effort */ }
+    setResumePromptDraft(null);
+  }, [resumePromptDraft]);
+
+  // Save draft — both localStorage (instant) and server (debounced 2 s).
   const saveDraft = useCallback(() => {
     try {
-      const { selectedImageFile, additionalImageFiles, selectedVideoFile, ...serializable } = state;
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(serializable));
+      const { selectedImageFile, additionalImageFiles, selectedVideoFile, originalImageFile, ...serializable } = state;
+      const serializableGifts = state.freeGifts.map(g => ({
+        imageFile: null, imageUrl: g.imageUrl, name: g.name,
+      }));
+      const serializableState = { ...serializable, freeGifts: serializableGifts, _isBuyGetFreeMode: isBuyGetFreeMode };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(serializableState));
       localStorage.setItem(DRAFT_KEY + '_step', String(currentStep));
+
+      const kind: CampaignDraftKind = isBuyGetFreeMode ? 'buy_get_free_dotd' : 'dotd';
+      const giftUrls = (state.freeGifts || []).map(g => g.imageUrl).filter(Boolean) as string[];
+      campaignDraftService.scheduleSave({
+        kind,
+        current_step: currentStep,
+        payload: serializableState,
+        cover_image_url: state.existingThumbnail || null,
+        additional_image_urls: state.additionalImageUrls || [],
+        free_gift_image_urls: giftUrls,
+      });
     } catch {}
-  }, [DRAFT_KEY, state, currentStep]);
+  }, [DRAFT_KEY, state, currentStep, isBuyGetFreeMode]);
 
   // Navigation
   const goToStep = (newStep: number) => {
@@ -190,14 +324,27 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
     }, 250);
   };
 
+  // When true, "Continue" on any step jumps back to Review instead of next step
+  const [returnToReview, setReturnToReview] = useState(false);
+
   const handleNext = () => {
     setModerationAlert(null);
     saveDraft();
+    if (returnToReview) {
+      setReturnToReview(false);
+      goToStep(totalSteps - 1);
+      return;
+    }
     goToStep(currentStep + 1);
   };
 
   const handleBack = () => {
     setModerationAlert(null);
+    if (returnToReview) {
+      setReturnToReview(false);
+      goToStep(totalSteps - 1);
+      return;
+    }
     if (currentStep === 0) {
       setView('merchant_dashboard');
       return;
@@ -205,9 +352,21 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
     goToStep(currentStep - 1);
   };
 
+  const handleEditFromReview = (stepIndex: number) => {
+    setReturnToReview(true);
+    goToStep(stepIndex);
+  };
+
   const handlePublishSuccess = () => {
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
+    // Server draft cleanup — fire and forget; published deal references the URLs.
+    (async () => {
+      try {
+        const kind: CampaignDraftKind = isBuyGetFreeMode ? 'buy_get_free_dotd' : 'dotd';
+        await campaignDraftService.delete(kind);
+      } catch { /* best-effort */ }
+    })();
     // Ask if they want to save as template
     setTemplateName(state.dealHeading || '');
     setShowSaveTemplate(true);
@@ -260,9 +419,10 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
 
   const handleModerationBlock = (field: string, message: string) => {
     setModerationAlert(message);
-    const targetStep = FIELD_TO_STEP[field];
-    if (targetStep !== undefined) {
-      goToStep(targetStep);
+    const stepKind = FIELD_TO_STEP_KIND[field];
+    if (stepKind) {
+      const targetStep = editStepMap[stepKind];
+      if (targetStep !== undefined) goToStep(targetStep);
     }
   };
 
@@ -270,10 +430,19 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
     setView('merchant_dashboard');
   };
 
-  const handleDiscard = () => {
+  const handleDiscard = async () => {
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
+    // On Start Over, delete the server draft AND destroy uploaded Cloudinary draft assets.
+    try {
+      const kind: CampaignDraftKind = isBuyGetFreeMode ? 'buy_get_free_dotd' : 'dotd';
+      const { orphaned_image_urls } = await campaignDraftService.delete(kind);
+      if (orphaned_image_urls.length > 0) {
+        await addCampaignService.destroyDraftImages(orphaned_image_urls);
+      }
+    } catch { /* best-effort */ }
     dispatch({ type: 'RESET' });
+    setIsBuyGetFreeMode(false);
     setCurrentStep(0);
     setShowDiscardConfirm(false);
   };
@@ -290,10 +459,21 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
     handleNext();
   };
 
+  // "Buy & Get Free Gift" template
+  const handleBuyGetFreeSelect = () => {
+    setIsBuyGetFreeMode(true);
+    dispatch({ type: 'SET_FIELD', field: 'offerValue', value: 'Buy & Get Free Gift' });
+    if (state.freeGifts.length === 0) {
+      dispatch({ type: 'SET_FIELD', field: 'freeGifts', value: [emptyGift()] });
+    }
+    handleNext(); // Move to Image step
+  };
+
   // --- Render Step ---
   const renderStep = () => {
-    switch (currentStep) {
-      case 0:
+    const kind = steps[currentStep];
+    switch (kind) {
+      case 'store':
         return (
           <StepStoreSelect
             stores={merchantStores}
@@ -304,16 +484,18 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             theme={theme}
           />
         );
-      case 1:
+      case 'template':
         return (
           <StepDotdTemplate
             onSelectTemplate={handleTemplateSelect}
             onSkip={handleNext}
             onBack={handleBack}
             theme={theme}
+            onBuyGetFree={handleBuyGetFreeSelect}
+            storeCategory={user.category}
           />
         );
-      case 2:
+      case 'image':
         return (
           <StepImage
             selectedFile={state.selectedImageFile}
@@ -324,10 +506,16 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             existingVideoUrl={state.existingVideoUrl}
             imageLibrary={imageLibrary}
             isLibraryLoading={isLibraryLoading}
-            onFileSelected={(file) => dispatch({ type: 'SET_FIELD', field: 'selectedImageFile', value: file })}
+            onFileSelected={(file) => {
+              dispatch({ type: 'SET_FIELD', field: 'selectedImageFile', value: file });
+              dispatch({ type: 'SET_FIELD', field: 'originalImageFile', value: file });
+              dispatch({ type: 'SET_FIELD', field: 'bannerPlacement', value: 'auto' });
+            }}
             onExistingSelected={(url, name) => {
               dispatch({ type: 'SET_FIELD', field: 'existingThumbnail', value: url || null });
               dispatch({ type: 'SET_FIELD', field: 'existingImageName', value: name });
+              dispatch({ type: 'SET_FIELD', field: 'originalImageFile', value: null });
+              dispatch({ type: 'SET_FIELD', field: 'bannerPlacement', value: 'auto' });
             }}
             onAdditionalImagesChange={(files, urls) => {
               dispatch({ type: 'SET_FIELD', field: 'additionalImageFiles', value: files });
@@ -342,9 +530,23 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
+            storeName={user.store_name}
+            dealHeading={state.dealHeading}
+            offerValue={state.offerValue}
+            merchantId={user.id}
           />
         );
-      case 3:
+      case 'freeGifts':
+        return (
+          <StepBuyGetFree
+            gifts={state.freeGifts}
+            onChange={(gifts) => dispatch({ type: 'SET_FIELD', field: 'freeGifts', value: gifts })}
+            onNext={handleNext}
+            onBack={handleBack}
+            theme={theme}
+          />
+        );
+      case 'heading':
         return (
           <StepHeading
             value={state.dealHeading}
@@ -354,7 +556,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             theme={theme}
           />
         );
-      case 4:
+      case 'offer':
         return (
           <StepOffer
             value={state.offerValue}
@@ -362,9 +564,10 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
+            storeCategory={user.category}
           />
         );
-      case 5:
+      case 'description':
         return (
           <StepDescription
             value={state.description}
@@ -374,7 +577,33 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             theme={theme}
           />
         );
-      case 6:
+      case 'badges':
+        return (
+          <StepTrustBadges
+            selectedBadgeIds={state.trustBadgeIds}
+            onChange={(ids) => dispatch({ type: 'SET_FIELD', field: 'trustBadgeIds', value: ids })}
+            onNext={handleNext}
+            onBack={handleBack}
+            theme={theme}
+          />
+        );
+      case 'bannerPlacement':
+        return (
+          <StepBannerPlacement
+            originalImageFile={state.originalImageFile || state.selectedImageFile}
+            existingThumbnail={state.existingThumbnail}
+            storeName={merchantStores.find(s => s.id === state.selectedStoreId)?.store_name || user.store_name || ''}
+            dealHeading={state.dealHeading}
+            offerValue={state.offerValue}
+            trustBadgeIds={state.trustBadgeIds}
+            value={state.bannerPlacement}
+            onChange={(p) => dispatch({ type: 'SET_FIELD', field: 'bannerPlacement', value: p })}
+            onNext={handleNext}
+            onBack={handleBack}
+            theme={theme}
+          />
+        );
+      case 'date':
         return (
           <StepDotdDate
             value={state.dealDate}
@@ -384,7 +613,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             theme={theme}
           />
         );
-      case 7:
+      case 'review':
         return (
           <StepDotdReview
             wizardState={state}
@@ -394,7 +623,17 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             onPublishSuccess={handlePublishSuccess}
             onPublishError={handlePublishError}
             onModerationBlock={handleModerationBlock}
+            onEditSection={handleEditFromReview}
+            onUpdateMainImage={(file) => dispatch({ type: 'SET_FIELD', field: 'selectedImageFile', value: file })}
+            onUpdateOriginalImage={(file) => dispatch({ type: 'SET_FIELD', field: 'originalImageFile', value: file })}
+            onUpdateAdditional={(files, urls, overlays) => {
+              dispatch({ type: 'SET_FIELD', field: 'additionalImageFiles', value: files });
+              dispatch({ type: 'SET_FIELD', field: 'additionalImageUrls', value: urls });
+              dispatch({ type: 'SET_FIELD', field: 'imagePriceOverlays', value: overlays });
+            }}
             theme={theme}
+            editStepMap={editStepMap}
+            isBuyGetFreeMode={isBuyGetFreeMode}
           />
         );
       default:
@@ -414,17 +653,19 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
         >
           <X className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
         </button>
-        <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-          {t('m_dotd_wizard_title')}
+        <span className={`text-xs font-semibold uppercase tracking-wider truncate max-w-[55%] text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+          {(() => {
+            const selectedStore = merchantStores.find(s => s.id === state.selectedStoreId);
+            if (selectedStore?.store_name) return selectedStore.store_name;
+            return t('m_dotd_wizard_title');
+          })()}
         </span>
         <button
           onClick={() => setShowDiscardConfirm(true)}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 ${
-            isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-200'
-          }`}
-          title="Start over"
+          className="px-3 h-9 rounded-lg bg-slate-900 text-white text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all"
         >
-          <RotateCcw className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+          <RotateCcw className="w-3.5 h-3.5" />
+          {t('m_start_over_btn')}
         </button>
       </div>
 
@@ -433,9 +674,9 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
         isDark ? 'bg-slate-900' : 'bg-white'
       }`}>
         {/* Progress Bar (hide on Review step) */}
-        {currentStep < TOTAL_STEPS - 1 && (
+        {currentStep < totalSteps - 1 && (
           <div className="w-full flex items-center gap-1.5 px-5 pt-3 pb-1.5">
-            {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+            {Array.from({ length: totalSteps }).map((_, i) => (
               <div
                 key={i}
                 className={`h-1.5 rounded-full flex-1 transition-all duration-500 ${
@@ -470,6 +711,44 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
           </div>
         </div>
       </div>
+
+      {/* Resume Draft Modal — shown on mount if a server-side draft exists. */}
+      {resumePromptDraft && (
+        <div className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center px-8">
+          <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+            <h3 className={`text-lg font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              You have an unfinished Deal of the Day
+            </h3>
+            <p className={`text-sm mb-5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              {(() => {
+                const heading = (resumePromptDraft.payload?.dealHeading || '').trim();
+                const when = new Date(resumePromptDraft.updated_at).toLocaleString('en-IN', {
+                  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                });
+                return heading
+                  ? `“${heading}” — last edited ${when}. Resume where you left off, or start fresh?`
+                  : `Last edited ${when}. Resume where you left off, or start fresh?`;
+              })()}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleDiscardServerDraft}
+                className={`flex-1 h-11 rounded-xl text-sm font-semibold active:scale-[0.98] transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                Start fresh
+              </button>
+              <button
+                onClick={handleResumeDraft}
+                className="flex-1 h-11 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+              >
+                Resume
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Discard Confirmation Modal */}
       {showDiscardConfirm && (

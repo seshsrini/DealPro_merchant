@@ -41,19 +41,64 @@ supabase.auth.onAuthStateChange((event, session) => {
   }
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// Resume-based JWT refresh.
+// Mobile WebViews and browsers throttle/pause setInterval when the app is
+// backgrounded. A 4-min wizard-level heartbeat is useless if the user
+// background-stashes the app for 2 hours. The Page Visibility API DOES still
+// fire visibilitychange on foreground/background transitions in Capacitor
+// WebViews and all major browsers — so we use it as the authoritative signal:
+// every time the app becomes visible, force a refresh (throttled to once per
+// 30s so rapid focus toggles don't spam the auth server).
+// ──────────────────────────────────────────────────────────────────────────
+if (typeof document !== 'undefined') {
+  let lastResumeRefresh = 0;
+  const refreshOnResume = () => {
+    if (document.visibilityState !== 'visible') return;
+    const now = Date.now();
+    if (now - lastResumeRefresh < 30_000) return;
+    lastResumeRefresh = now;
+    console.log('[SupabaseClient] App became visible — refreshing session.');
+    supabase.auth.refreshSession().then((res) => {
+      if (res.error) {
+        console.warn('[SupabaseClient] Resume refresh failed:', res.error.message);
+      } else {
+        console.log('[SupabaseClient] Resume refresh succeeded.');
+      }
+    }).catch(err => {
+      console.warn('[SupabaseClient] Resume refresh threw:', err?.message || err);
+    });
+  };
+  document.addEventListener('visibilitychange', refreshOnResume);
+  // Also refresh immediately on focus events for desktop browsers where
+  // visibilitychange may not always fire on tab refocus.
+  window.addEventListener('focus', refreshOnResume);
+}
+
 /**
  * Ensures the current session has a fresh (non-expired) JWT token.
- * Checks token expiry and proactively refreshes if it expires within 2 minutes
- * or is already expired — covers the case where the app is backgrounded long
- * enough for the auto-refresh timer to miss an expiry cycle.
+ * Uses a short-lived in-memory cache so that multiple concurrent Edge Function
+ * calls (e.g. on dashboard mount) don't each trigger their own getSession()
+ * network call — the first call verifies, the rest return instantly.
  */
 let _refreshPromise: Promise<string> | null = null;
+let _cachedToken: string | null = null;
+let _cachedTokenExpiresAt = 0; // Unix seconds
+
 export const ensureFreshToken = async (): Promise<string> => {
+  // Fast path: if we verified the token recently and it's not near expiry, return it
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (_cachedToken && _cachedTokenExpiresAt - nowSec > 120) {
+    return _cachedToken;
+  }
+
   const { data, error } = await supabase.auth.getSession();
   if (!error && data.session?.access_token) {
-    const expiresAt = data.session.expires_at;
-    const secondsLeft = expiresAt ? expiresAt - Math.floor(Date.now() / 1000) : 0;
+    const expiresAt = data.session.expires_at || 0;
+    const secondsLeft = expiresAt - nowSec;
     if (secondsLeft > 120) {
+      _cachedToken = data.session.access_token;
+      _cachedTokenExpiresAt = expiresAt;
       return data.session.access_token;
     }
     console.log(`[SupabaseClient] Token expires in ${secondsLeft}s — refreshing proactively`);
@@ -65,15 +110,78 @@ export const ensureFreshToken = async (): Promise<string> => {
       const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
       if (refreshError || !refreshData.session) {
         console.error('[SupabaseClient] Token refresh failed:', refreshError?.message);
+        // Invalidate cache so next call doesn't use stale token
+        _cachedToken = null;
+        _cachedTokenExpiresAt = 0;
         throw new Error('Session expired. Please log in again.');
       }
       console.log('[SupabaseClient] Token refreshed successfully.');
+      _cachedToken = refreshData.session.access_token;
+      _cachedTokenExpiresAt = refreshData.session.expires_at || (nowSec + 3600);
       return refreshData.session.access_token;
     } finally {
       _refreshPromise = null;
     }
   })();
   return _refreshPromise;
+};
+
+/**
+ * Forcefully recover a working session: try refreshSession first, then fall back to
+ * silent re-auth via the cached merchant phone (`merchantOtpLogin`). Used at critical
+ * boundaries like handlePublish where a 401 is unacceptable for the user experience.
+ *
+ * Returns true on success, false if the user truly needs to log in again.
+ *
+ * Pass the dependencies in to avoid this module taking direct deps on biometricService /
+ * userService (would cause an import cycle since both import this module).
+ */
+export const recoverSessionOrSilentReauth = async (deps: {
+  getSavedUser: () => { phone?: string | null; country_code?: string | null } | null;
+  reAuth: (phone: string, countryCode: string) => Promise<{ session?: { access_token: string; refresh_token: string } | null }>;
+  onReAuthSuccess?: (session: { access_token: string; refresh_token: string }) => void;
+}): Promise<boolean> => {
+  // 1. Try a normal refresh first (fast path).
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (!error && data?.session?.access_token) {
+      _cachedToken = data.session.access_token;
+      _cachedTokenExpiresAt = data.session.expires_at || (Math.floor(Date.now() / 1000) + 3600);
+      return true;
+    }
+  } catch {
+    // fall through to silent re-auth
+  }
+
+  // 2. refreshSession failed (refresh token dead). Try silent re-auth via cached phone.
+  const saved = deps.getSavedUser();
+  const phone = saved?.phone;
+  const cc = saved?.country_code || '+91';
+  if (!phone) {
+    console.warn('[SupabaseClient] Silent re-auth not possible — no cached phone.');
+    return false;
+  }
+  try {
+    console.log('[SupabaseClient] refreshSession dead — attempting silent re-auth via cached phone.');
+    const { session } = await deps.reAuth(phone, cc);
+    if (!session?.access_token || !session.refresh_token) {
+      console.warn('[SupabaseClient] Silent re-auth returned no session.');
+      return false;
+    }
+    // Hydrate the supabase client with the fresh session so subsequent calls work.
+    await supabase.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
+    _cachedToken = session.access_token;
+    _cachedTokenExpiresAt = Math.floor(Date.now() / 1000) + 3600;
+    deps.onReAuthSuccess?.(session);
+    console.log('[SupabaseClient] Silent re-auth succeeded.');
+    return true;
+  } catch (err: any) {
+    console.warn('[SupabaseClient] Silent re-auth failed:', err?.message || err);
+    return false;
+  }
 };
 
 // Wrap functions.invoke to automatically refresh token before every authenticated Edge Function call.
@@ -101,7 +209,10 @@ supabase.functions.invoke = async (functionName: string, options?: any) => {
     finalOptions = await attachFreshAuth(functionName, options);
   } catch (err: any) {
     console.error('[SupabaseClient] Token refresh failed for', functionName, ':', err?.message);
-    throw new Error('Session expired. Please log in again.');
+    _cachedToken = null;
+    _cachedTokenExpiresAt = 0;
+    // Don't throw — try the call anyway, the 401 retry below may save it
+    finalOptions = options;
   }
 
   let result = await originalInvoke(functionName, finalOptions);
@@ -109,7 +220,12 @@ supabase.functions.invoke = async (functionName: string, options?: any) => {
   // Retry once on 401 — force refresh and try again. Handles stale-token scenarios.
   const errMsg = (result.error as any)?.message || '';
   const errCtxStatus = (result.error as any)?.context?.status;
-  const isUnauthorized = errCtxStatus === 401 || /401|unauthor|invalid token|expired/i.test(errMsg);
+  // Also check the response body — some edge functions return { error: "Unauthorized: ..." }
+  // as a 401 JSON body which supabase-js wraps differently.
+  const bodyError = typeof result.data === 'object' && result.data?.error ? String(result.data.error) : '';
+  const isUnauthorized = errCtxStatus === 401
+    || /401|unauthor|invalid token|expired/i.test(errMsg)
+    || /unauthor|invalid token|expired/i.test(bodyError);
   if (isUnauthorized && !unauthFunctions.includes(functionName)) {
     console.warn('[SupabaseClient] 401 from', functionName, '— forcing token refresh and retrying');
     try {

@@ -14,10 +14,11 @@ interface StepTemplateProps {
   onSkip: () => void;
   onBack: () => void;
   theme: 'light' | 'dark';
+  onBuyGetFree?: () => void;
 }
 
 export const StepTemplate: React.FC<StepTemplateProps> = ({
-  merchantId, onSelectTemplate, onSkip, onBack, theme,
+  merchantId, onSelectTemplate, onSkip, onBack, theme, onBuyGetFree,
 }) => {
   const isDark = theme === 'dark';
   const { t } = useTranslation();
@@ -107,6 +108,24 @@ export const StepTemplate: React.FC<StepTemplateProps> = ({
       <p style={floatIn(200, visible)} className={`text-sm mb-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
         {t('m_pick_format')}
       </p>
+
+      {/* Special template: Buy & Get Free Gift */}
+      {onBuyGetFree && (
+        <button
+          onClick={onBuyGetFree}
+          style={floatIn(230, visible)}
+          className="w-full mb-4 p-4 rounded-2xl border-2 border-dashed flex items-center gap-4 transition-all active:scale-[0.98] border-pink-400 bg-gradient-to-r from-pink-50 to-orange-50 dark:from-pink-500/10 dark:to-orange-500/10 dark:border-pink-500/40"
+        >
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-orange-500 flex items-center justify-center shrink-0 shadow-lg shadow-pink-500/20">
+            <Gift className="w-6 h-6 text-white" />
+          </div>
+          <div className="text-left flex-1">
+            <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Buy & Get Free Gift</p>
+            <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Combine product + gift into one eye-catching image</p>
+          </div>
+          <ArrowRight className={`w-4 h-4 shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+        </button>
+      )}
 
       {/* Category filter pills */}
       {!loading && categories.length > 0 && (

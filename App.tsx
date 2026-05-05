@@ -8,6 +8,8 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { PermissionsProvider } from './contexts/PermissionsContext';
 import { LanguageSelection } from './components/LanguageSelection';
 import { LocationPermission } from './components/LocationPermission';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { setSentryUser } from './services/sentryService';
 import { InviteCodeScreen } from './components/InviteCodeScreen';
 import { Header, MerchantBottomNav } from './components/Navigation';
 import { MerchantOnboarding } from './MerchantOnboarding';
@@ -148,7 +150,7 @@ const AppContent: React.FC = () => {
         user: { id: user.id, email: user.email, user_metadata: { role: user.role } } as any,
         token_type: 'bearer',
         expires_in: 3600,
-        expires_at: Date.now() + 3600 * 1000
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
       }).then(async (success) => {
         if (!success && !isReAuthenticatingRef.current) {
           // Token refresh failed — silently re-authenticate using saved phone.
@@ -204,6 +206,16 @@ const AppContent: React.FC = () => {
     }
   }, [user]);
 
+  // Tag the current Sentry session with the user identity so reported errors are
+  // attributable. Clears on logout so post-logout errors don't get mis-tagged.
+  useEffect(() => {
+    if (user.isLoggedIn && user.id) {
+      setSentryUser({ id: user.id, email: user.email, phone: user.phone });
+    } else {
+      setSentryUser(null);
+    }
+  }, [user.isLoggedIn, user.id, user.email, user.phone]);
+
   useEffect(() => {
     if (view === 'splash') {
       const timer = setTimeout(async () => {
@@ -226,7 +238,7 @@ const AppContent: React.FC = () => {
               user: { id: savedUser.id, email: savedUser.email, user_metadata: { role: savedUser.role } } as any,
               token_type: 'bearer',
               expires_in: 3600,
-              expires_at: Date.now() + 3600 * 1000,
+              expires_at: Math.floor(Date.now() / 1000) + 3600,
             });
             if (!sessionValid) {
               console.warn('[App] Session refresh failed — attempting silent re-auth');
@@ -254,7 +266,7 @@ const AppContent: React.FC = () => {
                       user: { id: freshProfile.id, email: freshProfile.email, user_metadata: { role: freshProfile.role } } as any,
                       token_type: 'bearer',
                       expires_in: 3600,
-                      expires_at: Date.now() + 3600 * 1000,
+                      expires_at: Math.floor(Date.now() / 1000) + 3600,
                     });
                     // Continue to dashboard check below (don't return)
                   } else {
@@ -642,9 +654,14 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => (
-  <LanguageProvider>
-    <AppContent />
-  </LanguageProvider>
+  // ErrorBoundary sits outside every provider so it catches errors in providers
+  // themselves. Any uncaught component error → friendly fallback UI instead of
+  // a white screen.
+  <ErrorBoundary>
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
+  </ErrorBoundary>
 );
 
 export default App;

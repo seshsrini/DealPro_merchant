@@ -91,7 +91,7 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
 
           <button
             onClick={handleSkip}
-            className="w-full h-12 rounded-xl bg-slate-100 text-slate-900 font-semibold text-sm active:scale-[0.98] transition-all mt-4"
+            className="w-full h-12 rounded-xl bg-slate-900 text-white font-semibold text-sm active:scale-[0.98] transition-all mt-4"
           >
             I don&apos;t have an invite code
           </button>

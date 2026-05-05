@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, MapPin, Plus, Edit2, X, Loader2, CheckCircle2,
-  Clock, Navigation, ChevronDown, Store, Trash2, AlertTriangle,
+  Clock, Navigation, ChevronDown, Store, Trash2, AlertTriangle, Phone, Truck,
 } from 'lucide-react';
 import { AppView, MerchantStore, User } from './types';
 import { merchantService } from './services/merchantService';
@@ -44,6 +44,10 @@ interface StoreForm {
   shift2: string;
   is24hrs: boolean;
   store_category: string;
+  store_phone: string;
+  store_phone_alt: string;
+  delivers: boolean;
+  delivery_radius_km: number | null;
 }
 
 const blankForm = (): StoreForm => ({
@@ -51,7 +55,8 @@ const blankForm = (): StoreForm => ({
   city: '', state: '', pincode: '',
   latitude: 0, longitude: 0,
   shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false,
-  store_category: '',
+  store_category: '', store_phone: '', store_phone_alt: '',
+  delivers: false, delivery_radius_km: null,
 });
 
 function parseStoreHrs(hrs?: string): { shift1: string; shift2: string; is24hrs: boolean } {
@@ -140,6 +145,10 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
       shift2: hrs.shift2,
       is24hrs: hrs.is24hrs,
       store_category: store.store_category || '',
+      store_phone: store.store_phone || '',
+      store_phone_alt: store.store_phone_alt || '',
+      delivers: store.delivers || false,
+      delivery_radius_km: store.delivery_radius_km ?? null,
     });
     setEditingStoreId(store.id || null);
     setShowPanel(true);
@@ -336,6 +345,10 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
           longitude: form.longitude,
           store_hrs: storeHrs,
           store_category: form.store_category,
+          store_phone: form.store_phone || null,
+          store_phone_alt: form.store_phone_alt || null,
+          delivers: form.delivers,
+          delivery_radius_km: form.delivers ? form.delivery_radius_km : null,
         });
         setStores(prev => prev.map(s => s.id === editingStoreId ? updated : s));
         setSuccess(t('m_store_updated'));
@@ -354,6 +367,10 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
           longitude: form.longitude,
           store_hrs: storeHrs,
           store_category: form.store_category,
+          store_phone: form.store_phone || null,
+          store_phone_alt: form.store_phone_alt || null,
+          delivers: form.delivers,
+          delivery_radius_km: form.delivers ? form.delivery_radius_km : null,
         });
         const newCount = stores.length + 1;
         setStores(prev => [...prev, added]);
@@ -556,6 +573,11 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                 )}
 
                 <div className="space-y-1.5">
+                  {store.store_category && (
+                    <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
+                      {store.store_category}
+                    </span>
+                  )}
                   <div className="flex items-start gap-2">
                     <MapPin className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
                     <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
@@ -573,6 +595,22 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                       <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{store.store_hrs}</span>
                     </div>
                   )}
+                  {store.store_phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className={`w-3.5 h-3.5 shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+                      <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                        {store.store_phone}{store.store_phone_alt ? ` / ${store.store_phone_alt}` : ''}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Truck className={`w-3.5 h-3.5 shrink-0 ${store.delivers ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-slate-600' : 'text-slate-400')}`} />
+                    <span className={`text-xs ${store.delivers ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-slate-500' : 'text-slate-400')}`}>
+                      {store.delivers
+                        ? `Delivers${store.delivery_radius_km ? (store.delivery_radius_km >= 10 ? ' anywhere within city' : ` within ${store.delivery_radius_km} km`) : ''}`
+                        : 'In-store only'}
+                    </span>
+                  </div>
                 </div>
               </div>
             );
@@ -648,7 +686,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
               )}
 
               {/* Scrollable form */}
-              <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-4 space-y-4">
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-24 space-y-4">
                 {/* Store Name */}
                 <div>
                   <label className={labelClass}>Store / Branch Name <span className="text-red-500">*</span></label>
@@ -695,6 +733,93 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                     placeholder="Near temple, opposite bus stop..."
                     className={inputClass}
                   />
+                </div>
+
+                {/* Store Phone */}
+                <div>
+                  <label className={labelClass}>Store Phone Number</label>
+                  <input
+                    value={form.store_phone}
+                    onChange={e => setForm(f => ({ ...f, store_phone: e.target.value.replace(/[^0-9]/g, '').slice(0, 10) }))}
+                    placeholder="e.g. 9876543210"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    className={inputClass}
+                  />
+                  {form.store_phone && form.store_phone.length > 0 && form.store_phone.length < 10 && (
+                    <p className="text-[11px] text-red-500 mt-1">Phone number must be 10 digits</p>
+                  )}
+                </div>
+
+                {/* Alternate Phone */}
+                <div>
+                  <label className={labelClass}>Alternate Phone (optional)</label>
+                  <input
+                    value={form.store_phone_alt}
+                    onChange={e => setForm(f => ({ ...f, store_phone_alt: e.target.value.replace(/[^0-9]/g, '').slice(0, 10) }))}
+                    placeholder="e.g. 9876543210 (optional)"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    className={inputClass}
+                  />
+                  {form.store_phone_alt && form.store_phone_alt.length > 0 && form.store_phone_alt.length < 10 && (
+                    <p className="text-[11px] text-red-500 mt-1">Phone number must be 10 digits</p>
+                  )}
+                </div>
+
+                {/* Delivery Option */}
+                <div>
+                  <label className={`${labelClass} flex items-center gap-2`}>
+                    <Truck className="w-3.5 h-3.5" /> Delivery
+                  </label>
+                  <label className={`flex items-center gap-2 mb-3 cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                    <input
+                      type="checkbox"
+                      checked={form.delivers}
+                      onChange={(e) => {
+                        setForm(f => ({ ...f, delivers: e.target.checked, delivery_radius_km: e.target.checked ? f.delivery_radius_km : null }));
+                      }}
+                      className="w-4 h-4 rounded accent-slate-900"
+                    />
+                    <span className="text-sm">We deliver to customers</span>
+                  </label>
+                  {form.delivers && (
+                    <div>
+                      <label className={labelClass}>Delivery Range</label>
+                      <select
+                        value={form.delivery_radius_km ?? ''}
+                        onChange={(e) => setForm(f => ({ ...f, delivery_radius_km: e.target.value ? Number(e.target.value) : null }))}
+                        className={inputClass}
+                      >
+                        <option value="">Select range</option>
+                        <option value="1">1 km</option>
+                        <option value="2">2 km</option>
+                        <option value="3">3 km</option>
+                        <option value="4">4 km</option>
+                        <option value="5">5 km</option>
+                        <option value="10">Anywhere within city limits</option>
+                      </select>
+                      <div className={`mt-3 flex items-start gap-2.5 p-2.5 rounded-lg border ${
+                        isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50/60 border-emerald-200'
+                      }`}>
+                        <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
+                          isDark ? 'bg-emerald-500/15' : 'bg-emerald-100'
+                        }`}>
+                          <Truck className={`w-4 h-4 ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+                            Customers will see "Delivery available" on your deals
+                          </p>
+                          <p className={`text-[10px] mt-0.5 leading-snug ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                            Delivered by you or your delivery partner; DealPro is not liable.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Pincode */}
@@ -811,8 +936,12 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                 </div>
               </div>
 
-              {/* Footer */}
-              <div className={`shrink-0 px-6 py-4 border-t flex gap-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+              {/* Footer — extra bottom padding accounts for the device's gesture / home bar
+                  (Android navigation bar, iOS home indicator) so the Save button is never clipped. */}
+              <div
+                className={`shrink-0 px-6 pt-4 border-t flex gap-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}
+                style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+              >
                 {!forceAddMode && (
                   <button
                     onClick={closePanel}

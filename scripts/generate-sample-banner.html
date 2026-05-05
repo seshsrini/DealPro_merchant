@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head><title>Split Banner Sample</title></head>
+<body style="margin:0;padding:40px;background:#1a1a1a;display:flex;flex-direction:column;align-items:center;gap:20px;font-family:Arial,sans-serif;">
+<h2 style="color:#eab308;margin:0;">DealPro Split Banner Preview</h2>
+<p style="color:#aaa;margin:0;">Select a product image to generate the banner</p>
+<input type="file" id="filePicker" accept="image/*" style="color:#fff;margin:10px 0;">
+<canvas id="canvas" width="1080" height="1080" style="max-width:500px;border:1px solid #333;border-radius:12px;"></canvas>
+<button onclick="download()" style="padding:12px 24px;font-size:16px;cursor:pointer;background:#eab308;border:none;border-radius:8px;font-weight:bold;">Download Image</button>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const SIZE = 1080;
+
+document.getElementById('filePicker').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => drawBanner(img);
+  img.src = URL.createObjectURL(file);
+});
+
+function wrapText(ctx, text, maxW) {
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width > maxW && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawBanner(img) {
+  // === DRAW FULL PRODUCT IMAGE — cover entire canvas ===
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  const imgAspect = img.width / img.height;
+  let drawW, drawH, drawX, drawY;
+  // Cover the entire canvas (no cropping feel — image fills fully)
+  if (imgAspect >= 1) {
+    drawH = SIZE;
+    drawW = drawH * imgAspect;
+    drawX = (SIZE - drawW) / 2; // Center horizontally
+    drawY = 0;
+  } else {
+    drawW = SIZE;
+    drawH = drawW / imgAspect;
+    drawX = 0;
+    drawY = (SIZE - drawH) / 2; // Center vertically
+  }
+  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+  // === NARROW GRADIENT — only cover left 35% with dark, rest is clear image ===
+  const blendGrad = ctx.createLinearGradient(0, 0, SIZE * 0.45, 0);
+  blendGrad.addColorStop(0, 'rgba(15,23,42,0.95)');
+  blendGrad.addColorStop(0.6, 'rgba(15,23,42,0.85)');
+  blendGrad.addColorStop(0.8, 'rgba(15,23,42,0.4)');
+  blendGrad.addColorStop(1, 'rgba(15,23,42,0)');
+  ctx.fillStyle = blendGrad;
+  ctx.fillRect(0, 0, SIZE * 0.45, SIZE);
+
+  // Subtle bottom strip for branding
+  const botV = ctx.createLinearGradient(0, SIZE * 0.9, 0, SIZE);
+  botV.addColorStop(0, 'rgba(15,23,42,0)');
+  botV.addColorStop(1, 'rgba(15,23,42,0.6)');
+  ctx.fillStyle = botV;
+  ctx.fillRect(0, SIZE * 0.9, SIZE, SIZE * 0.1);
+
+  // === COMPACT TEXT — left 30% only ===
+  const pad = SIZE * 0.04;
+  const leftMaxW = SIZE * 0.3;
+
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 1;
+
+  // STORE NAME
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = `700 ${SIZE * 0.016}px Arial, sans-serif`;
+  ctx.fillText('ROYAL FURNITURE', pad, pad);
+
+  // DEAL HEADING — compact
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${SIZE * 0.035}px Arial, sans-serif`;
+  const headingLines = wrapText(ctx, 'Premium Wooden Dining Set', leftMaxW);
+  let y = pad + SIZE * 0.04;
+  headingLines.forEach(line => {
+    ctx.fillText(line, pad, y);
+    y += SIZE * 0.042;
+  });
+
+  // Thin gold separator
+  y += SIZE * 0.008;
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(234,179,8,0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(pad, y);
+  ctx.lineTo(pad + SIZE * 0.1, y);
+  ctx.stroke();
+  y += SIZE * 0.018;
+  ctx.shadowBlur = 4;
+
+  // OFFER — bold yellow
+  ctx.fillStyle = '#eab308';
+  ctx.font = `900 ${SIZE * 0.06}px Arial, sans-serif`;
+  ctx.fillText('₹29,999', pad, y);
+  y += SIZE * 0.068;
+
+  // MRP strikethrough
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.font = `500 ${SIZE * 0.02}px Arial, sans-serif`;
+  const mrpText = 'MRP ₹45,000';
+  ctx.fillText(mrpText, pad, y);
+  const mrpW = ctx.measureText(mrpText).width;
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, y + SIZE * 0.011);
+  ctx.lineTo(pad + mrpW, y + SIZE * 0.011);
+  ctx.stroke();
+  y += SIZE * 0.038;
+  ctx.shadowBlur = 4;
+
+  // LIMITED TIME OFFER badge — compact
+  ctx.fillStyle = '#ef4444';
+  const badgeText = 'LIMITED TIME OFFER';
+  ctx.font = `bold ${SIZE * 0.015}px Arial, sans-serif`;
+  const badgeW = ctx.measureText(badgeText).width + SIZE * 0.025;
+  const badgeH = SIZE * 0.03;
+  ctx.beginPath();
+  ctx.roundRect(pad, y, badgeW, badgeH, badgeH / 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(badgeText, pad + badgeW / 2, y + badgeH / 2);
+  y += badgeH + SIZE * 0.03;
+
+  // TRUST BADGES — compact
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  const badges = [
+    { icon: '🏆', label: 'Premium Quality' },
+    { icon: '🚚', label: 'Free Delivery' },
+    { icon: '🛡️', label: '2 Year Warranty' },
+  ];
+  badges.forEach((b, i) => {
+    const by = y + i * SIZE * 0.035;
+    ctx.font = `${SIZE * 0.02}px Arial`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(b.icon, pad, by);
+    ctx.font = `500 ${SIZE * 0.015}px Arial`;
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText(b.label, pad + SIZE * 0.032, by + SIZE * 0.003);
+  });
+
+  // === BOTTOM BAR ===
+  ctx.shadowBlur = 0;
+  const barH = SIZE * 0.05;
+  const barY = SIZE - barH;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(0, barY, SIZE, barH);
+
+  ctx.font = `bold ${SIZE * 0.02}px Arial, sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#eab308';
+  ctx.fillText('DealPro', pad, barY + barH / 2);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.font = `${SIZE * 0.014}px Arial, sans-serif`;
+  ctx.fillText('Visit Store for this Deal', SIZE - pad, barY + barH / 2);
+}
+
+function download() {
+  const link = document.createElement('a');
+  link.download = 'split-banner-sample.jpg';
+  link.href = canvas.toDataURL('image/jpeg', 0.92);
+  link.click();
+}
+</script>
+</body>
+</html>

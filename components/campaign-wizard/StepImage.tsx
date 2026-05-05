@@ -8,6 +8,821 @@ const MAX_IMAGES = 5;
 const MAX_VIDEO_SIZE_MB = 50;
 const ACCEPTED_VIDEO_TYPES = 'video/mp4,video/quicktime,video/webm';
 
+export interface PromoBannerTagOverride {
+  discountPct?: string;  // e.g. "30"
+  offerPrice?: string;   // e.g. "699" (MRP auto = +30%)
+}
+
+export type BannerTextSide = 'left' | 'right';
+
+/**
+ * Where the deal text overlay sits on the cover banner.
+ *   - 'auto'   → heuristic picks 'left' or 'right' based on image content
+ *   - 'left'   → vertical band on left, image dominant on right
+ *   - 'right'  → vertical band on right, image dominant on left
+ *   - 'top'    → horizontal band across top, image dominant below
+ *   - 'bottom' → horizontal band across bottom, image dominant above
+ */
+export type BannerPlacement = 'auto' | 'left' | 'right' | 'top' | 'bottom';
+
+export const ALL_BANNER_PLACEMENTS: BannerPlacement[] = ['auto', 'left', 'right', 'top', 'bottom'];
+
+export const BANNER_PLACEMENT_LABELS: Record<BannerPlacement, string> = {
+  auto:   'Auto',
+  left:   'Left',
+  right:  'Right',
+  top:    'Top',
+  bottom: 'Bottom',
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Placement heuristic — pick the side with the LESS visually busy content so
+// the product stays visible. Uses Sobel edge density on the left/right thirds
+// + the browser's native FaceDetector (when available) as a tie-breaker that
+// pushes text away from people's faces.
+// ────────────────────────────────────────────────────────────────────────────
+
+async function detectFaceCentersIfPossible(img: HTMLImageElement): Promise<number[]> {
+  const FD: any = (window as any).FaceDetector;
+  if (typeof FD !== 'function') return [];
+  try {
+    const detector = new FD({ maxDetectedFaces: 5, fastMode: true });
+    const faces = await detector.detect(img);
+    const naturalW = img.naturalWidth || img.width;
+    if (!naturalW) return [];
+    return faces.map((f: any) => (f.boundingBox.x + f.boundingBox.width / 2) / naturalW);
+  } catch {
+    return [];
+  }
+}
+
+function sobelEdgeDensity(ctx: CanvasRenderingContext2D, sx: number, sy: number, w: number, h: number): number {
+  try {
+    const data = ctx.getImageData(sx, sy, w, h).data;
+    let total = 0;
+    let count = 0;
+    const step = 6;
+    const lum = (a: number, b: number, c: number) => a * 0.299 + b * 0.587 + c * 0.114;
+    for (let py = step; py < h - step; py += step) {
+      for (let px = step; px < w - step; px += step) {
+        const i = (py * w + px) * 4;
+        const iL = i - 4;
+        const iR = i + 4;
+        const iT = ((py - 1) * w + px) * 4;
+        const iB = ((py + 1) * w + px) * 4;
+        const dx = lum(data[iR], data[iR + 1], data[iR + 2]) - lum(data[iL], data[iL + 1], data[iL + 2]);
+        const dy = lum(data[iB], data[iB + 1], data[iB + 2]) - lum(data[iT], data[iT + 1], data[iT + 2]);
+        total += Math.sqrt(dx * dx + dy * dy);
+        count++;
+      }
+    }
+    return count > 0 ? total / count : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function pickTextSide(ctx: CanvasRenderingContext2D, size: number, faceCenters: number[]): BannerTextSide {
+  // Combine signals into a single interest score per side so neither faces nor edges dominate
+  // alone — both contribute. Text goes on the side with the LOWER total interest.
+  const thirdW = Math.floor(size / 3);
+  const sampleH = Math.min(size, Math.floor(size * 0.7));
+  const sampleY = Math.floor((size - sampleH) / 2);
+
+  const leftEdge = sobelEdgeDensity(ctx, 0, sampleY, thirdW, sampleH);
+  const rightEdge = sobelEdgeDensity(ctx, size - thirdW, sampleY, thirdW, sampleH);
+  const centerEdge = sobelEdgeDensity(ctx, thirdW, sampleY, thirdW, sampleH);
+
+  // Each face on a side adds a fixed bonus relative to the typical edge magnitude.
+  // Tuned so a single face contributes roughly the weight of one moderately busy third.
+  const refEdge = Math.max(centerEdge, (leftEdge + rightEdge) / 2, 1);
+  const FACE_BONUS = refEdge * 0.6;
+  const leftFaces = faceCenters.filter(x => x < 0.5).length;
+  const rightFaces = faceCenters.filter(x => x >= 0.5).length;
+  const leftScore = leftEdge + leftFaces * FACE_BONUS;
+  const rightScore = rightEdge + rightFaces * FACE_BONUS;
+
+  // Default to LEFT (natural reading direction). Flip to RIGHT when the left
+  // side is meaningfully busier than the right.
+  return leftScore > rightScore * 1.2 ? 'right' : 'left';
+}
+
+/**
+ * Determine which side the deal text overlay should land on for a given image.
+ * Exposed so the manual "Move text" toggle can know what `auto` would have chosen.
+ */
+export async function detectBannerTextSide(imageFile: File): Promise<BannerTextSide> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(imageFile);
+    img.onload = async () => {
+      try {
+        const SIZE = Math.max(img.width, img.height, 1080);
+        const canvas = document.createElement('canvas');
+        canvas.width = SIZE;
+        canvas.height = SIZE;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve('left'); return; }
+        // Mirror the cover-draw logic so the analyzed pixels match what generatePromoBanner sees.
+        const aspect = img.width / img.height;
+        let drawW: number, drawH: number, drawX: number, drawY: number;
+        if (aspect >= 1) {
+          drawH = SIZE; drawW = drawH * aspect;
+          drawX = (SIZE - drawW) / 2; drawY = 0;
+        } else {
+          drawW = SIZE; drawH = drawW / aspect;
+          drawX = 0; drawY = (SIZE - drawH) / 2;
+        }
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+        const faceCenters = await detectFaceCentersIfPossible(img);
+        resolve(pickTextSide(ctx, SIZE, faceCenters));
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve('left'); };
+    img.src = url;
+  });
+}
+
+/**
+ * Generates a professional promo banner by overlaying deal info on the product image.
+ * The `placement` argument selects between four real layouts (left/right vertical bands,
+ * top/bottom horizontal bands) plus 'auto' which falls back to the side-picking heuristic.
+ *
+ * When `tagOverride` is provided, the offer section is rendered from the structured tag
+ * (big "% OFF" + offer price + slashed-through auto MRP) instead of the free-text offerValue.
+ */
+export async function generatePromoBanner(
+  imageFile: File,
+  storeName: string,
+  dealHeading: string,
+  offerValue: string,
+  trustBadgeLabels?: string[],
+  tagOverride?: PromoBannerTagOverride,
+  placement: BannerPlacement = 'auto',
+): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(imageFile);
+    img.onload = async () => {
+      const SIZE = Math.max(img.width, img.height, 1080);
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(imageFile); return; }
+
+      // Helper: word-wrap text
+      const wrapText = (text: string, maxW: number): string[] => {
+        const words = text.split(' ');
+        const lines: string[] = [];
+        let ln = '';
+        for (const w of words) {
+          const test = ln ? `${ln} ${w}` : w;
+          if (ctx.measureText(test).width > maxW && ln) { lines.push(ln); ln = w; }
+          else ln = test;
+        }
+        if (ln) lines.push(ln);
+        return lines;
+      };
+
+      // === DARK BASE ===
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, SIZE, SIZE);
+
+      // === DRAW FULL IMAGE — initial center-crop, used for the placement heuristic ===
+      const imgAspect = img.width / img.height;
+      let drawW: number, drawH: number, drawX: number, drawY: number;
+      if (imgAspect >= 1) {
+        drawH = SIZE; drawW = drawH * imgAspect;
+        drawX = (SIZE - drawW) / 2; drawY = 0;
+      } else {
+        drawW = SIZE; drawH = drawW / imgAspect;
+        drawX = 0; drawY = (SIZE - drawH) / 2;
+      }
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+      // === Resolve the placement ===
+      // 'auto' → heuristic picks 'left' or 'right'. Explicit values bypass the heuristic.
+      // 'top'/'bottom' use a horizontal band layout; 'left'/'right' use a vertical side layout.
+      let resolvedSide: BannerTextSide = 'left';
+      const isBand = placement === 'top' || placement === 'bottom';
+      const onTop = placement === 'top';
+      if (placement === 'left' || placement === 'right') {
+        resolvedSide = placement;
+      } else if (placement === 'auto') {
+        const faceCenters = await detectFaceCentersIfPossible(img);
+        resolvedSide = pickTextSide(ctx, SIZE, faceCenters);
+      }
+      const textOnRight = resolvedSide === 'right';
+
+      // === Re-anchor the crop so the SUBJECT stays in the IMAGE area (opposite of band) ===
+      if (isBand) {
+        // Band mode: wide images keep the centered crop (full subject width is visible);
+        // tall images anchor opposite the band so the subject lives in the picture half.
+        if (drawH > SIZE) {
+          const desiredDrawY = onTop ? SIZE - drawH : 0; // top band → image flush to bottom, etc.
+          if (desiredDrawY !== drawY) {
+            drawY = desiredDrawY;
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, SIZE, SIZE);
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+          }
+        }
+      } else {
+        // Side mode: shift wide images flush against the side OPPOSITE the text band;
+        // shift tall images so the densest vertical third stays visible.
+        if (drawW > SIZE) {
+          const desiredDrawX = textOnRight ? 0 : SIZE - drawW;
+          if (desiredDrawX !== drawX) {
+            drawX = desiredDrawX;
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, SIZE, SIZE);
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+          }
+        } else if (drawH > SIZE) {
+          const thirdH = Math.floor(SIZE / 3);
+          const topEdge = sobelEdgeDensity(ctx, 0, 0, SIZE, thirdH);
+          const bottomEdge = sobelEdgeDensity(ctx, 0, SIZE - thirdH, SIZE, thirdH);
+          const desiredDrawY = topEdge >= bottomEdge ? 0 : SIZE - drawH;
+          if (desiredDrawY !== drawY) {
+            drawY = desiredDrawY;
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, SIZE, SIZE);
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+          }
+        }
+      }
+
+      // === GRADIENT + TEXT ===
+      // Branch into side (left/right vertical band) vs band (top/bottom horizontal band).
+      if (!isBand) {
+
+      let blendGrad: CanvasGradient;
+      if (textOnRight) {
+        blendGrad = ctx.createLinearGradient(SIZE, 0, SIZE * 0.55, 0);
+      } else {
+        blendGrad = ctx.createLinearGradient(0, 0, SIZE * 0.45, 0);
+      }
+      blendGrad.addColorStop(0, 'rgba(15,23,42,0.95)');
+      blendGrad.addColorStop(0.6, 'rgba(15,23,42,0.85)');
+      blendGrad.addColorStop(0.8, 'rgba(15,23,42,0.4)');
+      blendGrad.addColorStop(1, 'rgba(15,23,42,0)');
+      ctx.fillStyle = blendGrad;
+      if (textOnRight) {
+        ctx.fillRect(SIZE * 0.55, 0, SIZE * 0.45, SIZE);
+      } else {
+        ctx.fillRect(0, 0, SIZE * 0.45, SIZE);
+      }
+
+      // Subtle bottom strip for branding bar
+      const botV = ctx.createLinearGradient(0, SIZE * 0.9, 0, SIZE);
+      botV.addColorStop(0, 'rgba(15,23,42,0)');
+      botV.addColorStop(1, 'rgba(15,23,42,0.6)');
+      ctx.fillStyle = botV;
+      ctx.fillRect(0, SIZE * 0.9, SIZE, SIZE * 0.1);
+
+      // === COMPACT TEXT — on the detected side (30% width) ===
+      const pad = SIZE * 0.04;
+      const leftMaxW = SIZE * 0.3;
+      const textX = textOnRight ? SIZE - pad - leftMaxW : pad;
+      const textAlign: CanvasTextAlign = textOnRight ? 'right' : 'left';
+      const textAnchorX = textOnRight ? SIZE - pad : pad;
+
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetX = 1;
+      ctx.shadowOffsetY = 1;
+
+      // STORE NAME
+      ctx.textAlign = textAlign;
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = `700 ${SIZE * 0.016}px Arial, sans-serif`;
+      ctx.fillText(storeName.toUpperCase(), textAnchorX, pad);
+
+      // DEAL HEADING
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${SIZE * 0.035}px Arial, sans-serif`;
+      const headingLines = wrapText(dealHeading, leftMaxW);
+      let y = pad + SIZE * 0.04;
+      headingLines.forEach(line => {
+        ctx.fillText(line, textAnchorX, y);
+        y += SIZE * 0.042;
+      });
+
+      // Gold separator
+      y += SIZE * 0.008;
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(234,179,8,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const sepStartX = textOnRight ? SIZE - pad - SIZE * 0.1 : pad;
+      ctx.moveTo(sepStartX, y);
+      ctx.lineTo(sepStartX + SIZE * 0.1, y);
+      ctx.stroke();
+      y += SIZE * 0.018;
+      ctx.shadowBlur = 4;
+
+      // OFFER VALUE — branch on structured tag override vs free-text offer
+      ctx.textAlign = textAlign;
+      const tagDiscount = tagOverride?.discountPct?.trim();
+      const tagPrice = tagOverride?.offerPrice?.trim();
+      if (tagDiscount || tagPrice) {
+        if (tagDiscount) {
+          ctx.fillStyle = '#eab308';
+          ctx.font = `900 ${SIZE * 0.07}px Arial, sans-serif`;
+          ctx.fillText(`${tagDiscount}%`, textAnchorX, y);
+          y += SIZE * 0.07;
+          ctx.font = `bold ${SIZE * 0.022}px Arial, sans-serif`;
+          ctx.fillStyle = '#eab308';
+          ctx.fillText('OFF', textAnchorX, y);
+          y += SIZE * 0.032;
+        }
+        if (tagPrice) {
+          const priceNum = parseFloat(tagPrice);
+          const mrp = isFinite(priceNum) && priceNum > 0 ? Math.round(priceNum * 1.3) : null;
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `bold ${SIZE * 0.045}px Arial, sans-serif`;
+          ctx.fillText(`₹${tagPrice}`, textAnchorX, y);
+          y += SIZE * 0.05;
+          if (mrp) {
+            ctx.font = `${SIZE * 0.022}px Arial, sans-serif`;
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            const mrpText = `MRP ₹${mrp}`;
+            ctx.fillText(mrpText, textAnchorX, y);
+            // Strikethrough on MRP
+            const prevShadow = ctx.shadowBlur;
+            ctx.shadowBlur = 0;
+            const mrpW = ctx.measureText(mrpText).width;
+            const strikeY = y + SIZE * 0.011;
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            if (textOnRight) {
+              ctx.moveTo(textAnchorX - mrpW, strikeY);
+              ctx.lineTo(textAnchorX, strikeY);
+            } else {
+              ctx.moveTo(textAnchorX, strikeY);
+              ctx.lineTo(textAnchorX + mrpW, strikeY);
+            }
+            ctx.stroke();
+            ctx.shadowBlur = prevShadow;
+            y += SIZE * 0.028;
+          }
+        }
+      } else {
+        const offerMatch = offerValue.match(/(\d+)\s*%/);
+        if (offerMatch) {
+          ctx.fillStyle = '#eab308';
+          ctx.font = `900 ${SIZE * 0.07}px Arial, sans-serif`;
+          ctx.fillText(`${offerMatch[1]}%`, textAnchorX, y);
+          y += SIZE * 0.075;
+          const restText = offerValue.replace(/\d+\s*%/, '').trim();
+          if (restText) {
+            ctx.font = `bold ${SIZE * 0.022}px Arial, sans-serif`;
+            ctx.fillStyle = '#eab308';
+            const restLines = wrapText(restText, leftMaxW);
+            restLines.forEach(ln => { ctx.fillText(ln, textAnchorX, y); y += SIZE * 0.028; });
+          }
+        } else {
+          ctx.fillStyle = '#eab308';
+          ctx.font = `900 ${SIZE * 0.04}px Arial, sans-serif`;
+          const offerLines = wrapText(offerValue, leftMaxW);
+          offerLines.forEach(ln => { ctx.fillText(ln, textAnchorX, y); y += SIZE * 0.048; });
+        }
+      }
+      y += SIZE * 0.01;
+
+      // LIMITED TIME OFFER badge
+      ctx.fillStyle = '#ef4444';
+      const badgeText = 'LIMITED TIME OFFER';
+      ctx.font = `bold ${SIZE * 0.015}px Arial, sans-serif`;
+      const badgeW = ctx.measureText(badgeText).width + SIZE * 0.025;
+      const badgeH = SIZE * 0.03;
+      const badgeX = textOnRight ? SIZE - pad - badgeW : pad;
+      ctx.beginPath();
+      ctx.roundRect(badgeX, y, badgeW, badgeH, badgeH / 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(badgeText, badgeX + badgeW / 2, y + badgeH / 2);
+      y += badgeH + SIZE * 0.03;
+
+      // TRUST BADGES — compact vertical list
+      const BADGE_ICONS: Record<string, string> = {
+        'Premium Quality': '🏆', 'Genuine Product': '✅', '100% Natural': '🌿',
+        'Free Delivery': '🚚', 'Fast & Safe Delivery': '⚡', 'Best Price Guarantee': '👍',
+        'Trusted Seller': '🛡️', 'Hygiene Packaging': '✨', 'Customer Support': '🎧',
+        'Top Rated': '⭐', 'Eco Friendly': '♻️', 'Handpicked Selection': '💎',
+        'Limited Edition': '🎁', 'Warranty Included': '🛡️', 'Loved by Customers': '❤️',
+      };
+      ctx.textAlign = textAlign;
+      ctx.textBaseline = 'top';
+      const badges = trustBadgeLabels || [];
+      badges.slice(0, 4).forEach((label, i) => {
+        const by = y + i * SIZE * 0.035;
+        if (textOnRight) {
+          ctx.font = `500 ${SIZE * 0.015}px Arial`;
+          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          ctx.textAlign = 'right';
+          ctx.fillText(label, SIZE - pad - SIZE * 0.035, by + SIZE * 0.003);
+          ctx.font = `${SIZE * 0.02}px Arial`;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(BADGE_ICONS[label] || '✅', SIZE - pad, by);
+        } else {
+          ctx.font = `${SIZE * 0.02}px Arial`;
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'left';
+          ctx.fillText(BADGE_ICONS[label] || '✅', pad, by);
+          ctx.font = `500 ${SIZE * 0.015}px Arial`;
+          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          ctx.fillText(label, pad + SIZE * 0.032, by + SIZE * 0.003);
+        }
+      });
+
+      } else {
+        // === BAND LAYOUT (top / bottom) — full-width horizontal band, centered text stack ===
+        const bandH = SIZE * 0.45;
+        const brandingReserve = SIZE * 0.05; // bottom branding bar height; leave clearance when band is on bottom
+        const bandY = onTop ? 0 : SIZE - bandH - brandingReserve;
+
+        // Gradient: opaque on the band edge, fading toward the image side.
+        const grad = onTop
+          ? ctx.createLinearGradient(0, bandY, 0, bandY + bandH)
+          : ctx.createLinearGradient(0, bandY + bandH, 0, bandY);
+        grad.addColorStop(0, 'rgba(15,23,42,0.95)');
+        grad.addColorStop(0.6, 'rgba(15,23,42,0.8)');
+        grad.addColorStop(0.85, 'rgba(15,23,42,0.45)');
+        grad.addColorStop(1, 'rgba(15,23,42,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, bandY, SIZE, bandH);
+
+        const pad = SIZE * 0.04;
+        const centerX = SIZE / 2;
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+
+        // Cursor — anchored to the opaque edge of the band so text reads naturally.
+        let cy = onTop ? bandY + pad : bandY + bandH * 0.18;
+
+        // STORE NAME
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = `700 ${SIZE * 0.018}px Arial, sans-serif`;
+        ctx.fillText(storeName.toUpperCase(), centerX, cy);
+        cy += SIZE * 0.03;
+
+        // HEADING (max 2 centered lines)
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${SIZE * 0.038}px Arial, sans-serif`;
+        const bandHeadingLines = wrapText(dealHeading, SIZE * 0.85).slice(0, 2);
+        bandHeadingLines.forEach(line => { ctx.fillText(line, centerX, cy); cy += SIZE * 0.045; });
+
+        // Gold separator
+        cy += SIZE * 0.006;
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(234,179,8,0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(centerX - SIZE * 0.05, cy);
+        ctx.lineTo(centerX + SIZE * 0.05, cy);
+        ctx.stroke();
+        cy += SIZE * 0.018;
+        ctx.shadowBlur = 4;
+
+        // OFFER VALUE
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const bandTagDiscount = tagOverride?.discountPct?.trim();
+        const bandTagPrice = tagOverride?.offerPrice?.trim();
+        if (bandTagDiscount || bandTagPrice) {
+          if (bandTagDiscount) {
+            ctx.fillStyle = '#eab308';
+            ctx.font = `900 ${SIZE * 0.075}px Arial, sans-serif`;
+            ctx.fillText(`${bandTagDiscount}% OFF`, centerX, cy);
+            cy += SIZE * 0.078;
+          }
+          if (bandTagPrice) {
+            const priceNum = parseFloat(bandTagPrice);
+            const mrp = isFinite(priceNum) && priceNum > 0 ? Math.round(priceNum * 1.3) : null;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${SIZE * 0.038}px Arial, sans-serif`;
+            const priceLine = mrp ? `₹${bandTagPrice}   (MRP ₹${mrp})` : `₹${bandTagPrice}`;
+            ctx.fillText(priceLine, centerX, cy);
+            cy += SIZE * 0.045;
+          }
+        } else {
+          const offerMatch = offerValue.match(/(\d+)\s*%/);
+          if (offerMatch) {
+            ctx.fillStyle = '#eab308';
+            ctx.font = `900 ${SIZE * 0.075}px Arial, sans-serif`;
+            ctx.fillText(`${offerMatch[1]}% OFF`, centerX, cy);
+            cy += SIZE * 0.078;
+          } else {
+            ctx.fillStyle = '#eab308';
+            ctx.font = `900 ${SIZE * 0.038}px Arial, sans-serif`;
+            wrapText(offerValue, SIZE * 0.85).slice(0, 2).forEach(ln => {
+              ctx.fillText(ln, centerX, cy);
+              cy += SIZE * 0.045;
+            });
+          }
+        }
+        cy += SIZE * 0.008;
+
+        // LIMITED TIME OFFER badge (centered)
+        ctx.fillStyle = '#ef4444';
+        const bandBadgeText = 'LIMITED TIME OFFER';
+        ctx.font = `bold ${SIZE * 0.015}px Arial, sans-serif`;
+        const bandBadgeW = ctx.measureText(bandBadgeText).width + SIZE * 0.025;
+        const bandBadgeH = SIZE * 0.03;
+        const bandBadgeX = centerX - bandBadgeW / 2;
+        ctx.beginPath();
+        ctx.roundRect(bandBadgeX, cy, bandBadgeW, bandBadgeH, bandBadgeH / 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(bandBadgeText, centerX, cy + bandBadgeH / 2);
+        cy += bandBadgeH + SIZE * 0.018;
+
+        // TRUST BADGES — inline horizontal row (up to 3 to fit)
+        const bandBadges = (trustBadgeLabels || []).slice(0, 3);
+        if (bandBadges.length > 0) {
+          const ICONS_INLINE: Record<string, string> = {
+            'Premium Quality': '🏆', 'Genuine Product': '✅', '100% Natural': '🌿',
+            'Free Delivery': '🚚', 'Fast & Safe Delivery': '⚡', 'Best Price Guarantee': '👍',
+            'Trusted Seller': '🛡️', 'Hygiene Packaging': '✨', 'Customer Support': '🎧',
+            'Top Rated': '⭐', 'Eco Friendly': '♻️', 'Handpicked Selection': '💎',
+            'Limited Edition': '🎁', 'Warranty Included': '🛡️', 'Loved by Customers': '❤️',
+          };
+          ctx.font = `500 ${SIZE * 0.014}px Arial`;
+          ctx.fillStyle = 'rgba(255,255,255,0.75)';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          const inlineText = bandBadges.map(l => `${ICONS_INLINE[l] || '✅'} ${l}`).join('   ·   ');
+          ctx.fillText(inlineText, centerX, cy);
+        }
+      }
+
+      // === BOTTOM BAR — DealPro branding (always) ===
+      ctx.shadowBlur = 0;
+      const barH = SIZE * 0.05;
+      const barY = SIZE - barH;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0, barY, SIZE, barH);
+
+      ctx.font = `bold ${SIZE * 0.02}px Arial, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#eab308';
+      const brandingPad = SIZE * 0.04;
+      ctx.fillText('DealPro', brandingPad, barY + barH / 2);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = `${SIZE * 0.014}px Arial, sans-serif`;
+      ctx.fillText('Visit Store for this Deal', SIZE - brandingPad, barY + barH / 2);
+
+      URL.revokeObjectURL(url);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(imageFile); return; }
+          resolve(new File([blob], `promo-banner-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+        },
+        'image/jpeg',
+        0.92
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
+    img.src = url;
+  });
+}
+
+/**
+ * Generates a standalone "Free Gifts" showcase image.
+ * Shows gift items horizontally with names, styled like a promotional banner.
+ * Added as a separate image in the deal carousel.
+ */
+export async function generateFreeGiftsImage(
+  gifts: { imageUrl: string; name: string }[],
+  storeName: string
+): Promise<File> {
+  return new Promise((resolve, reject) => {
+    if (gifts.length === 0) { reject(new Error('No gifts')); return; }
+
+    // Load all gift images
+    const images: HTMLImageElement[] = [];
+    let loaded = 0;
+    const onLoad = () => {
+      loaded++;
+      if (loaded < gifts.length) return;
+
+      const SIZE = 1080;
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('No canvas context')); return; }
+
+      const pad = SIZE * 0.06;
+
+      // ─── Background ───
+      // Gradient from soft pink-white to white
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, SIZE);
+      bgGrad.addColorStop(0, '#fff5f7');
+      bgGrad.addColorStop(0.5, '#ffffff');
+      bgGrad.addColorStop(1, '#fef2f4');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, SIZE, SIZE);
+
+      // Subtle pattern dots
+      ctx.fillStyle = 'rgba(236,72,153,0.04)';
+      for (let x = 0; x < SIZE; x += 40) {
+        for (let y = 0; y < SIZE; y += 40) {
+          ctx.beginPath();
+          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // ─── Top section: "Choose your" + "FREE GIFT" ───
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // "Choose your"
+      const chooseFS = SIZE * 0.055;
+      ctx.font = `600 ${chooseFS}px Arial, sans-serif`;
+      ctx.fillStyle = '#64748b';
+      ctx.fillText('Choose your', SIZE / 2, SIZE * 0.12);
+
+      // "FREE GIFT" — big bold pink
+      const freeFS = SIZE * 0.11;
+      ctx.font = `900 ${freeFS}px Arial, sans-serif`;
+      ctx.fillStyle = '#ec4899';
+      ctx.fillText('FREE GIFT', SIZE / 2, SIZE * 0.21);
+
+      // Decorative line under title
+      const lineW = SIZE * 0.3;
+      ctx.strokeStyle = '#ec4899';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(SIZE / 2 - lineW / 2, SIZE * 0.265);
+      ctx.lineTo(SIZE / 2 + lineW / 2, SIZE * 0.265);
+      ctx.stroke();
+
+      // "with your purchase" subtitle
+      const subFS = SIZE * 0.028;
+      ctx.font = `500 ${subFS}px Arial, sans-serif`;
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText('with your purchase at this store', SIZE / 2, SIZE * 0.30);
+
+      // ─── Gift items section ───
+      const giftCount = Math.min(gifts.length, 3);
+      const giftAreaTop = SIZE * 0.36;
+      const giftAreaH = SIZE * 0.45;
+      const giftImgSize = giftCount === 1 ? SIZE * 0.35 : giftCount === 2 ? SIZE * 0.30 : SIZE * 0.24;
+      const totalGiftWidth = giftCount * giftImgSize + (giftCount - 1) * (giftCount <= 2 ? SIZE * 0.12 : SIZE * 0.06);
+      const startX = (SIZE - totalGiftWidth) / 2;
+      const giftCenterY = giftAreaTop + giftAreaH * 0.4;
+
+      gifts.slice(0, 3).forEach((gift, i) => {
+        const spacing = giftCount <= 2 ? giftImgSize + SIZE * 0.12 : giftImgSize + SIZE * 0.06;
+        const cx = startX + giftImgSize / 2 + i * spacing;
+        const cy = giftCenterY;
+
+        // White circle background with shadow
+        ctx.save();
+        ctx.shadowColor = 'rgba(236,72,153,0.15)';
+        ctx.shadowBlur = 25;
+        ctx.shadowOffsetY = 8;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(cx, cy, giftImgSize / 2 + 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Pink border ring
+        ctx.strokeStyle = '#fda4af';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, giftImgSize / 2 + 8, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Gift image — circular clip
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, giftImgSize / 2, 0, Math.PI * 2);
+        ctx.clip();
+
+        const gImg = images[i];
+        if (gImg) {
+          const gAspect = gImg.width / gImg.height;
+          let gw, gh, gx, gy;
+          if (gAspect > 1) {
+            gh = giftImgSize;
+            gw = giftImgSize * gAspect;
+            gx = cx - gw / 2;
+            gy = cy - gh / 2;
+          } else {
+            gw = giftImgSize;
+            gh = giftImgSize / gAspect;
+            gx = cx - gw / 2;
+            gy = cy - gh / 2;
+          }
+          ctx.drawImage(gImg, gx, gy, gw, gh);
+        }
+        ctx.restore();
+
+        // Gift name label below
+        const nameY = cy + giftImgSize / 2 + SIZE * 0.04;
+        const nameFS = SIZE * 0.025;
+        ctx.font = `700 ${nameFS}px Arial, sans-serif`;
+        ctx.fillStyle = '#334155';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        // Word wrap if needed
+        const nameMaxW = giftImgSize + SIZE * 0.04;
+        const nameWords = gift.name.split(' ');
+        let nameLine = '';
+        let nameLineY = nameY;
+        for (const word of nameWords) {
+          const test = nameLine ? `${nameLine} ${word}` : word;
+          if (ctx.measureText(test).width > nameMaxW && nameLine) {
+            ctx.fillText(nameLine, cx, nameLineY);
+            nameLine = word;
+            nameLineY += nameFS * 1.4;
+          } else {
+            nameLine = test;
+          }
+        }
+        if (nameLine) ctx.fillText(nameLine, cx, nameLineY);
+
+        // "or" text between items (not after last)
+        if (i < giftCount - 1) {
+          const orX = cx + spacing / 2;
+          const orFS = SIZE * 0.03;
+          ctx.font = `600 ${orFS}px Arial, sans-serif`;
+          ctx.fillStyle = '#cbd5e1';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('or', orX, cy);
+        }
+      });
+
+      // ─── Bottom bar — DealPro branding ───
+      const barH = SIZE * 0.07;
+      const barY = SIZE - barH;
+      // Pink gradient bar
+      const barGrad = ctx.createLinearGradient(0, barY, SIZE, barY);
+      barGrad.addColorStop(0, '#ec4899');
+      barGrad.addColorStop(1, '#f43f5e');
+      ctx.fillStyle = barGrad;
+      ctx.fillRect(0, barY, SIZE, barH);
+
+      const barFS = SIZE * 0.025;
+      ctx.font = `bold ${barFS}px Arial, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('DealPro', pad, barY + barH / 2);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = `${barFS * 0.85}px Arial, sans-serif`;
+      ctx.fillText(storeName, SIZE - pad, barY + barH / 2);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { reject(new Error('Failed to create image')); return; }
+          resolve(new File([blob], `free-gifts-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+        },
+        'image/jpeg',
+        0.92
+      );
+    };
+
+    gifts.forEach((gift, i) => {
+      const gImg = new Image();
+      gImg.crossOrigin = 'anonymous';
+      gImg.onload = onLoad;
+      gImg.onerror = () => {
+        // Create blank placeholder on error
+        images[i] = new Image(1, 1);
+        onLoad();
+      };
+      images[i] = gImg;
+      gImg.src = gift.imageUrl;
+    });
+  });
+}
+
 export interface ImagePriceOverlay {
   discountPct: string;   // e.g. "30"
   offerPrice: string;    // e.g. "699"
@@ -38,6 +853,16 @@ interface StepImageProps {
   onNext: () => void;
   onBack: () => void;
   theme: 'light' | 'dark';
+  // Optional deal info for promo banner generation
+  storeName?: string;
+  dealHeading?: string;
+  offerValue?: string;
+  /**
+   * Merchant ID. When provided, files are uploaded to the `dealpro-drafts/`
+   * Cloudinary folder once moderation passes — converting Files to URLs in
+   * wizard state so server-side drafts can survive close/reopen.
+   */
+  merchantId?: string;
 }
 
 export const StepImage: React.FC<StepImageProps> = ({
@@ -45,6 +870,7 @@ export const StepImage: React.FC<StepImageProps> = ({
   selectedVideoFile, existingVideoUrl, imageLibrary, isLibraryLoading,
   imagePriceOverlays, onFileSelected, onExistingSelected, onAdditionalImagesChange,
   onVideoChange, onPriceOverlayChange, onNext, onBack, theme,
+  storeName, dealHeading, offerValue, merchantId,
 }) => {
   const isDark = theme === 'dark';
   const { t } = useTranslation();
@@ -57,6 +883,42 @@ export const StepImage: React.FC<StepImageProps> = ({
   const [moderationError, setModerationError] = useState<string | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [generatingBanner, setGeneratingBanner] = useState(false);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+
+  // Can generate banner if we have an image + at least store name or offer
+  const canGenerateBanner = !!(selectedFile || existingThumbnail) && !!(storeName || offerValue || dealHeading);
+
+  const handleGenerateBanner = async () => {
+    const sourceFile = selectedFile || (existingThumbnail ? await urlToFile(existingThumbnail) : null);
+    if (!sourceFile) return;
+    setGeneratingBanner(true);
+    try {
+      const banner = await generatePromoBanner(
+        sourceFile,
+        storeName || 'Your Store',
+        dealHeading || 'Special Deal',
+        offerValue || 'Great Offer'
+      );
+      onFileSelected(banner);
+      // Show preview
+      const previewUrl = URL.createObjectURL(banner);
+      setBannerPreview(previewUrl);
+    } catch (err) {
+      console.error('[StepImage] Banner generation failed:', err);
+    } finally {
+      setGeneratingBanner(false);
+    }
+  };
+
+  // Helper: fetch a URL as a File (for existing thumbnails)
+  async function urlToFile(url: string): Promise<File | null> {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      return new File([blob], 'existing-image.jpg', { type: blob.type });
+    } catch { return null; }
+  }
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
@@ -183,29 +1045,115 @@ export const StepImage: React.FC<StepImageProps> = ({
   };
 
   const handleContinue = async () => {
-    // Moderate all new image files
+    // Run profanity + copyright checks for every newly uploaded image, in parallel.
+    // Same upload-time gate as the existing profanity check — gives the merchant
+    // immediate feedback instead of waiting until the Review/Publish step to find out.
+    // When a file fails, it's auto-removed from the list and the error names which
+    // ones were dropped (so the merchant doesn't have to guess across N thumbnails).
     const filesToCheck = [selectedFile, ...additionalImageFiles].filter(Boolean) as File[];
-    if (filesToCheck.length > 0) {
-      setChecking(true);
-      setModerationError(null);
-      try {
-        for (const file of filesToCheck) {
-          const result = await addCampaignService.moderateImage(file);
-          if (result.flagged) {
-            setModerationError(result.reason || t('m_img_inappropriate'));
-            setChecking(false);
-            return;
+    if (filesToCheck.length === 0) { onNext(); return; }
+
+    setChecking(true);
+    setModerationError(null);
+    try {
+      // Run both checks per file, in parallel across all files. Whichever check
+      // flags first wins for that file's `reason` field.
+      const fileResults = await Promise.all(
+        filesToCheck.map(async (file) => {
+          const [profanity, copyright] = await Promise.all([
+            addCampaignService.moderateImage(file),
+            addCampaignService.checkImageCopyright(file),
+          ]);
+          if (profanity.flagged) return { file, flagged: true, reason: profanity.reason };
+          if (copyright.flagged) return { file, flagged: true, reason: copyright.reason };
+          return { file, flagged: false, reason: '' };
+        }),
+      );
+
+      const flagged = fileResults.filter(r => r.flagged);
+      if (flagged.length === 0) {
+        // All files passed moderation. If we have a merchantId, upload to the
+        // `dealpro-drafts/` Cloudinary folder and replace File refs with URLs in
+        // wizard state — that way the server-side draft can persist them and the
+        // merchant can resume after closing the app.
+        if (merchantId && filesToCheck.length > 0) {
+          try {
+            const uploads = await Promise.all(
+              filesToCheck.map(async (file) => {
+                try {
+                  const { publicUrl } = await addCampaignService.uploadDealImageDraft(merchantId, file);
+                  return { file, url: publicUrl };
+                } catch (err) {
+                  console.warn('[StepImage] Draft upload failed (file will stay as File in state):', err);
+                  return { file, url: null };
+                }
+              }),
+            );
+
+            // Convert cover File → URL (if uploaded successfully).
+            const coverUpload = selectedFile ? uploads.find(u => u.file === selectedFile) : null;
+            const newAdditionalUploads = uploads.filter(u => u.file !== selectedFile && u.url);
+            const remainingAdditionalFiles = additionalImageFiles.filter(f =>
+              !uploads.some(u => u.file === f && u.url),
+            );
+
+            if (coverUpload?.url) {
+              onFileSelected(null);
+              onExistingSelected(coverUpload.url, null);
+            }
+
+            if (newAdditionalUploads.length > 0 || remainingAdditionalFiles.length !== additionalImageFiles.length) {
+              const newUrls = newAdditionalUploads.map(u => u.url!).filter(Boolean);
+              onAdditionalImagesChange(remainingAdditionalFiles, [...additionalImageUrls, ...newUrls]);
+            }
+          } catch (err) {
+            // Hard failure of the upload phase shouldn't block navigation — files
+            // are still in state and will be uploaded normally at publish time.
+            console.warn('[StepImage] Draft uploads failed wholesale, continuing with Files in state:', err);
           }
         }
-      } catch {
-        setModerationError(t('m_img_verify_fail'));
-        setChecking(false);
+        onNext();
         return;
-      } finally {
-        setChecking(false);
       }
+
+      // Strip the flagged files from wizard state. Preserve URL slots and unflagged files.
+      const flaggedSet = new Set(flagged.map(r => r.file));
+      const coverFlagged = !!(selectedFile && flaggedSet.has(selectedFile));
+      const cleanedFiles = additionalImageFiles.filter(f => !flaggedSet.has(f));
+
+      if (coverFlagged) {
+        // Cover removed — promote first surviving slot if any (URL first, then File).
+        if (additionalImageUrls.length > 0) {
+          const [promoUrl, ...restUrls] = additionalImageUrls;
+          onFileSelected(null);
+          onExistingSelected(promoUrl, null);
+          onAdditionalImagesChange(cleanedFiles, restUrls);
+        } else if (cleanedFiles.length > 0) {
+          const [promoFile, ...restFiles] = cleanedFiles;
+          onFileSelected(promoFile);
+          onAdditionalImagesChange(restFiles, additionalImageUrls);
+        } else {
+          // Nothing left at all.
+          onFileSelected(null);
+          onAdditionalImagesChange([], additionalImageUrls);
+        }
+      } else if (cleanedFiles.length !== additionalImageFiles.length) {
+        // Cover survived; just drop the flagged additional files.
+        onAdditionalImagesChange(cleanedFiles, additionalImageUrls);
+      }
+
+      // Build the error message — list the unique reasons returned by the AI.
+      const reasons = Array.from(new Set(flagged.map(r => r.reason).filter(Boolean)));
+      const summary = flagged.length === 1
+        ? `1 image was removed: ${reasons[0] || t('m_img_inappropriate')}`
+        : `${flagged.length} images were removed: ${reasons.join(' · ') || t('m_img_inappropriate')}`;
+      setModerationError(summary);
+      // Stay on the step so the merchant can see the message + re-upload if needed.
+    } catch {
+      setModerationError(t('m_img_verify_fail'));
+    } finally {
+      setChecking(false);
     }
-    onNext();
   };
 
   const hasVideo = !!selectedVideoFile || !!existingVideoUrl;
@@ -255,8 +1203,8 @@ export const StepImage: React.FC<StepImageProps> = ({
                 }`}
               >
                 <img src={img.preview} alt="" className="w-full h-full object-cover" />
-                {/* Price overlay on image */}
-                {hasOverlay && (
+                {/* Price overlay on image — custom tag or fallback to deal heading + offer */}
+                {hasOverlay ? (
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent pt-4 pb-1.5 px-2">
                     {overlay.discountPct && (
                       <span className="inline-block bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded mb-0.5">
@@ -272,7 +1220,16 @@ export const StepImage: React.FC<StepImageProps> = ({
                       )}
                     </div>
                   </div>
-                )}
+                ) : (offerValue || dealHeading) ? (
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent pt-3 pb-1.5 px-2">
+                    {offerValue && (
+                      <p className="text-yellow-400 text-[9px] font-bold truncate">{offerValue}</p>
+                    )}
+                    {dealHeading && (
+                      <p className="text-white text-[8px] truncate opacity-80">{dealHeading}</p>
+                    )}
+                  </div>
+                ) : null}
                 {i === 0 && (
                   <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-blue-500 text-[9px] font-bold text-white uppercase tracking-wide">
                     {t('m_cover')}
@@ -281,11 +1238,12 @@ export const StepImage: React.FC<StepImageProps> = ({
                 {/* Tag button to add/edit price overlay */}
                 <button
                   onClick={(e) => { e.stopPropagation(); setEditingOverlayIdx(editingOverlayIdx === i ? null : i); }}
-                  className={`absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
-                    hasOverlay ? 'bg-emerald-500' : 'bg-black/40 hover:bg-black/60'
+                  className={`absolute bottom-1.5 right-1.5 px-1.5 py-1 rounded-md flex items-center gap-1 transition-colors ${
+                    hasOverlay ? 'bg-emerald-500' : 'bg-black/50 hover:bg-black/70'
                   }`}
                 >
                   <Tag className="w-3 h-3 text-white" />
+                  <span className="text-[7px] font-bold text-white">{hasOverlay ? 'Edit' : 'Tag'}</span>
                 </button>
                 <button
                   onClick={() => removeImage(i)}

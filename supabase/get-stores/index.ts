@@ -26,7 +26,11 @@ async function authenticateRequest(req: Request) {
 
   const admin = createClient(supabaseUrl, serviceKey);
   const { data: { user }, error } = await admin.auth.getUser(jwt);
-  if (error || !user) throw new Error('Unauthorized: Invalid token.');
+  if (error || !user) {
+    // Distinguish expired from malformed so the client can react (force refresh + retry).
+    const reason = /jwt expired|expired/i.test(error?.message || '') ? 'expired' : 'invalid';
+    throw new Error(`Unauthorized: token ${reason}`);
+  }
   return { user, jwt };
 }
 
@@ -94,10 +98,17 @@ Deno.serve(async (req) => {
     });
 
   } catch (error: any) {
-    console.error('[get-stores] Final Error:', error.message);
+    const isAuth = error?.message?.includes('Unauthorized');
+    // Auth failures are expected user behavior (expired token, signed out elsewhere) —
+    // log as warn so they don't pollute the error dashboard.
+    if (isAuth) {
+      console.warn('[get-stores] Auth rejected:', error.message);
+    } else {
+      console.error('[get-stores] Final Error:', error.message);
+    }
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: error.message.includes('Unauthorized') ? 401 : 500,
+      status: isAuth ? 401 : 500,
     });
   }
 });

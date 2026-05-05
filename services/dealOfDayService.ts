@@ -23,10 +23,13 @@ export const dealOfDayService = {
       media_urls?: string[];
       video_url?: string;
       image_price_overlays?: Record<string, { discountPct: string; offerPrice: string }>;
+      trust_badges?: string[];
+      free_gifts?: { image_url: string; name: string }[];
       localized_heading?: any;
       localized_offer?: any;
       localized_description?: any;
       localized_shop_name?: any;
+      [key: string]: any;
     }
   ) => {
     // Explicitly ensure is_deal_of_the_day is TRUE and include merchant_id

@@ -24,26 +24,30 @@ export const StepProductLookup: React.FC<StepProductLookupProps> = ({
   }, []);
 
   return (
-    <div className="flex flex-col min-h-full px-6 pt-6">
-      <div style={floatIn(0, visible)} className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
-        <Search className="w-8 h-8 text-emerald-500" />
-      </div>
-      <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Find your product
-      </h2>
-      <p style={floatIn(200, visible)} className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        Search by name or barcode to auto-fill details, or skip to enter manually.
-      </p>
+    <div className="flex flex-col h-full">
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto px-6 pt-6 pb-4">
+        <div style={floatIn(0, visible)} className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
+          <Search className="w-8 h-8 text-emerald-500" />
+        </div>
+        <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+          Find your product
+        </h2>
+        <p style={floatIn(200, visible)} className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+          Search by name or barcode to auto-fill details, or skip to enter manually.
+        </p>
 
-      <div style={floatIn(300, visible)}>
-        <ProductLookup
-          hintCategory={hintCategory}
-          onResult={onResult}
-          theme={theme}
-        />
+        <div style={floatIn(300, visible)}>
+          <ProductLookup
+            hintCategory={hintCategory}
+            onResult={onResult}
+            theme={theme}
+          />
+        </div>
       </div>
 
-      <div style={floatIn(400, visible)} className="mt-auto pb-8 flex gap-3">
+      {/* Sticky bottom buttons — won't overlap content */}
+      <div style={floatIn(400, visible)} className={`shrink-0 px-6 pt-3 pb-8 flex gap-3 border-t ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
         <button
           onClick={onBack}
           className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${

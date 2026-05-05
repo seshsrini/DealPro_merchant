@@ -155,7 +155,7 @@ export const ProductLookup: React.FC<ProductLookupProps> = ({
             </div>
           )}
 
-          <div className={`divide-y overflow-y-auto max-h-[420px] ${isDark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+          <div className={`divide-y overflow-y-auto max-h-[50vh] ${isDark ? 'divide-slate-800' : 'divide-slate-100'}`}>
           {results.map((product, idx) => {
             const schemaLabel =
               CATEGORY_SCHEMAS.find(s => s.id === product.detectedSchemaId)?.label ?? product.category;
