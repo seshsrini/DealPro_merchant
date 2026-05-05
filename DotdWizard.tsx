@@ -492,7 +492,10 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             onBack={handleBack}
             theme={theme}
             onBuyGetFree={handleBuyGetFreeSelect}
-            storeCategory={user.category}
+            storeCategory={
+              merchantStores.find((s) => s.id === state.selectedStoreId)?.store_category
+              || user.category
+            }
           />
         );
       case 'image':
@@ -564,7 +567,10 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
-            storeCategory={user.category}
+            storeCategory={
+              merchantStores.find((s) => s.id === state.selectedStoreId)?.store_category
+              || user.category
+            }
           />
         );
       case 'description':

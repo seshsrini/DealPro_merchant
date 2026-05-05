@@ -647,7 +647,10 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
-            storeCategory={user.category}
+            storeCategory={
+              merchantStores.find((s) => s.id === state.selectedStoreId)?.store_category
+              || user.category
+            }
           />
         );
       case 'description':
