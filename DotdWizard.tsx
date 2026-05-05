@@ -581,6 +581,10 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
+            heading={state.dealHeading}
+            offer={state.offerValue}
+            freeGifts={state.freeGifts}
+            isBuyGetFree={isBuyGetFreeMode}
           />
         );
       case 'badges':

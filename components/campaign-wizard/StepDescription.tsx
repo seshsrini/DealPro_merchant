@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { FileText, Loader2 } from 'lucide-react';
 import { floatIn } from './floatIn';
 import { addCampaignService } from '../../services/addCampaignService';
@@ -6,18 +6,80 @@ import { RichTextEditor } from '../RichTextEditor';
 import { PlaceholderTooltip, isPlaceholderTooltipDismissed } from './PlaceholderTooltip';
 import { useTranslation } from '../../contexts/LanguageContext';
 
+interface FreeGiftLike { name?: string }
+
 interface StepDescriptionProps {
   value: string;
   onChange: (value: string) => void;
   onNext: () => void;
   onBack: () => void;
   theme: 'light' | 'dark';
+  // Used to auto-generate a starter description from what the merchant already
+  // typed. Optional so older callers keep working.
+  heading?: string;
+  offer?: string;
+  freeGifts?: FreeGiftLike[];
+  isBuyGetFree?: boolean;
 }
 
 const stripHtml = (html: string): string =>
   html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
 
-export const StepDescription: React.FC<StepDescriptionProps> = ({ value, onChange, onNext, onBack, theme }) => {
+// Mirrors campaignTemplatesService.textToHtml so the auto-generated description
+// renders the same way template descriptions do. Kept local to avoid pulling in
+// an extra import for a single helper.
+function textToHtml(text: string): string {
+  const lines = text.split('\n');
+  let html = '';
+  let inList = false;
+  for (const line of lines) {
+    if (line.startsWith('• ')) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${line.slice(2)}</li>`;
+    } else {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += line === '' ? '<div><br></div>' : `<div>${line}</div>`;
+    }
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
+// Build a starter description from heading + offer (and free gifts in BGF mode).
+// Returns HTML ready for the RichTextEditor. Returns null when there's nothing
+// useful to write yet (no heading and no offer).
+function buildSuggestedDescription(args: {
+  heading?: string;
+  offer?: string;
+  freeGifts?: FreeGiftLike[];
+  isBuyGetFree?: boolean;
+  t: (key: string) => string;
+}): string | null {
+  const heading = (args.heading || '').trim();
+  const offer = (args.offer || '').trim();
+  if (!heading && !offer) return null;
+
+  const safeHeading = heading || 'Special Offer';
+  if (args.isBuyGetFree) {
+    const giftNames = (args.freeGifts || [])
+      .map((g) => (g?.name || '').trim())
+      .filter(Boolean);
+    const giftsLine = giftNames.length > 0 ? giftNames.join(', ') : args.t('m_desc_gift_default');
+    const text = args.t('m_desc_template_bgf')
+      .replace('{heading}', safeHeading)
+      .replace('{offer}', offer || safeHeading)
+      .replace('{gifts}', giftsLine);
+    return textToHtml(text);
+  }
+  const text = args.t('m_desc_template_generic')
+    .replace('{heading}', safeHeading)
+    .replace('{offer}', offer || safeHeading);
+  return textToHtml(text);
+}
+
+export const StepDescription: React.FC<StepDescriptionProps> = ({
+  value, onChange, onNext, onBack, theme, heading, offer, freeGifts, isBuyGetFree,
+}) => {
   const { t } = useTranslation();
   const isDark = theme === 'dark';
   const plainText = stripHtml(value);
@@ -40,6 +102,31 @@ export const StepDescription: React.FC<StepDescriptionProps> = ({ value, onChang
       return () => clearTimeout(t);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-fill the description on first arrival when it's empty and the merchant
+  // has typed enough upstream to seed it. Only runs once per mount; never
+  // overwrites an existing description (template-supplied or merchant-edited).
+  const autoFilledRef = useRef(false);
+  useEffect(() => {
+    if (autoFilledRef.current) return;
+    if (plainText.length > 0) return;
+    const suggested = buildSuggestedDescription({ heading, offer, freeGifts, isBuyGetFree, t });
+    if (suggested) {
+      autoFilledRef.current = true;
+      onChange(suggested);
+    }
+  }, [plainText, heading, offer, freeGifts, isBuyGetFree, t, onChange]);
+
+  // Manual regenerate — overwrites the current description with a freshly-built
+  // suggestion using the latest heading/offer values.
+  const handleRegenerate = () => {
+    const suggested = buildSuggestedDescription({ heading, offer, freeGifts, isBuyGetFree, t });
+    if (suggested) {
+      onChange(suggested);
+      if (moderationError) setModerationError(null);
+    }
+  };
+  const canSuggest = !!((heading && heading.trim()) || (offer && offer.trim()));
 
   const handleContinue = async () => {
     // Block if placeholder text still present
@@ -73,9 +160,24 @@ export const StepDescription: React.FC<StepDescriptionProps> = ({ value, onChang
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
         {t('m_describe_deal')}
       </h2>
-      <p style={floatIn(200, visible)} className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        {t('m_desc_hint')}
-      </p>
+      <div style={floatIn(200, visible)} className="flex items-start justify-between gap-3 mb-6">
+        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+          {t('m_desc_hint')}
+        </p>
+        {canSuggest && (
+          <button
+            type="button"
+            onClick={handleRegenerate}
+            className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all active:scale-95 ${
+              isDark
+                ? 'bg-purple-500/15 text-purple-300 hover:bg-purple-500/25'
+                : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+            }`}
+          >
+            {t('m_desc_regenerate')}
+          </button>
+        )}
+      </div>
 
       <div style={floatIn(300, visible)} className="flex-1">
         <PlaceholderTooltip

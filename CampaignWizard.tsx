@@ -661,6 +661,10 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}
+            heading={state.dealHeading}
+            offer={state.offerValue}
+            freeGifts={state.freeGifts}
+            isBuyGetFree={isBuyGetFreeMode}
           />
         );
       case 'badges':
