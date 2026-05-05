@@ -17,7 +17,7 @@ interface StepOfferProps {
 // Bucket the merchant's store category to a suggestion set. Falls back to
 // retail-style discount chips when no category or an unknown one is given,
 // so the experience is never worse than the original.
-type OfferBucket = 'retail' | 'food' | 'service' | 'pro';
+type OfferBucket = 'retail' | 'food' | 'service' | 'pro' | 'hybrid';
 function bucketForCategory(category?: string | null): OfferBucket {
   const c = (category || '').toLowerCase();
   if (!c) return 'retail';
@@ -25,8 +25,11 @@ function bucketForCategory(category?: string | null): OfferBucket {
   if (/restaurant|dining|cafe|bakery|chaat|juice|ice cream|tiffin|catering/.test(c)) return 'food';
   // Knowledge-/appointment-driven merchants where premium framing fits
   if (/professional|education|training|real estate|consult|legal|law|account|finance/.test(c)) return 'pro';
+  // Hybrid: sells goods AND provides services. Needs both discount chips
+  // (e.g. "10% off all medicines") AND service chips (e.g. "free home delivery").
+  if (/pharmacy|healthcare|automotive|optical|pet/.test(c)) return 'hybrid';
   // Visit-/session-driven services
-  if (/salon|beauty|parlor|automotive|pharmacy|healthcare|travel|tour|entertainment|games|fitness|optical|tailor|boutique|pet/.test(c)) return 'service';
+  if (/salon|beauty|parlor|travel|tour|entertainment|games|fitness|tailor|boutique/.test(c)) return 'service';
   return 'retail';
 }
 
@@ -155,10 +158,11 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
           {(() => {
             const bucket = bucketForCategory(storeCategory);
             const keys: Record<OfferBucket, string[]> = {
-              retail: ['m_offer_q1', 'm_offer_q2', 'm_offer_q3', 'm_offer_q4', 'm_offer_q6'],
-              food:   ['m_offer_food_1', 'm_offer_food_2', 'm_offer_food_3', 'm_offer_food_4', 'm_offer_food_5'],
-              service:['m_offer_service_1', 'm_offer_service_2', 'm_offer_service_3', 'm_offer_service_4', 'm_offer_service_5'],
-              pro:    ['m_offer_pro_1', 'm_offer_pro_2', 'm_offer_pro_3', 'm_offer_pro_4', 'm_offer_pro_5'],
+              retail: ['m_offer_q1', 'm_offer_q2', 'm_offer_q3', 'm_offer_q4', 'm_offer_q5', 'm_offer_q6', 'm_offer_q7', 'm_offer_q8'],
+              food:   ['m_offer_food_1', 'm_offer_food_2', 'm_offer_food_3', 'm_offer_food_4', 'm_offer_food_5', 'm_offer_food_6', 'm_offer_food_7', 'm_offer_food_8'],
+              service:['m_offer_service_1', 'm_offer_service_2', 'm_offer_service_3', 'm_offer_service_4', 'm_offer_service_5', 'm_offer_service_6', 'm_offer_service_7', 'm_offer_service_8'],
+              pro:    ['m_offer_pro_1', 'm_offer_pro_2', 'm_offer_pro_3', 'm_offer_pro_4', 'm_offer_pro_5', 'm_offer_pro_6', 'm_offer_pro_7', 'm_offer_pro_8'],
+              hybrid: ['m_offer_hybrid_1', 'm_offer_hybrid_2', 'm_offer_hybrid_3', 'm_offer_hybrid_4', 'm_offer_hybrid_5', 'm_offer_hybrid_6', 'm_offer_hybrid_7', 'm_offer_hybrid_8'],
             };
             return keys[bucket].map((k) => t(k));
           })().map((chip) => (

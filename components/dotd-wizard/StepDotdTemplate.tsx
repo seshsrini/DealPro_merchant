@@ -15,16 +15,17 @@ export interface DotdTemplate {
   // Which store-category buckets this template is appropriate for. Templates
   // tagged with multiple buckets show up for all of them. A template with no
   // matches still shows for unknown categories (default = retail).
-  buckets: Array<'retail' | 'food' | 'service' | 'pro'>;
+  buckets: Array<'retail' | 'food' | 'service' | 'pro' | 'hybrid'>;
 }
 
-type OfferBucket = 'retail' | 'food' | 'service' | 'pro';
+type OfferBucket = 'retail' | 'food' | 'service' | 'pro' | 'hybrid';
 function bucketForCategory(category?: string | null): OfferBucket {
   const c = (category || '').toLowerCase();
   if (!c) return 'retail';
   if (/restaurant|dining|cafe|bakery|chaat|juice|ice cream|tiffin|catering/.test(c)) return 'food';
   if (/professional|education|training|real estate|consult|legal|law|account|finance/.test(c)) return 'pro';
-  if (/salon|beauty|parlor|automotive|pharmacy|healthcare|travel|tour|entertainment|games|fitness|optical|tailor|boutique|pet/.test(c)) return 'service';
+  if (/pharmacy|healthcare|automotive|optical|pet/.test(c)) return 'hybrid';
+  if (/salon|beauty|parlor|travel|tour|entertainment|games|fitness|tailor|boutique/.test(c)) return 'service';
   return 'retail';
 }
 
@@ -38,7 +39,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '⚡ 24-Hour Flash Deal!\n\nThis deal vanishes at midnight. No extensions, no repeats.\n\n✅ One-day-only pricing\n✅ Walk in anytime today\n✅ First come, first served\n\n⏰ Hurry — once it\'s gone, it\'s gone!',
     category: 'flash',
     discount: 40,
-    buckets: ['retail', 'food', 'service', 'pro'],
+    buckets: ['retail', 'food', 'service', 'pro', 'hybrid'],
   },
   {
     id: 'lunch-rush',
@@ -71,7 +72,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '💥 Doorbuster Deal!\n\nOne hero product. One jaw-dropping price. One day.\n\n🏷️ Limited quantity available\n⚡ First 50 customers only\n🚫 No rain checks\n\n🏃 Get here early — this won\'t last!',
     category: 'doorbuster',
     discount: 60,
-    buckets: ['retail'],
+    buckets: ['retail', 'hybrid'],
   },
   {
     id: 'mystery-deal',
@@ -82,7 +83,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '🎲 Mystery Deal Day!\n\nEvery customer gets a surprise discount. What will YOU get?\n\n🎁 Scratch card at checkout\n💰 Discounts range from 10% to 50%\n✨ Everyone\'s a winner!\n\n🤩 Come try your luck today!',
     category: 'surprise',
     discount: 30,
-    buckets: ['retail', 'food'],
+    buckets: ['retail', 'food', 'hybrid'],
   },
   {
     id: 'sunrise-sale',
@@ -93,7 +94,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '🌅 Early Bird Special!\n\nThe early bird gets the deal. Show up before 11 AM for exclusive savings.\n\n☀️ Valid 8 AM – 11 AM\n💰 Extra discount for morning shoppers\n☕ Start your day with savings\n\n⏰ Morning only — no exceptions!',
     category: 'seasonal',
     discount: 25,
-    buckets: ['retail', 'food', 'service'],
+    buckets: ['retail', 'food', 'service', 'hybrid'],
   },
   {
     id: 'stock-clear',
@@ -104,7 +105,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '🏷️ One-Day Clearance Blowout!\n\nMassive markdowns across the store. Today only.\n\n📦 Selected items up to 70% OFF\n🔖 Prices slashed on all categories\n❌ No further discounts apply\n\n💨 When it\'s sold, it\'s sold. No restocking!',
     category: 'clearance',
     discount: 50,
-    buckets: ['retail'],
+    buckets: ['retail', 'hybrid'],
   },
   {
     id: 'vip-day',
@@ -115,7 +116,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '👑 VIP Customer Day!\n\nA special thank-you to our loyal customers.\n\n🎖️ Exclusive one-day pricing\n🎁 Free gift with every purchase over ₹500\n💎 Premium service all day\n\n❤️ Because you deserve the best!',
     category: 'exclusive',
     discount: 20,
-    buckets: ['retail', 'food', 'service', 'pro'],
+    buckets: ['retail', 'food', 'service', 'pro', 'hybrid'],
   },
   // Service- & pro-friendly templates so those buckets aren't too sparse.
   {
@@ -127,7 +128,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '📅 Free Consultation Day!\n\nBook a complimentary 30-minute session with us today.\n\n✅ No obligation\n✅ Personalized advice\n✅ Limited slots available\n\n💼 Reserve your slot now!',
     category: 'exclusive',
     discount: 100,
-    buckets: ['service', 'pro'],
+    buckets: ['service', 'pro', 'hybrid'],
   },
   {
     id: 'first-visit-special',
@@ -138,7 +139,7 @@ const DOTD_TEMPLATES: DotdTemplate[] = [
     description: '🎉 First-Visit Special!\n\nA warm welcome from us — enjoy big savings on your first visit today.\n\n👋 New customers only\n💰 Up to 30% OFF\n📍 In-store only\n\n💡 Show this offer at checkout.',
     category: 'exclusive',
     discount: 30,
-    buckets: ['service', 'pro'],
+    buckets: ['service', 'pro', 'hybrid'],
   },
 ];
 
