@@ -532,11 +532,20 @@ const AppContent: React.FC = () => {
           />
           <main ref={mainRef} className="flex-1 overflow-y-auto hide-scrollbar pb-32">
             {/* Privacy / Terms render regardless of login state — both logged-out users
-                (during signup) and logged-in users (from the profile screen) reach them. */}
+                (during signup) and logged-in users (from the profile screen) reach them.
+                The policy components hardcode setView('login') on their close/agree button;
+                rewrite that to setView('profile') for logged-in users so they land back on
+                the profile tab they came from instead of a blank login screen. */}
             {view === 'privacy_policy' ? (
-              <PrivacyPolicy setView={navigateTo} theme={theme} />
+              <PrivacyPolicy
+                setView={(v) => navigateTo(v === 'login' && user.isLoggedIn ? 'profile' : v)}
+                theme={theme}
+              />
             ) : view === 'terms_of_service' ? (
-              <TermsOfService setView={navigateTo} theme={theme} />
+              <TermsOfService
+                setView={(v) => navigateTo(v === 'login' && user.isLoggedIn ? 'profile' : v)}
+                theme={theme}
+              />
             ) : !user.isLoggedIn ? (
               (view === 'register' || view === 'terms_of_service_signup' || view === 'privacy_policy_signup') ? (
                 <>
