@@ -34,7 +34,7 @@ export const ForgotPwd: React.FC<ForgotPwdProps> = ({ setView, loading, setLoadi
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
-  const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const inputClass = `w-full h-12 rounded-lg text-sm font-normal outline-none transition-all ${
     isDark

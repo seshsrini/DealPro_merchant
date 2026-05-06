@@ -34,7 +34,7 @@ const AppContent: React.FC = () => {
   const [hasBiometricSession, setHasBiometricSession] = useState(false);
   const [dealIdToEdit, setDealIdToEdit] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [preSelectedTab, setPreSelectedTab] = useState<'review' | 'active' | 'expired' | 'needs review' | null>(null);
+  const [preSelectedTab, setPreSelectedTab] = useState<'active' | 'expired' | null>(null);
   const [pendingAuthView, setPendingAuthView] = useState<AppView>('login');
 
   // Location permission state

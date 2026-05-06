@@ -196,12 +196,20 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
     console.warn('[MerchantStack] Unknown view for merchant:', view, '— defaulting to dashboard');
     currentView = (
       <MerchantDashboard
+        view={view}
+        setView={setView}
         user={user}
+        setUser={setUser}
         deals={deals}
         loading={loading}
-        setView={setView}
-        setDealIdToEdit={setDealIdToEdit}
+        setLoading={setLoading}
         theme={theme}
+        refreshDeals={refreshDeals}
+        setDealIdToEdit={setDealIdToEdit}
+        onClearDealIdToEdit={onClearDealIdToEdit}
+        isScanning={isScanning}
+        setIsScanning={setIsScanning}
+        setPreSelectedTab={setPreSelectedTab}
       />
     );
   }

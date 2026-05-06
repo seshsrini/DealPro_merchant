@@ -196,10 +196,7 @@ export const BankVerification: React.FC<BankVerificationProps> = ({ user, setUse
 
         await editProfileService.updateUserProfile(user.id, user.role, updateData);
 
-        setUser(prev => ({
-          ...prev,
-          ...updateData
-        }));
+        setUser({ ...user, ...updateData });
 
         setSaveSuccess(t('m_bank_saved'));
         setTimeout(() => setView('profile'), 2000);

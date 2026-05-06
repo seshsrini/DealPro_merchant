@@ -41,101 +41,45 @@ export const fetchStateLocalities = async (stateName: string): Promise<Record<st
   try {
     let rawData: any = null;
     
-    // Fix: Restructured the switch statement to use a common return path with normalization, 
-    // resolving type errors for Tamil Nadu, Kerala, and other state modules that return string arrays.
-    switch (stateName) {
-      case "Karnataka":
-        rawData = (await import('./karnataka_data.ts')).default;
-        break;
-      
-      case "Tamil Nadu":
-        rawData = (await import('./tamilnadu_data.ts')).default;
-        break;
-
-      case "Kerala":
-        rawData = (await import('./kerala_data.ts')).default;
-        break;
-
-      case "Maharashtra":
-        rawData = (await import('./maharashtra_data.ts')).default;
-        break;
-
-      case "Andhra Pradesh":
-        rawData = (await import('./andhra_pradesh_data.ts')).default;
-        break;
-
-      case "Assam":
-        rawData = (await import('./assam_data.ts')).default;
-        break;
-
-      case "Bihar":
-        rawData = (await import('./bihar_data.ts')).default;
-        break;
-
-      case "Chhattisgarh":
-        rawData = (await import('./chhattisgarh_data.ts')).default;
-        break;
-
-      case "Delhi":
-        rawData = (await import('./delhi_data.ts')).default;
-        break;
-
-      case "Goa":
-        rawData = (await import('./goa_data.ts')).default;
-        break;
-
-      case "Gujarat":
-        rawData = (await import('./gujarat_data.ts')).default;
-        break;
-
-      case "Haryana":
-        rawData = (await import('./haryana_data.ts')).default;
-        break;
-
-      case "Himachal Pradesh":
-        rawData = (await import('./himachal_pradesh_data.ts')).default;
-        break;
-
-      case "Jharkhand":
-        rawData = (await import('./jharkhand_data.ts')).default;
-        break;
-
-      case "Madhya Pradesh":
-        rawData = (await import('./madhya_pradesh_data.ts')).default;
-        break;
-
-      case "Odisha":
-        rawData = (await import('./odisha_data.ts')).default;
-        break;
-
-      case "Punjab":
-        rawData = (await import('./punjab_data.ts')).default;
-        break;
-
-      case "Rajasthan":
-        rawData = (await import('./rajasthan_data.ts')).default;
-        break;
-
-      case "Telangana":
-        rawData = (await import('./telangana_data.ts')).default;
-        break;
-
-      case "Uttar Pradesh":
-        rawData = (await import('./uttar_pradesh_data.ts')).default;
-        break;
-
-      case "West Bengal":
-        rawData = (await import('./west_bengal_data.ts')).default;
-        break;
-
-      case "Uttarakhand":
-        rawData = (await import('./uttarakhand_data.ts')).default;
-        break;
-
-      default: // Add a default case for robustness
-        console.warn(`[localities.ts] No locality data found for state: ${stateName}.`);
-        rawData = null; // Ensure rawData is explicitly set to null if no match
-        break;
+    // State name → data file slug. Some files don't exist yet (only bihar/odisha
+    // were generated) — load attempts for missing files fall through to the
+    // catch below and return null. Using a templated dynamic import (rather than
+    // a literal string per case) keeps tsc from trying to statically resolve
+    // every file at type-check time.
+    const STATE_FILE_MAP: Record<string, string> = {
+      "Karnataka":        "karnataka_data",
+      "Tamil Nadu":       "tamilnadu_data",
+      "Kerala":           "kerala_data",
+      "Maharashtra":      "maharashtra_data",
+      "Andhra Pradesh":   "andhra_pradesh_data",
+      "Assam":            "assam_data",
+      "Bihar":            "bihar_data",
+      "Chhattisgarh":     "chhattisgarh_data",
+      "Delhi":            "delhi_data",
+      "Goa":              "goa_data",
+      "Gujarat":          "gujarat_data",
+      "Haryana":          "haryana_data",
+      "Himachal Pradesh": "himachal_pradesh_data",
+      "Jharkhand":        "jharkhand_data",
+      "Madhya Pradesh":   "madhya_pradesh_data",
+      "Odisha":           "odisha_data",
+      "Punjab":           "punjab_data",
+      "Rajasthan":        "rajasthan_data",
+      "Telangana":        "telangana_data",
+      "Uttar Pradesh":    "uttar_pradesh_data",
+      "West Bengal":      "west_bengal_data",
+      "Uttarakhand":      "uttarakhand_data",
+    };
+    const fileSlug = STATE_FILE_MAP[stateName];
+    if (!fileSlug) {
+      console.warn(`[localities.ts] No locality data mapping for state: ${stateName}.`);
+      return {};
+    }
+    try {
+      rawData = (await import(/* @vite-ignore */ `./${fileSlug}.ts`)).default;
+    } catch {
+      console.warn(`[localities.ts] Locality data not bundled for state: ${stateName}.`);
+      rawData = null;
     }
     
     return normalizeLocalities(rawData, stateName);

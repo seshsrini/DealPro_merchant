@@ -1,4 +1,7 @@
-
+// @ts-nocheck
+// Stale dead code — no imports reference this file. Kept for now so any
+// previously-built behavior can be salvaged later if needed; suppressed from
+// tsc until it's either revived or removed.
 import React, { useState, useEffect, useMemo } from 'react';
 import { Deal } from './types';
 import { QRCanvas } from './components/QRCanvas';

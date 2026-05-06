@@ -24,7 +24,7 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(0);
-  const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasSentRef = useRef(false);
 
   useEffect(() => {

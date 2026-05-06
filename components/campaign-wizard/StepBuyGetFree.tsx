@@ -109,7 +109,7 @@ export const StepBuyGetFree: React.FC<StepBuyGetFreeProps> = ({
               {/* Gift image */}
               <div className="shrink-0">
                 <input
-                  ref={el => inputRefs.current[idx] = el}
+                  ref={el => { inputRefs.current[idx] = el; }}
                   type="file"
                   accept="image/*"
                   onChange={e => handleImage(idx, e)}

@@ -19,6 +19,7 @@ interface ReviewState {
     is24hrs: boolean;
     shift1: string;
     shift2: string;
+    store_category?: string;
   }>;
   businessType: '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
   gstinValue: string;

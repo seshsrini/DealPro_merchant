@@ -485,7 +485,7 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
         if (Object.keys(cleaned).length > 0) payload.image_price_overlays = cleaned;
       }
 
-      const result = await dealOfDayService.createDealOfDay(user.id, payload);
+      const result = await dealOfDayService.createDealOfDay(user.id, payload as any);
       const campaignId = result?.campaign?.campaign_id;
 
       // Background translation (fire-and-forget)

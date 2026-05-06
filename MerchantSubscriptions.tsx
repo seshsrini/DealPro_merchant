@@ -119,11 +119,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
             const isActive = row.status === 'active' &&
               row.current_period_end &&
               new Date(row.current_period_end) > new Date();
-            setUser((prev: any) => ({
-              ...prev,
+            setUser({
+              ...user,
               hasActiveSubscription: isActive,
               subscription_status: row.status,
-            }));
+            });
           }
         }
       )

@@ -227,9 +227,9 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     { store_name: '', street: '', pincode: '', locality: '', state: '', city: '', landmark: '', coords: null, isGeocoding: false, shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, isPincodeSearching: false, delivers: false, delivery_radius_km: null, store_category: '', store_phone: '', store_phone_alt: '' }
   ]);
 
-  const geocodeDebounceRef = useRef<Record<number, number | null>>({});
-  const pincodeDebounceRef = useRef<Record<number, number | null>>({}); // New debounce ref for pincode
-  const localityDebounceRef = useRef<Record<number, number | null>>({}); // New debounce ref for locality search
+  const geocodeDebounceRef = useRef<Record<number, ReturnType<typeof setTimeout> | null>>({});
+  const pincodeDebounceRef = useRef<Record<number, ReturnType<typeof setTimeout> | null>>({}); // New debounce ref for pincode
+  const localityDebounceRef = useRef<Record<number, ReturnType<typeof setTimeout> | null>>({}); // New debounce ref for locality search
 
   // State for locality autocomplete
   const [localitySuggestions, setLocalitySuggestions] = useState<Record<number, DBLocality[]>>({});
@@ -237,12 +237,14 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const [localityResolved, setLocalityResolved] = useState<Record<number, boolean>>({});
 
   // Ref for debounce timeouts
-  const phoneDebounceRef = useRef<number | null>(null);
-  const gstinDebounceRef = useRef<number | null>(null);
-  const panDebounceRef = useRef<number | null>(null);
-  const udyamDebounceRef = useRef<number | null>(null);
-  const fssaiDebounceRef = useRef<number | null>(null);
-  const tradeLicenseDebounceRef = useRef<number | null>(null);
+  // setTimeout returns Timeout (per @types/node) — use ReturnType<typeof setTimeout>
+  // so the cast-to-number dance throughout this file isn't needed.
+  const phoneDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gstinDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const udyamDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fssaiDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tradeLicenseDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
   // Real-time phone number validation (for consumer role)
@@ -277,9 +279,9 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     // For all users, check phone availability after debounce
     if (value.length >= 7) {
       if (phoneDebounceRef.current) {
-        clearTimeout(phoneDebounceRef.current as number);
+        clearTimeout(phoneDebounceRef.current);
       }
-      phoneDebounceRef.current = setTimeout(() => validatePhoneNumber(value, selectedCountry.code), 500) as number;
+      phoneDebounceRef.current = setTimeout(() => validatePhoneNumber(value, selectedCountry.code), 500);
     } else {
       setPhoneTaken(null);
       setIsCheckingPhone(false);
@@ -322,9 +324,9 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     setGstinValidated(null);
 
     if (gstinDebounceRef.current) {
-      clearTimeout(gstinDebounceRef.current as number);
+      clearTimeout(gstinDebounceRef.current);
     }
-    gstinDebounceRef.current = setTimeout(() => validateGstin(value), 500) as unknown as number;
+    gstinDebounceRef.current = setTimeout(() => validateGstin(value), 500);
   };
 
   // Real-time PAN validation
@@ -361,9 +363,9 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     setPanValidated(null);
 
     if (panDebounceRef.current) {
-      clearTimeout(panDebounceRef.current as number);
+      clearTimeout(panDebounceRef.current);
     }
-    panDebounceRef.current = setTimeout(() => validatePan(value), 500) as unknown as number;
+    panDebounceRef.current = setTimeout(() => validatePan(value), 500);
   };
 
   // Dynamic Address-to-LatLong Resolver (existing logic)
@@ -373,7 +375,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     merchantStores.forEach((store, index) => {
       // Clear existing debounce timeout for this store
       if (geocodeDebounceRef.current[index]) {
-        clearTimeout(geocodeDebounceRef.current[index] as number);
+        clearTimeout(geocodeDebounceRef.current[index]);
       }
 
       // If coordinates are already set, or geocoding is in progress, skip.
@@ -410,7 +412,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
               return next;
             });
           }
-        }, 1200) as number; // Debounce time
+        }, 1200); // Debounce time
       } else if (store.coords && store.street.length <= 5 && store.city.length === 0 && store.state.length === 0) {
           // If address fields are cleared, reset coords.
           setMerchantStores(prev => {
@@ -424,10 +426,10 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     return () => {
       Object.values(geocodeDebounceRef.current).forEach(timeout => {
         if (timeout !== null) { 
-          clearTimeout(timeout as number);
+          clearTimeout(timeout);
         }
       });
-      if (phoneDebounceRef.current) clearTimeout(phoneDebounceRef.current as number); 
+      if (phoneDebounceRef.current) clearTimeout(phoneDebounceRef.current); 
     };
   }, [
     regRole, 
@@ -447,7 +449,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     merchantStores.forEach((store, index) => {
       // Clear existing debounce timeout for this store
       if (pincodeDebounceRef.current[index]) {
-        clearTimeout(pincodeDebounceRef.current[index] as number);
+        clearTimeout(pincodeDebounceRef.current[index]);
       }
 
       // If city and state are already populated by a 6-digit pincode, skip.
@@ -500,7 +502,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
               return next;
             });
           }
-        }, 800) as number; // Debounce time
+        }, 800); // Debounce time
       } else {
         // If pincode is not 6 digits, clear city/state fields (keep locality as user-entered)
         setMerchantStores(prev => {
@@ -515,7 +517,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
         });
         // Clear any pending debounce for this store
         if (pincodeDebounceRef.current[index]) {
-          clearTimeout(pincodeDebounceRef.current[index] as number);
+          clearTimeout(pincodeDebounceRef.current[index]);
         }
       }
     });
@@ -523,7 +525,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     return () => {
       Object.values(pincodeDebounceRef.current).forEach(timeout => {
         if (timeout !== null) {
-          clearTimeout(timeout as number);
+          clearTimeout(timeout);
         }
       });
     };
@@ -582,7 +584,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const handleLocalitySearch = useCallback((index: number, query: string) => {
     // Clear previous timeout
     if (localityDebounceRef.current[index]) {
-      clearTimeout(localityDebounceRef.current[index] as number);
+      clearTimeout(localityDebounceRef.current[index]);
     }
 
     // If query is empty, hide dropdown
@@ -742,8 +744,8 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     setUdyamTaken(null);
     setUdyamValidated(null);
     setIsCheckingUdyam(false);
-    if (udyamDebounceRef.current) clearTimeout(udyamDebounceRef.current as number);
-    udyamDebounceRef.current = setTimeout(() => validateUdyam(value), 500) as unknown as number;
+    if (udyamDebounceRef.current) clearTimeout(udyamDebounceRef.current);
+    udyamDebounceRef.current = setTimeout(() => validateUdyam(value), 500);
   };
 
   const handleValidateUdyam = () => {
@@ -769,8 +771,8 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     setFssaiTaken(null);
     setFssaiValidated(null);
     setIsCheckingFssai(false);
-    if (fssaiDebounceRef.current) clearTimeout(fssaiDebounceRef.current as number);
-    fssaiDebounceRef.current = setTimeout(() => validateFssai(value), 500) as unknown as number;
+    if (fssaiDebounceRef.current) clearTimeout(fssaiDebounceRef.current);
+    fssaiDebounceRef.current = setTimeout(() => validateFssai(value), 500);
   };
 
   const handleValidateFssai = () => {
@@ -796,8 +798,8 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     setTradeLicenseTaken(null);
     setTradeLicenseValidated(null);
     setIsCheckingTradeLicense(false);
-    if (tradeLicenseDebounceRef.current) clearTimeout(tradeLicenseDebounceRef.current as number);
-    tradeLicenseDebounceRef.current = setTimeout(() => validateTradeLicense(value), 500) as unknown as number;
+    if (tradeLicenseDebounceRef.current) clearTimeout(tradeLicenseDebounceRef.current);
+    tradeLicenseDebounceRef.current = setTimeout(() => validateTradeLicense(value), 500);
   };
 
   const handleValidateTradeLicense = () => {
