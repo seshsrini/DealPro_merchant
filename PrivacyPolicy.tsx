@@ -122,8 +122,14 @@ export const PrivacyPolicy: React.FC<PrivacyPolicyProps> = ({ setView, theme }) 
                     <li><span className="font-semibold">With Consumers/Merchants:</span> To facilitate deal redemptions.</li>
                     <li><span className="font-semibold">With Service Providers:</span>
                       <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
+                        <li><span className="font-semibold">Supabase:</span> Hosts our database, authentication, and server-side functions.</li>
                         <li><span className="font-semibold">SerpApi:</span> To perform product searches and metadata retrieval.</li>
                         <li><span className="font-semibold">Cloudinary:</span> To host and optimize merchant-uploaded or confirmed images.</li>
+                        <li><span className="font-semibold">Google Gemini AI:</span> Powers image moderation, product extraction from photos, and locality-name transliteration into Indian languages.</li>
+                        <li><span className="font-semibold">Firebase Cloud Messaging (Google):</span> Delivers push notifications about deals, redemptions, and account activity.</li>
+                        <li><span className="font-semibold">OpenStreetMap &amp; Leaflet:</span> Powers in-app maps for store and deal locations.</li>
+                        <li><span className="font-semibold">Google Maps:</span> Opens for turn-by-turn navigation when you tap a "Directions" button.</li>
+                        <li><span className="font-semibold">Sentry:</span> Captures crash and error reports to help us fix bugs (no personal data is sent intentionally).</li>
                       </ul>
                     </li>
                     <li><span className="font-semibold">Legal Requirements:</span> When required by law or to protect our rights in intellectual property disputes.</li>
