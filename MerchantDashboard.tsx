@@ -372,21 +372,31 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
         {/* ─── Quick Actions Grid ─── */}
         <div style={fi(160)} className="grid grid-cols-2 gap-3">
-          <button
-            id="tour-new-deal"
-            onClick={() => setView('merchant_deals')}
-            className="group relative rounded-2xl p-4 flex flex-col gap-3 text-left active:scale-[0.96] active:shadow-md transition-all overflow-hidden bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/25"
-          >
-            <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10 transition-transform group-active:scale-110" />
-            <div className="absolute bottom-0 right-0 w-16 h-16 rounded-full bg-blue-400/20 translate-x-4 translate-y-4" />
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/20">
-              <Plus className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-white">{t('m_new_deal')}</p>
-              <p className="text-[10px] mt-0.5 text-blue-100">{t('m_launch_campaign')}</p>
-            </div>
-          </button>
+          {(() => {
+            const atCampaignLimit = !!campaignUsage && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit;
+            return (
+              <button
+                id="tour-new-deal"
+                onClick={() => setView('merchant_deals')}
+                disabled={atCampaignLimit}
+                className={`group relative rounded-2xl p-4 flex flex-col gap-3 text-left transition-all overflow-hidden ${
+                  atCampaignLimit
+                    ? 'bg-slate-300 cursor-not-allowed opacity-60 shadow-none'
+                    : 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/25 active:scale-[0.96] active:shadow-md'
+                }`}
+              >
+                {!atCampaignLimit && <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10 transition-transform group-active:scale-110" />}
+                {!atCampaignLimit && <div className="absolute bottom-0 right-0 w-16 h-16 rounded-full bg-blue-400/20 translate-x-4 translate-y-4" />}
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${atCampaignLimit ? 'bg-slate-400/40' : 'bg-white/20'}`}>
+                  <Plus className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white">{t('m_new_deal')}</p>
+                  <p className={`text-[10px] mt-0.5 ${atCampaignLimit ? 'text-slate-100' : 'text-blue-100'}`}>{t('m_launch_campaign')}</p>
+                </div>
+              </button>
+            );
+          })()}
 
           <button
             id="tour-scan-verify"

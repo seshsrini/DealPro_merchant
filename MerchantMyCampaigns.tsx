@@ -403,23 +403,33 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
         </div>
       )}
 
-      {/* New Deal Button — full width */}
-      <button
-        id="ctour-new-deal"
-        onClick={handleNewDeal}
-        className="w-full relative overflow-hidden rounded-2xl p-4 bg-blue-600 border-2 border-blue-500 transition-all active:translate-y-0.5 active:shadow-none shadow-lg shadow-blue-600/30 flex items-center gap-4"
-      >
-        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white/20 shrink-0">
-          <Sparkles className="w-6 h-6 text-white" />
-        </div>
-        <div className="text-left flex-1">
-          <h3 className="text-base font-bold text-white">{t('m_new_deal')}</h3>
-          <p className="text-xs text-blue-100">{t('m_launch_campaign')}</p>
-        </div>
-        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-white/20 shrink-0">
-          <ArrowLeft className="w-4 h-4 text-white rotate-180" />
-        </div>
-      </button>
+      {/* New Deal Button — full width. Disabled when campaign limit is reached. */}
+      {(() => {
+        const atCampaignLimit = !!campaignUsage && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit;
+        return (
+          <button
+            id="ctour-new-deal"
+            onClick={handleNewDeal}
+            disabled={atCampaignLimit}
+            className={`w-full relative overflow-hidden rounded-2xl p-4 border-2 transition-all flex items-center gap-4 ${
+              atCampaignLimit
+                ? 'bg-slate-300 border-slate-300 cursor-not-allowed opacity-60 shadow-none'
+                : 'bg-blue-600 border-blue-500 active:translate-y-0.5 active:shadow-none shadow-lg shadow-blue-600/30'
+            }`}
+          >
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${atCampaignLimit ? 'bg-slate-400/40' : 'bg-white/20'}`}>
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <div className="text-left flex-1">
+              <h3 className="text-base font-bold text-white">{t('m_new_deal')}</h3>
+              <p className={`text-xs ${atCampaignLimit ? 'text-slate-100' : 'text-blue-100'}`}>{t('m_launch_campaign')}</p>
+            </div>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${atCampaignLimit ? 'bg-slate-400/40' : 'bg-white/20'}`}>
+              <ArrowLeft className="w-4 h-4 text-white rotate-180" />
+            </div>
+          </button>
+        );
+      })()}
 
       {/* Campaigns List */}
       <div ref={campaignListRef} className="space-y-4">
