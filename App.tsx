@@ -531,11 +531,13 @@ const AppContent: React.FC = () => {
             onBellClick={user.isLoggedIn ? () => navigateTo('notifications') : undefined}
           />
           <main ref={mainRef} className="flex-1 overflow-y-auto hide-scrollbar pb-32">
-            {!user.isLoggedIn ? (
-              view === 'privacy_policy' ?
-                <PrivacyPolicy setView={navigateTo} theme={theme} /> :
-              view === 'terms_of_service' ?
-                <TermsOfService setView={navigateTo} theme={theme} /> :
+            {/* Privacy / Terms render regardless of login state — both logged-out users
+                (during signup) and logged-in users (from the profile screen) reach them. */}
+            {view === 'privacy_policy' ? (
+              <PrivacyPolicy setView={navigateTo} theme={theme} />
+            ) : view === 'terms_of_service' ? (
+              <TermsOfService setView={navigateTo} theme={theme} />
+            ) : !user.isLoggedIn ? (
               (view === 'register' || view === 'terms_of_service_signup' || view === 'privacy_policy_signup') ? (
                 <>
                   <MemberJoin
