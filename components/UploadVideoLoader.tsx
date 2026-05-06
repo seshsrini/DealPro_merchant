@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 
 const VIDEO_COUNT = 5;
@@ -35,7 +36,12 @@ export const UploadVideoLoader: React.FC<UploadVideoLoaderProps> = ({
 
   const pct = Math.min(100, Math.max(0, (step / Math.max(1, totalSteps)) * 100));
 
-  return (
+  // Render via a portal to document.body so the fixed positioning is relative
+  // to the viewport, not to any ancestor that has `transform` set (the floatIn
+  // helper used throughout the wizard applies `translateY(...)`, which would
+  // otherwise contain `position: fixed` and trap the modal mid-page).
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center px-8">
       <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
         <div className="flex flex-col items-center">
@@ -73,6 +79,7 @@ export const UploadVideoLoader: React.FC<UploadVideoLoaderProps> = ({
           </p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
