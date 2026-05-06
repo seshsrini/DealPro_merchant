@@ -5,6 +5,7 @@ import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarCha
 import { AppView, Locale, User as UserType } from '../types';
 import { useTranslation } from '../contexts/LanguageContext';
 import { usePermissions } from '../contexts/PermissionsContext';
+import { DealProLogo } from './DealProLogo';
 
 interface NavProps {
   currentView: AppView;
@@ -44,13 +45,8 @@ export const Header: React.FC<NavProps> = ({ currentView, setView, onBack, showB
           </button>
         ) : (
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
-              <img
-                src="/assets/merchantlogo.svg"
-                alt="DealPro"
-                className="w-full h-full object-contain"
-              />
-            </div>
+            <DealProLogo className="w-9 h-9 rounded-lg overflow-hidden shrink-0 object-contain" />
+
             <div className="flex flex-col leading-none">
               <span className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>DealPro</span>
               <span className={`text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Merchant <span className="text-green-500">Hub</span></span>

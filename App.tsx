@@ -12,6 +12,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { setSentryUser } from './services/sentryService';
 import { InviteCodeScreen } from './components/InviteCodeScreen';
 import { Header, MerchantBottomNav } from './components/Navigation';
+import { DealProLogo } from './components/DealProLogo';
 import { MerchantOnboarding } from './MerchantOnboarding';
 import { QRscan } from './QRscan';
 import { supabase, updateSupabaseSession } from './services/supabaseClient';
@@ -414,7 +415,11 @@ const AppContent: React.FC = () => {
       {view === 'splash' ? (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6">
           <div className="relative mb-8 w-48 h-48">
-            <img src="/assets/merchantlogo.svg" alt="DealPro Merchant Logo" className="w-full h-full object-contain animate-float" />
+            <DealProLogo
+              alt="DealPro Merchant Logo"
+              className="w-full h-full object-contain animate-float rounded-2xl"
+              iconClassName="w-24 h-24 text-white"
+            />
           </div>
           <h1 className="text-4xl font-semibold text-white text-center">
             Deal<span className="text-yellow-500">Pro</span>
@@ -426,9 +431,8 @@ const AppContent: React.FC = () => {
         <div className="h-screen bg-white flex flex-col px-8 pt-16 pb-10">
           {/* Logo + DealPro branding */}
           <div className="flex items-center gap-3 mb-6 animate-float-in float-in-delay-1">
-            <div className="w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
-              <img src="/assets/merchantlogo.svg" alt="Logo" className="w-full h-full object-contain" />
-            </div>
+            <DealProLogo className="w-10 h-10 rounded-2xl overflow-hidden shrink-0 object-contain" />
+
             <span className="font-semibold text-xl leading-none text-slate-900">Deal<span className="text-yellow-500">Pro</span></span>
           </div>
 
