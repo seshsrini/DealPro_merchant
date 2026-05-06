@@ -3,6 +3,7 @@ import { ImageIcon, Upload, Check, X, Loader2, Film, Plus, GripVertical, Tag, Pe
 import { floatIn } from './floatIn';
 import { addCampaignService } from '../../services/addCampaignService';
 import { useTranslation } from '../../contexts/LanguageContext';
+import { UploadVideoLoader } from '../UploadVideoLoader';
 
 const MAX_IMAGES = 5;
 const MAX_VIDEO_SIZE_MB = 50;
@@ -902,6 +903,10 @@ export const StepImage: React.FC<StepImageProps> = ({
   const [videoError, setVideoError] = useState<string | null>(null);
   const [generatingBanner, setGeneratingBanner] = useState(false);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  // Drives the fullscreen video distraction overlay while images are being
+  // moderated and then uploaded as drafts. Two phases mirror the work done in
+  // handleContinue below.
+  const [checkingPhase, setCheckingPhase] = useState<{ step: number; label: string } | null>(null);
 
   // Can generate banner if we have an image + at least store name or offer
   const canGenerateBanner = !!(selectedFile || existingThumbnail) && !!(storeName || offerValue || dealHeading);
@@ -1071,6 +1076,7 @@ export const StepImage: React.FC<StepImageProps> = ({
     if (filesToCheck.length === 0) { onNext(); return; }
 
     setChecking(true);
+    setCheckingPhase({ step: 1, label: t('m_checking_content') });
     setModerationError(null);
     try {
       // Run both checks per file, in parallel across all files. Whichever check
@@ -1094,6 +1100,7 @@ export const StepImage: React.FC<StepImageProps> = ({
         // wizard state — that way the server-side draft can persist them and the
         // merchant can resume after closing the app.
         if (merchantId && filesToCheck.length > 0) {
+          setCheckingPhase({ step: 2, label: t('m_uploading_media') });
           try {
             const uploads = await Promise.all(
               filesToCheck.map(async (file) => {
@@ -1170,6 +1177,7 @@ export const StepImage: React.FC<StepImageProps> = ({
       setModerationError(t('m_img_verify_fail'));
     } finally {
       setChecking(false);
+      setCheckingPhase(null);
     }
   };
 
@@ -1177,6 +1185,15 @@ export const StepImage: React.FC<StepImageProps> = ({
   const videoPreviewUrl = selectedVideoFile ? URL.createObjectURL(selectedVideoFile) : existingVideoUrl;
 
   return (
+    <>
+    {checkingPhase && (
+      <UploadVideoLoader
+        step={checkingPhase.step}
+        totalSteps={2}
+        label={checkingPhase.label}
+        theme={theme}
+      />
+    )}
     <div className="flex flex-col min-h-full px-6 pt-6">
       <div style={floatIn(0, visible)} className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
         <ImageIcon className="w-8 h-8 text-blue-500" />
@@ -1500,5 +1517,6 @@ export const StepImage: React.FC<StepImageProps> = ({
         </button>
       </div>
     </div>
+    </>
   );
 };

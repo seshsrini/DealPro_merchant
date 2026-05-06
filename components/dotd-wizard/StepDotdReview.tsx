@@ -13,6 +13,7 @@ import { generatePromoBanner, generateFreeGiftsImage, BannerPlacement } from '..
 import { TRUST_BADGES } from '../campaign-wizard/StepTrustBadges';
 import { FreeGiftItem } from '../campaign-wizard/StepBuyGetFree';
 import { pickBadgeCornerForImage, cornerClass, BadgeCorner } from '../../utils/badgeCornerForImage';
+import { UploadVideoLoader } from '../UploadVideoLoader';
 
 interface MerchantStore {
   id?: string;
@@ -753,39 +754,14 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
         )}
       </div>
 
-      {/* Publishing Progress */}
+      {/* Publishing Progress — video distraction with progress bar. */}
       {progress && (
-        <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center px-8">
-          <div className={`w-full max-w-sm rounded-2xl p-6 ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
-            <div className="space-y-4">
-              {[
-                { step: 1, label: t('m_checking_content'), icon: CheckCircle2 },
-                { step: 2, label: t('m_uploading_media'), icon: Upload },
-                { step: 3, label: t('m_publishing_deal'), icon: Zap },
-              ].map((item) => {
-                const Icon = item.icon;
-                const isActive = progress.step === item.step;
-                const isDone = progress.step > item.step;
-                return (
-                  <div key={item.step} className="flex items-center gap-3">
-                    {isDone ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                    ) : isActive ? (
-                      <Loader2 className="w-5 h-5 animate-spin text-yellow-500" />
-                    ) : (
-                      <Icon className={`w-5 h-5 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
-                    )}
-                    <span className={`text-sm font-medium ${
-                      isDone ? 'text-emerald-500' : isActive ? (isDark ? 'text-white' : 'text-slate-900') : (isDark ? 'text-slate-600' : 'text-slate-300')
-                    }`}>
-                      {item.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <UploadVideoLoader
+          step={progress.step}
+          totalSteps={3}
+          label={progress.label}
+          theme={theme}
+        />
       )}
 
       {/* Publish button */}
