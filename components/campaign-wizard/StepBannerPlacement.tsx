@@ -32,7 +32,7 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
   const [previews, setPreviews] = useState<Record<BannerPlacement, string | null>>({
-    auto: null, left: null, right: null, top: null, bottom: null,
+    auto: null, left: null, right: null, top: null, bottom: null, none: null,
   });
   const [generating, setGenerating] = useState(true);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -90,7 +90,7 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
           return;
         }
         const next: Record<BannerPlacement, string | null> = {
-          auto: results[0], left: results[1], right: results[2], top: results[3], bottom: results[4],
+          auto: results[0], left: results[1], right: results[2], top: results[3], bottom: results[4], none: results[5],
         };
         results.forEach(u => objectUrls.push(u));
         setPreviews(next);
@@ -172,7 +172,9 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
         <p className={`text-[11px] ${isDark ? 'text-purple-400/70' : 'text-purple-600/80'}`}>
           {value === 'auto'
             ? 'Auto picks left or right based on where the product sits in your photo.'
-            : `Text will sit on the ${BANNER_PLACEMENT_LABELS[value].toLowerCase()} of the cover image.`}
+            : value === 'none'
+              ? 'Image only — no overlay, gradient, or text. Lets the photo speak for itself.'
+              : `Text will sit on the ${BANNER_PLACEMENT_LABELS[value].toLowerCase()} of the cover image.`}
         </p>
       </div>
 

@@ -42,7 +42,7 @@ interface DotdWizardState {
   trustBadgeIds: string[];
   freeGifts: FreeGiftItem[];
   originalImageFile: File | null;
-  bannerPlacement: 'auto' | 'left' | 'right' | 'top' | 'bottom';
+  bannerPlacement: 'auto' | 'left' | 'right' | 'top' | 'bottom' | 'none';
 }
 
 type DotdAction =

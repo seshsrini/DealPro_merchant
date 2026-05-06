@@ -46,7 +46,7 @@ interface WizardState {
   // the banner cleanly when the merchant changes placement via the layout step.
   originalImageFile: File | null;
   // Cover banner text placement chosen by the merchant. 'auto' = heuristic decides.
-  bannerPlacement: 'auto' | 'left' | 'right' | 'top' | 'bottom';
+  bannerPlacement: 'auto' | 'left' | 'right' | 'top' | 'bottom' | 'none';
 }
 
 type WizardAction =

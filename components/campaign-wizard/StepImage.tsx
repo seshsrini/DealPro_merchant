@@ -23,9 +23,9 @@ export type BannerTextSide = 'left' | 'right';
  *   - 'top'    → horizontal band across top, image dominant below
  *   - 'bottom' → horizontal band across bottom, image dominant above
  */
-export type BannerPlacement = 'auto' | 'left' | 'right' | 'top' | 'bottom';
+export type BannerPlacement = 'auto' | 'left' | 'right' | 'top' | 'bottom' | 'none';
 
-export const ALL_BANNER_PLACEMENTS: BannerPlacement[] = ['auto', 'left', 'right', 'top', 'bottom'];
+export const ALL_BANNER_PLACEMENTS: BannerPlacement[] = ['auto', 'left', 'right', 'top', 'bottom', 'none'];
 
 export const BANNER_PLACEMENT_LABELS: Record<BannerPlacement, string> = {
   auto:   'Auto',
@@ -33,6 +33,7 @@ export const BANNER_PLACEMENT_LABELS: Record<BannerPlacement, string> = {
   right:  'Right',
   top:    'Top',
   bottom: 'Bottom',
+  none:   'No Text',
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -202,6 +203,22 @@ export async function generatePromoBanner(
         drawX = 0; drawY = (SIZE - drawH) / 2;
       }
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+      // === 'none' placement → image only, no gradient/text/badges ===
+      // Some merchants want the photo to speak for itself. Return the cropped
+      // square as-is, skipping every overlay below.
+      if (placement === 'none') {
+        URL.revokeObjectURL(url);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { resolve(imageFile); return; }
+            resolve(new File([blob], `promo-banner-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+          },
+          'image/jpeg',
+          0.92,
+        );
+        return;
+      }
 
       // === Resolve the placement ===
       // 'auto' → heuristic picks 'left' or 'right'. Explicit values bypass the heuristic.
