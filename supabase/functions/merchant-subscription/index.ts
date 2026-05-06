@@ -192,6 +192,62 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (action === 'create_test_subscription') {
+      // ──────────────────────────────────────────────────────────────────
+      // Test-only bypass for the in-app subscription step. Creates a free
+      // 30-day subscription with the highest tier so testers can exercise
+      // the rest of the app without going through real payment. Marked
+      // is_test_subscription = true so the row can be wiped before launch
+      // (DELETE FROM merchant_subscriptions WHERE is_test_subscription).
+      //
+      // Client-side this action is gated by VITE_ALLOW_TEST_SUBSCRIPTION;
+      // the server still validates the request is authenticated to keep
+      // strangers from minting test subs against random merchant IDs.
+      // ──────────────────────────────────────────────────────────────────
+      const { tier_key } = body;
+      const planName = tier_key || 'pro_test';
+
+      // Deactivate any existing active subscriptions
+      const { error: deactivateErr } = await supabaseAdmin
+        .from('merchant_subscriptions')
+        .update({ status: 'cancelled', cancel_at_period_end: true })
+        .eq('merchant_id', user.id)
+        .eq('status', 'active');
+      if (deactivateErr) {
+        console.error('[merchant-subscription] Test bypass deactivate error:', deactivateErr);
+        throw deactivateErr;
+      }
+
+      const now = new Date();
+      const periodEnd = new Date(now);
+      periodEnd.setDate(periodEnd.getDate() + 30); // 30-day test subscription
+
+      const { data, error } = await supabaseAdmin
+        .from('merchant_subscriptions')
+        .insert([{
+          merchant_id: user.id,
+          plan_name: planName,
+          status: 'active',
+          current_period_start: now.toISOString(),
+          current_period_end: periodEnd.toISOString(),
+          cancel_at_period_end: false,
+          is_test_subscription: true,
+        }])
+        .select()
+        .single();
+      if (error) {
+        console.error('[merchant-subscription] Test bypass insert error:', error);
+        throw error;
+      }
+
+      console.log(`[merchant-subscription] Created TEST subscription for merchant ${user.id}: ${planName}, id: ${data.id}`);
+
+      return new Response(
+        JSON.stringify({ success: true, subscription: data, subscriptionId: data.id, isTest: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
+
     if (action === 'campaign_usage') {
       // Campaign / DOTD limits reset on the 1st of each month at 12:00 AM IST
       // (UTC+5:30). The Edge Function runtime is UTC, so naively reading
@@ -416,7 +472,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ error: 'Invalid action. Use "check", "fetch", "create", "cancel", "campaign_usage", or "add_loyalty_addon"' }),
+      JSON.stringify({ error: 'Invalid action. Use "check", "fetch", "create", "create_test_subscription", "cancel", "campaign_usage", or "add_loyalty_addon"' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
     );
 

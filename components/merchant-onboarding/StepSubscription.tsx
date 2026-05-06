@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CreditCard, Loader2, CheckCircle2, Gauge, Tags, Gift, AlertTriangle } from 'lucide-react';
+import { CreditCard, Loader2, CheckCircle2, Gauge, Tags, Gift, AlertTriangle, FlaskConical } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { SubscriptionTier, User } from '../../types';
 import { subscriptionService } from '../../services/subscriptionService';
@@ -32,6 +32,38 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);
   const [billingReady, setBillingReady] = useState(false);
   const isNative = Capacitor.isNativePlatform();
+  // Test bypass: shown only while VITE_ALLOW_TEST_SUBSCRIPTION is true. Lets
+  // internal testers skip the subscription step without going through real
+  // payment. The button itself is also conditionally rendered so it disappears
+  // from the bundle entirely when the env flag is false.
+  const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true';
+  const [testBypassing, setTestBypassing] = useState(false);
+
+  const handleTestBypass = useCallback(async () => {
+    if (!user.id || testBypassing) return;
+    setTestBypassing(true);
+    setError(null);
+    try {
+      const { data, error: efErr } = await supabase.functions.invoke('merchant-subscription', {
+        body: { action: 'create_test_subscription', tier_key: 'pro_test' },
+      });
+      if (efErr || !data?.success) {
+        const msg = data?.error || efErr?.message || 'Could not create test subscription.';
+        throw new Error(msg);
+      }
+      setUser({
+        ...user,
+        hasActiveSubscription: true,
+        subscription_status: 'active',
+        current_tier_id: data.subscription?.id ?? null,
+      });
+      onComplete(0, data.subscriptionId);
+    } catch (err: any) {
+      console.error('[StepSubscription] Test bypass error:', err?.message || err);
+      setError(err?.message || 'Test bypass failed.');
+      setTestBypassing(false);
+    }
+  }, [user, testBypassing, setUser, onComplete]);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
@@ -380,6 +412,33 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
                 Confirm
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Test-only bypass — visible while VITE_ALLOW_TEST_SUBSCRIPTION=true. */}
+      {allowTestBypass && (
+        <div style={floatIn(550, visible)} className="mt-4 mb-2">
+          <div className={`rounded-xl border-2 border-dashed p-3 ${isDark ? 'border-amber-500/40 bg-amber-500/5' : 'border-amber-400 bg-amber-50'}`}>
+            <div className="flex items-start gap-2 mb-2">
+              <FlaskConical className={`w-4 h-4 mt-0.5 ${isDark ? 'text-amber-400' : 'text-amber-700'}`} />
+              <div>
+                <p className={`text-xs font-bold ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>Test Mode Only — Will Be Removed</p>
+                <p className={`text-[11px] ${isDark ? 'text-amber-400/80' : 'text-amber-700/80'}`}>
+                  Skip payment for internal testing. Creates a 30-day test subscription.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleTestBypass}
+              disabled={testBypassing || selecting}
+              className={`w-full h-11 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
+                isDark ? 'bg-amber-500/20 text-amber-200 border border-amber-500/30' : 'bg-amber-500 text-white border border-amber-600'
+              }`}
+            >
+              {testBypassing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />}
+              {testBypassing ? 'Creating test subscription…' : 'Skip Payment (Test Subscription)'}
+            </button>
           </div>
         </div>
       )}
