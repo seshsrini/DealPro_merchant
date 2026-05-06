@@ -380,26 +380,36 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
             </div>
           </div>
 
-          {(campaignUsage.campaigns_used >= campaignUsage.campaigns_limit || campaignUsage.dotd_used >= campaignUsage.dotd_limit) && (
-            <div className="mt-3 space-y-2">
-              {campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
-                <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-200'}`}>
-                  <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
-                  <p className={`text-xs ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>
-                    {t('m_campaign_limit_reached')} ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.
-                  </p>
-                </div>
-              )}
-              {campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
-                <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
-                  <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                  <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                    {t('m_dotd_limit_reached')} ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+          {(campaignUsage.campaigns_used >= campaignUsage.campaigns_limit || campaignUsage.dotd_used >= campaignUsage.dotd_limit) && (() => {
+            // Limits reset on the 1st of next month at 12 AM IST. Compute the
+            // friendly label using the device's local time — Indian merchants
+            // are already on IST, so this lines up with the server-side window.
+            const next = new Date();
+            next.setMonth(next.getMonth() + 1);
+            next.setDate(1);
+            const nextResetLabel = next.toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+            const waitMsg = t('m_or_wait_until_reset').replace('{date}', nextResetLabel);
+            return (
+              <div className="mt-3 space-y-2">
+                {campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
+                  <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-200'}`}>
+                    <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
+                    <p className={`text-xs ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>
+                      {t('m_campaign_limit_reached')} ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan, {waitMsg}.
+                    </p>
+                  </div>
+                )}
+                {campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
+                  <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+                    <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                    <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                      {t('m_dotd_limit_reached')} ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan, {waitMsg}.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

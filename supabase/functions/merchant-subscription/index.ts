@@ -193,8 +193,11 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'campaign_usage') {
-      // Get campaign usage for current calendar month
-      // Get year and month from request body, or use server time as fallback
+      // Campaign / DOTD limits reset on the 1st of each month at 12:00 AM IST
+      // (UTC+5:30). The Edge Function runtime is UTC, so naively reading
+      // new Date().getMonth() rolls the period over at 5:30 AM IST instead of
+      // midnight IST — making merchants wait an extra 5.5 hours past their
+      // expected reset. Default to IST when the client doesn't specify.
       const { year, month } = body;
 
       // 1. Get merchant's active subscription and tier limits
@@ -242,8 +245,11 @@ Deno.serve(async (req) => {
       // 3. Count campaigns active during the current calendar month
       // A campaign is "active this month" if its date range overlaps with the month:
       //   start_date <= end of month AND (end_date >= start of month OR end_date is null)
-      const currentYear = year || new Date().getFullYear();
-      const currentMonth = month !== undefined ? month : new Date().getMonth();
+      // IST = UTC + 5h30m. Shift now() into IST before reading year/month so
+      // the period boundary lines up with midnight IST on the 1st.
+      const istNow = new Date(Date.now() + 5.5 * 3600 * 1000);
+      const currentYear = year || istNow.getUTCFullYear();
+      const currentMonth = month !== undefined ? month : istNow.getUTCMonth();
 
       const startOfMonth = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
       const endOfMonth = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0]; // last day of month
