@@ -20,6 +20,8 @@ import {
   Crown,
   BarChart3,
   Users,
+  Shield,
+  FileText,
 } from 'lucide-react';
 import { AppView } from './types';
 import { useTranslation } from './contexts/LanguageContext';
@@ -310,6 +312,30 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             </p>
           </div>
         )}
+      </div>
+
+      {/* Legal Links */}
+      <div className="mt-6 flex flex-col gap-2">
+        <button
+          onClick={() => setView('privacy_policy')}
+          className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all active:scale-[0.98] ${isDark ? 'bg-slate-800/50 hover:bg-slate-800 text-slate-300' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'}`}
+        >
+          <div className="flex items-center gap-3">
+            <Shield className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+            <span className="text-sm font-medium">{t('m_privacy_policy')}</span>
+          </div>
+          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+        </button>
+        <button
+          onClick={() => setView('terms_of_service')}
+          className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all active:scale-[0.98] ${isDark ? 'bg-slate-800/50 hover:bg-slate-800 text-slate-300' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'}`}
+        >
+          <div className="flex items-center gap-3">
+            <FileText className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+            <span className="text-sm font-medium">{t('m_terms_of_service')}</span>
+          </div>
+          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+        </button>
       </div>
 
       {/* Footer */}
