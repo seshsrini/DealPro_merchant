@@ -57,6 +57,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Materialize .env.local + google-services.json from secrets
+        # Both files are .gitignored locally, so they're absent on the runner.
+        # Without .env.local: Vite bundles `import.meta.env.VITE_SUPABASE_URL`
+        #   as undefined → supabase client throws on construction → React
+        #   bundle dies before mounting → black screen on the emulator.
+        # Without google-services.json: Firebase Android SDK fails init →
+        #   same outcome via a different path.
+        # Fail loudly if any required secret is missing — silent fallback
+        # would mean a green CI run with a broken APK.
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          missing=0
+          for var in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY GOOGLE_SERVICES_JSON_B64; do
+            if [ -z "${!var}" ]; then echo "::error::Missing required secret: $var"; missing=1; fi
+          done
+          if [ "$missing" = "1" ]; then exit 1; fi
+
+          cat > .env.local <<EOF
+          VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+          VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+          VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
+          VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
+          VITE_ALLOW_TEST_SUBSCRIPTION=true
+          EOF
+          echo "Wrote .env.local ($(wc -c < .env.local) bytes)"
+
+          mkdir -p android/app
+          echo "$GOOGLE_SERVICES_JSON_B64" | base64 -d > android/app/google-services.json
+          echo "Wrote google-services.json ($(wc -c < android/app/google-services.json) bytes)"
+
       - name: Heartbeat — run_started
         run: |
           node .github/scripts/report.cjs run_started \
