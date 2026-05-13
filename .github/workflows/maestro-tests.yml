@@ -63,11 +63,13 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Setup JDK 17
+      - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          # @capacitor/browser@8 was compiled against JDK 21. JDK 21 also
+          # builds the rest of the Capacitor 6 modules without issue.
+          java-version: '21'
 
       - name: Install npm deps
         run: npm ci
