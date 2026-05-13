@@ -60,10 +60,11 @@ tags:
     timeout: 5000
 - takeScreenshot: 05-login
 
-# Tap the phone input field (placeholder includes 'Phone Number'),
-# then type the auto-test bypass number.
-- tapOn:
-    text: "Phone Number"
+# The phone <input> has autoFocus and is the only input on the screen,
+# so skip the tap (Maestro can't match input fields by placeholder text)
+# and just type — keystrokes go to the focused element. Once typed,
+# isPhoneValid evaluates true (digits.length === 10 for +91), which
+# enables the Continue button.
 - inputText: "3333333333"
 - takeScreenshot: 06-phone-entered
 - tapOn: "Continue"
