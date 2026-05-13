@@ -69,9 +69,18 @@ tags:
 - takeScreenshot: 06-phone-entered
 - tapOn: "Continue"
 
-# 6. Should auto-bypass OTP (no SMS round-trip for 3333333333) and
-#    land on the merchant onboarding wizard. Capture whatever appears
-#    so we can assert on the actual onboarding header next iteration.
+# 6. OTP-bypassed login lands on the biometric consent screen, NOT
+#    directly on the destination view. Both new signups AND returning
+#    logins go through this prompt the first time on a device.
+- extendedWaitUntil:
+    visible: "Enable Quick Login"
+    timeout: 10000
+- takeScreenshot: 07-biometric-consent
+- tapOn: "Not Now"
+
+# 7. NOW we should land on the actual destination — onboarding wizard
+#    for a fresh signup, dashboard for a returning user. Either way,
+#    capture so we know what's there.
 - waitForAnimationToEnd:
     timeout: 8000
-- takeScreenshot: 07-after-login
+- takeScreenshot: 08-after-biometric
