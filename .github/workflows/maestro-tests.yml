@@ -39,6 +39,13 @@ env:
   REPORT_URL: ${{ inputs.report_url }}
   REPORT_SECRET: ${{ inputs.report_secret }}
   RUN_ID: ${{ inputs.run_id }}
+  # Supabase config for screenshot uploads (used by run-flows.cjs). Promoted
+  # to the workflow env so they're visible inside android-emulator-runner's
+  # `script:` context — that subshell does NOT inherit secrets unless the
+  # secret name is referenced or the env var is exported here.
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  SUPABASE_SCREENSHOT_BUCKET: ${{ secrets.SUPABASE_SCREENSHOT_BUCKET }}
 
 jobs:
   build-and-test:
@@ -118,6 +125,28 @@ jobs:
             # report.cjs wrapper times each flow, captures screenshots, and
             # POSTs flow_started / flow_finished back to VedicJaalam.
             node .github/scripts/run-flows.cjs
+
+      - name: DIAG — list maestro-artifacts + supabase env (always)
+        if: always()
+        # Temporary diagnostic to figure out where Maestro wrote screenshots
+        # and whether the Supabase env vars are present (without leaking
+        # values). Remove once thumbnails reliably appear on the dashboard.
+        run: |
+          echo "=== ls -la maestro-artifacts/ (depth 3) ==="
+          if [ -d maestro-artifacts ]; then
+            find maestro-artifacts -maxdepth 3 -printf '%p (%s bytes)\n' 2>/dev/null || ls -la maestro-artifacts
+          else
+            echo "(maestro-artifacts/ does not exist)"
+          fi
+          echo ""
+          echo "=== Supabase env presence (lengths only — never values) ==="
+          echo "SUPABASE_URL set: $([ -n "$SUPABASE_URL" ] && echo "yes (${#SUPABASE_URL} chars)" || echo "NO")"
+          echo "SUPABASE_SERVICE_ROLE_KEY set: $([ -n "$SUPABASE_SERVICE_ROLE_KEY" ] && echo "yes (${#SUPABASE_SERVICE_ROLE_KEY} chars)" || echo "NO")"
+          echo "SUPABASE_SCREENSHOT_BUCKET: ${SUPABASE_SCREENSHOT_BUCKET:-(default: auto-test-screenshots)}"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_SCREENSHOT_BUCKET: ${{ secrets.SUPABASE_SCREENSHOT_BUCKET }}
 
       - name: Upload Maestro debug artifacts (always)
         if: always()
