@@ -112,14 +112,20 @@ async function runOneFlow(filePath) {
   const durationMs = Date.now() - startedAt;
   const status = result.status === 0 ? 'pass' : 'fail';
 
-  // Collect screenshots — Maestro writes screenshots/screenshot-*.png inside
-  // the debug-output directory.
+  // Collect screenshots from the flow artifacts dir. Includes both explicit
+  // takeScreenshot output AND Maestro's auto-generated failure-debug
+  // screenshots (which include unicode markers like ❌ in the filename —
+  // sanitize before upload since Supabase Storage rejects non-ASCII keys).
   let screenshotUrls = [];
   try {
     const candidates = collectPngs(flowArtifactsDir);
     for (let i = 0; i < candidates.length && i < 20; i++) {
       const local = candidates[i];
-      const remote = `${process.env.RUN_ID}/${testId}/${String(i + 1).padStart(2, '0')}-${path.basename(local)}`;
+      const safeName = path
+        .basename(local)
+        .replace(/[^A-Za-z0-9._-]/g, '_')
+        .replace(/_+/g, '_');
+      const remote = `${process.env.RUN_ID}/${testId}/${String(i + 1).padStart(2, '0')}-${safeName}`;
       const url = await uploadScreenshot(local, remote);
       if (url) screenshotUrls.push(url);
     }
