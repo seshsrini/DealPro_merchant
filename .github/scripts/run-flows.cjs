@@ -96,12 +96,18 @@ async function runOneFlow(filePath) {
   runReport('flow_started', { testId, startedAt: new Date().toISOString() });
 
   const startedAt = Date.now();
-  // `maestro test --debug-output` writes step screenshots + a summary into the
-  // given dir. Exit code 0 = pass, non-zero = fail.
+  // Run Maestro with cwd = flowArtifactsDir so explicit `takeScreenshot`
+  // commands in the flow write PNGs there (they default to cwd, NOT to
+  // --debug-output). --debug-output still receives the UI hierarchy +
+  // failure dumps. filePath is absolute so the cwd change is safe.
   const result = spawnSync(
     'maestro',
     ['test', '--debug-output', flowArtifactsDir, filePath],
-    { stdio: 'inherit', shell: process.platform === 'win32' },
+    {
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+      cwd: flowArtifactsDir,
+    },
   );
   const durationMs = Date.now() - startedAt;
   const status = result.status === 0 ? 'pass' : 'fail';
