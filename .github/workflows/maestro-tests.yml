@@ -80,7 +80,12 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        # gradlew was committed from Windows (no executable bit). chmod here
+        # rather than touching git's file mode, since this repo is developed
+        # on Windows and the bit would be re-stripped on every clone.
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
 
       - name: Enable KVM (for emulator perf)
         run: |
