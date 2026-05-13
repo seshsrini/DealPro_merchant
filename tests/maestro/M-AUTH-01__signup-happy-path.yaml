@@ -45,12 +45,14 @@ tags:
 - takeScreenshot: 03-location
 - tapOn: "Skip for now"
 
-# 4. Invite code — skip
+# 4. Invite code — skip via the "I don't have an invite code" button
+#    (the actual label, not a generic "Skip"). The apostrophe is a real
+#    apostrophe in the rendered DOM (JSX writes &apos;).
 - extendedWaitUntil:
     visible: "Enter invite code"
     timeout: 5000
 - takeScreenshot: 04-invite
-- tapOn: "Skip"
+- tapOn: "I don't have an invite code"
 
 # 5. Login view ('Partner Success' header, phone input)
 - extendedWaitUntil:
