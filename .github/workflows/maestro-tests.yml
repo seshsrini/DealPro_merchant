@@ -130,7 +130,12 @@ jobs:
 
       - name: Heartbeat — run_finished (always)
         if: always()
+        # MAESTRO_TOTALS is exported by run-flows.cjs to GITHUB_ENV so it's
+        # available here. Falls back to zeroes if the runner died before
+        # run-flows.cjs ever wrote it (e.g. APK build failed).
         run: |
           STATUS="success"
           if [ "${{ job.status }}" != "success" ]; then STATUS="failure"; fi
-          node .github/scripts/report.cjs run_finished --status "$STATUS"
+          TOTALS='{"total":0,"passed":0,"failed":0}'
+          if [ -n "$MAESTRO_TOTALS" ]; then TOTALS="$MAESTRO_TOTALS"; fi
+          node .github/scripts/report.cjs run_finished --status "$STATUS" --totals "$TOTALS"
