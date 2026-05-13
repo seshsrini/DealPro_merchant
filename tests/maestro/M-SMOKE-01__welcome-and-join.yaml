@@ -1,0 +1,35 @@
+# M-SMOKE-01: Welcome screen renders + JOIN navigates forward
+#
+# Real assertions now that the APK is built with proper env. Verifies
+# the welcome screen appears and then taps JOIN to advance to the next
+# screen (language selection per App.tsx). Screenshots both screens so
+# we can see exactly what the language picker looks like and write
+# proper assertions for it in the next iteration.
+
+appId: com.dealpro.merchant
+name: "M-SMOKE-01: Welcome + JOIN"
+tags:
+  - smoke
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# Splash auto-hides at 3000ms; welcome animations finish around ~6s.
+# Wait for the JOIN button text as the canary that welcome is fully on.
+- extendedWaitUntil:
+    visible: "JOIN"
+    timeout: 15000
+
+- assertVisible: "SIGN IN"
+- assertVisible: "JOIN"
+- assertVisible: "Grow"
+- takeScreenshot: 01-welcome-screen
+
+- tapOn: "JOIN"
+
+# Whatever screen comes next (language_selection per App.tsx). Wait for
+# any animation, then capture so we know what to assert on next iteration.
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: 02-after-join-tap
