@@ -119,6 +119,15 @@ jobs:
             # POSTs flow_started / flow_finished back to VedicJaalam.
             node .github/scripts/run-flows.cjs
 
+      - name: Upload Maestro debug artifacts (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-debug-${{ github.run_id }}
+          path: maestro-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Heartbeat — run_finished (always)
         if: always()
         run: |
