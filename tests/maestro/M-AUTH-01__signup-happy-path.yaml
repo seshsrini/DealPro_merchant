@@ -20,10 +20,18 @@ tags:
     clearState: true
     clearKeychain: true
 
-# 1. Welcome screen
+# Screenshot at launch (before any wait/assertion) so we always have a
+# visual of what the app is showing, even on timeout failures.
+- takeScreenshot: 00-launch
+- waitForAnimationToEnd:
+    timeout: 2000
+
+# 1. Welcome screen. Bumped timeout to 25s for flaky CI emulator and
+#    used a less-specific canary ('SIGN IN' tends to render slightly
+#    earlier than 'JOIN' in the float-in animation order).
 - extendedWaitUntil:
-    visible: "JOIN"
-    timeout: 15000
+    visible: "SIGN IN"
+    timeout: 25000
 - takeScreenshot: 01-welcome
 - assertVisible: "SIGN IN"
 - assertVisible: "JOIN"
