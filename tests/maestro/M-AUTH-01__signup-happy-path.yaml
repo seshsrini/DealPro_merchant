@@ -1,0 +1,37 @@
+# M-AUTH-01: New merchant signup with phone number
+#
+# Uses the auto-test bypass number 3333333333 — backend skips OTP verification
+# and accepts the canned 999999 OTP. See AuthStack.tsx + the
+# verify-merchant-otp edge function for the bypass logic.
+
+appId: com.dealpro.merchant
+name: "M-AUTH-01: Merchant signup happy path"
+tags:
+  - auth
+  - happy
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# Landing screen → choose merchant signup
+- assertVisible: "Sign up as Merchant"
+- tapOn: "Sign up as Merchant"
+
+# Phone entry — country code defaults to +91, just type the bypass number
+- assertVisible:
+    text: "Phone"
+    enabled: true
+- inputText: ${AUTO_TEST_PHONE}
+- tapOn: "Send OTP"
+
+# Auto-test bypass: backend short-circuits to OTP-entry screen
+- assertVisible: "Enter the OTP"
+- inputText: ${AUTO_TEST_OTP}
+- tapOn: "Verify"
+
+# Should land on the merchant onboarding wizard (Profile step)
+- extendedWaitUntil:
+    visible: "Tell us about your business"
+    timeout: 15000
+- takeScreenshot: signup-onboarding-landed

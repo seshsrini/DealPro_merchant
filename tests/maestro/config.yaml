@@ -1,0 +1,11 @@
+# Shared Maestro config used by every flow in this directory.
+#
+# `appId` is matched against the Capacitor `appId` in capacitor.config.ts
+# (com.dealpro.merchant). Maestro auto-launches it before each `flow:` step.
+appId: com.dealpro.merchant
+
+# Phones the merchant + edge-functions treat as auto-test bypass numbers (skip
+# the SMS round-trip). Shared with `7777777777` for manual QA.
+env:
+  AUTO_TEST_PHONE: "3333333333"
+  AUTO_TEST_OTP: "999999"

@@ -393,7 +393,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
 
     const cleanDigits = input.replace(/\D/g, '');
 
-    const TEST_NUMBERS = ['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555'];
+    const TEST_NUMBERS = ['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555', '3333333333'];
     if (selectedCountry.code === '+91' && !TEST_NUMBERS.includes(cleanDigits)) {
       if (cleanDigits.length !== 10 || !/^[6-9]/.test(cleanDigits)) {
         setAuthError('Please enter a valid 10-digit phone number.');
@@ -410,7 +410,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     setPhoneNumber(cleanDigits);
 
     // Test bypass — skip OTP for test numbers
-    if (['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555'].includes(cleanDigits)) {
+    if (['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555', '3333333333'].includes(cleanDigits)) {
       setIsPhoneVerifiedForLogin(true);
       return;
     }
