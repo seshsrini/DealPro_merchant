@@ -1,0 +1,28 @@
+# M-SMOKE-01: App launches and welcome screen renders
+#
+# Minimal smoke test that proves:
+#   • The APK installed correctly
+#   • Capacitor + the React bundle initialize without crash
+#   • The first user-visible screen (welcome) renders
+#
+# Doesn't test any auth/business logic — that comes next, once the
+# pipeline is proven end-to-end. Splash auto-advances to welcome within
+# a few seconds.
+
+appId: com.dealpro.merchant
+name: "M-SMOKE-01: App launches"
+tags:
+  - smoke
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# Splash → welcome transitions automatically. Wait up to 15s.
+- extendedWaitUntil:
+    visible: "SIGN IN"
+    timeout: 15000
+
+- assertVisible: "SIGN IN"
+- assertVisible: "JOIN"
+- takeScreenshot: welcome-screen-rendered

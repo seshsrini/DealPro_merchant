@@ -164,6 +164,10 @@ function collectPngs(dir) {
   const flows = fs
     .readdirSync(FLOWS_DIR)
     .filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'))
+    // Skip shared config / fixture files — only files prefixed with a real
+    // test_id (containing '__') are flows. config.yaml is just env vars
+    // re-used by every flow via ${...} interpolation.
+    .filter((f) => f.includes('__'))
     .sort()
     .map((f) => path.join(FLOWS_DIR, f));
 
