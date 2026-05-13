@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, Loader2, CheckCircle2, Package, AlertCircle } from 'lucide-react';
+import { Eye, Loader2, CheckCircle2, Package, AlertCircle, Pencil, ImageIcon, Tag, Layers, IndianRupee, Sliders, Store } from 'lucide-react';
 import { floatIn } from './floatIn';
 import { getSchemaForCategory } from '../../data/formSchema';
 import { addCampaignService } from '../../services/addCampaignService';
@@ -34,7 +34,47 @@ interface StepProductReviewProps {
   onSaveSuccess: () => void;
   onSaveError: (error: string) => void;
   theme: 'light' | 'dark';
+  /** Pencil-edit jump per section. Receives the step name; the parent maps
+   *  it to a step index. Optional — old callers without per-section edits
+   *  still work, the pencils just won't render. */
+  onEditStep?: (stepName: 'Photo' | 'Details' | 'Category' | 'Store' | 'Specs' | 'Pricing') => void;
+  /** True if the merchant has more than one store, so the Store section is shown. */
+  isMultiStore?: boolean;
 }
+
+// Reusable section card with a pencil-edit affordance, mirroring the
+// merchant-onboarding StepReviewDetails ReviewCard pattern. Edit pencil only
+// renders when onEdit is provided.
+const ReviewSection: React.FC<{
+  title: string;
+  icon: React.ReactNode;
+  onEdit?: () => void;
+  isDark: boolean;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}> = ({ title, icon, onEdit, isDark, style, children }) => (
+  <div
+    style={style}
+    className={`rounded-2xl border mb-4 overflow-hidden ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}
+  >
+    <div className={`flex items-center justify-between px-4 py-2.5 border-b ${isDark ? 'border-slate-700/60 bg-slate-800/60' : 'border-slate-100 bg-slate-50/60'}`}>
+      <div className="flex items-center gap-2">
+        {icon}
+        <h3 className={`text-xs font-bold uppercase tracking-wide ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{title}</h3>
+      </div>
+      {onEdit && (
+        <button
+          onClick={onEdit}
+          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90 ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-100 hover:bg-slate-200'}`}
+          aria-label={`Edit ${title}`}
+        >
+          <Pencil className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+        </button>
+      )}
+    </div>
+    <div className="p-4">{children}</div>
+  </div>
+);
 
 function describeStock(count: number | null): { label: string; color: string } {
   if (count === null) return { label: 'Available',            color: 'text-emerald-500' };
@@ -43,7 +83,7 @@ function describeStock(count: number | null): { label: string; color: string } {
 }
 
 export const StepProductReview: React.FC<StepProductReviewProps> = ({
-  wizardState, user, editingId, onBack, onSaveSuccess, onSaveError, theme,
+  wizardState, user, editingId, onBack, onSaveSuccess, onSaveError, theme, onEditStep, isMultiStore = false,
 }) => {
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
@@ -172,63 +212,75 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
         </p>
       </div>
 
-      {/* Product Card Preview */}
-      <div style={floatIn(150, visible)} className={`rounded-2xl overflow-hidden border mb-5 ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}>
-        {/* Image */}
-        <div className={`relative w-full aspect-video flex items-center justify-center ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+      {/* Photo */}
+      <ReviewSection
+        title="Photo"
+        icon={<ImageIcon className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
+        onEdit={onEditStep ? () => onEditStep('Photo') : undefined}
+        isDark={isDark}
+        style={floatIn(150, visible)}
+      >
+        <div className={`relative w-full aspect-video rounded-lg overflow-hidden flex items-center justify-center ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
           {wizardState.imageUrl ? (
             <img src={wizardState.imageUrl} alt={wizardState.name} className="w-full h-full object-contain" />
           ) : (
-            <Package className={`w-16 h-16 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
+            <Package className={`w-12 h-12 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
           )}
           {discountPct > 0 && (
-            <span className="absolute top-3 left-3 bg-emerald-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-              {discountPct}% off
-            </span>
+            <span className="absolute top-2 left-2 bg-emerald-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{discountPct}% off</span>
           )}
         </div>
+      </ReviewSection>
 
-        {/* Info */}
-        <div className="p-4">
-          {wizardState.brand && (
-            <p className={`text-[10px] font-medium mb-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              {wizardState.brand}
-            </p>
-          )}
-          <h3 className={`font-bold text-base mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            {wizardState.name}
-          </h3>
-          <p className={`text-xs mb-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-            {wizardState.category}
+      {/* Details (name + brand) */}
+      <ReviewSection
+        title="Details"
+        icon={<Tag className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
+        onEdit={onEditStep ? () => onEditStep('Details') : undefined}
+        isDark={isDark}
+        style={floatIn(200, visible)}
+      >
+        {wizardState.brand && (
+          <p className={`text-[10px] font-medium mb-0.5 uppercase tracking-wide ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{wizardState.brand}</p>
+        )}
+        <h3 className={`font-bold text-base ${isDark ? 'text-white' : 'text-slate-900'}`}>{wizardState.name}</h3>
+      </ReviewSection>
+
+      {/* Category */}
+      <ReviewSection
+        title="Category"
+        icon={<Layers className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
+        onEdit={onEditStep ? () => onEditStep('Category') : undefined}
+        isDark={isDark}
+        style={floatIn(250, visible)}
+      >
+        <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{wizardState.category || '—'}</p>
+      </ReviewSection>
+
+      {/* Store (multi-store only) */}
+      {isMultiStore && (
+        <ReviewSection
+          title="Store"
+          icon={<Store className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
+          onEdit={onEditStep ? () => onEditStep('Store') : undefined}
+          isDark={isDark}
+          style={floatIn(280, visible)}
+        >
+          <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+            {(wizardState.storeIds || []).length > 0 ? `${wizardState.storeIds.length} store${wizardState.storeIds.length === 1 ? '' : 's'} selected` : 'No stores selected'}
           </p>
+        </ReviewSection>
+      )}
 
-          {/* Price row */}
-          <div className="flex items-center gap-2 mb-2">
-            {wizardState.price && (
-              <span className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                ₹{wizardState.price}
-              </span>
-            )}
-            {hasDiscount && (
-              <span className={`text-sm line-through ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                ₹{wizardState.mrp}
-              </span>
-            )}
-          </div>
-
-          {/* Stock */}
-          <p className={`text-xs font-medium ${stockMeta.color}`}>
-            {stockMeta.label}
-          </p>
-        </div>
-      </div>
-
-      {/* Specifications summary */}
+      {/* Specifications */}
       {specEntries.length > 0 && (
-        <div style={floatIn(300, visible)} className={`rounded-2xl p-4 border mb-5 ${isDark ? 'border-slate-700 bg-slate-800/50' : 'border-slate-200 bg-slate-50'}`}>
-          <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-            Specifications
-          </p>
+        <ReviewSection
+          title="Specifications"
+          icon={<Sliders className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
+          onEdit={onEditStep ? () => onEditStep('Specs') : undefined}
+          isDark={isDark}
+          style={floatIn(300, visible)}
+        >
           <div className="space-y-2">
             {specEntries.map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between">
@@ -239,8 +291,27 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
               </div>
             ))}
           </div>
-        </div>
+        </ReviewSection>
       )}
+
+      {/* Pricing & Stock */}
+      <ReviewSection
+        title="Pricing"
+        icon={<IndianRupee className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
+        onEdit={onEditStep ? () => onEditStep('Pricing') : undefined}
+        isDark={isDark}
+        style={floatIn(350, visible)}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          {wizardState.price && (
+            <span className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>₹{wizardState.price}</span>
+          )}
+          {hasDiscount && (
+            <span className={`text-sm line-through ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>₹{wizardState.mrp}</span>
+          )}
+        </div>
+        <p className={`text-xs font-medium ${stockMeta.color}`}>{stockMeta.label}</p>
+      </ReviewSection>
 
       {/* Progress overlay */}
       {progress && (

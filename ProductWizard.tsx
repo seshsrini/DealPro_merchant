@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useReducer, useCallback } from 'react';
+import React, { useState, useEffect, useReducer, useCallback, useRef } from 'react';
 import { AppView, User } from './types';
 import { X, CheckCircle2, RotateCcw } from 'lucide-react';
 import { getSchemaForCategory } from './data/formSchema';
@@ -111,6 +111,10 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
   const isDark = theme === 'dark';
   const [state, dispatch] = useReducer(wizardReducer, initialState);
   const [currentStep, setCurrentStep] = useState(0);
+  // True when the merchant tapped a Review pencil to edit one section.
+  // The next handleNext / save action should return them to Review instead
+  // of advancing to the next step in sequence.
+  const returnToReviewRef = useRef(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('left');
   const [isTransitioning, setIsTransitioning] = useState(false);
 
@@ -141,7 +145,10 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
       .catch(err => console.error('[ProductWizard] Failed to load stores:', err));
   }, [user.id]);
 
-  // Pre-populate for edit mode
+  // Pre-populate for edit mode AND jump straight to the Review step.
+  // Editing an existing product shouldn't re-walk every wizard step — the
+  // Review screen has pencil-edit affordances per field, which is the right
+  // flow for surgical edits.
   useEffect(() => {
     if (editProduct) {
       dispatch({
@@ -161,8 +168,10 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
           stockCount: editProduct.stockCount,
         },
       });
+      // Review is always the last step in both single- and multi-store layouts.
+      setCurrentStep(STEP_LABELS.length - 1);
     }
-  }, [editProduct]);
+  }, [editProduct, STEP_LABELS.length]);
 
   // Restore draft for new products only
   useEffect(() => {
@@ -206,6 +215,17 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
 
   const handleNext = () => {
     saveDraft();
+
+    // Pencil-edit return: when the merchant jumped here from Review's per-
+    // section pencil, route back to Review instead of advancing to the next
+    // step in sequence. Saves them from walking the rest of the wizard
+    // every time they edit one field.
+    if (returnToReviewRef.current) {
+      returnToReviewRef.current = false;
+      goToStep(STEP_LABELS.length - 1);
+      return;
+    }
+
     const nextStepName = STEP_LABELS[currentStep + 1];
 
     // When moving to the Store step, auto-select stores matching the chosen category
@@ -415,6 +435,16 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
             onSaveSuccess={handleSaveSuccess}
             onSaveError={handleSaveError}
             theme={theme}
+            isMultiStore={isMultiStore}
+            onEditStep={(stepName) => {
+              // Pencil-edit jump: go to the requested step and remember to
+              // route 'Continue' back to Review when the merchant finishes.
+              const idx = STEP_LABELS.indexOf(stepName);
+              if (idx >= 0) {
+                returnToReviewRef.current = true;
+                goToStep(idx);
+              }
+            }}
           />
         );
       default:
