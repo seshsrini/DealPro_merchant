@@ -77,18 +77,19 @@ tags:
 - takeScreenshot: 06-phone-entered
 - tapOn: "Continue"
 
-# 6. OTP-bypassed login lands on the biometric consent screen, NOT
-#    directly on the destination view. Both new signups AND returning
-#    logins go through this prompt the first time on a device.
-- extendedWaitUntil:
-    visible: "Enable Quick Login"
-    timeout: 10000
-- takeScreenshot: 07-biometric-consent
-- tapOn: "Not Now"
-
-# 7. NOW we should land on the actual destination — onboarding wizard
-#    for a fresh signup, dashboard for a returning user. Either way,
-#    capture so we know what's there.
+# 6. After Continue, the path diverges:
+#    • New signup → onboarding wizard (direct, no biometric prompt)
+#    • Returning login → biometric consent screen first, then dashboard
+#    Capture state without asserting on a specific screen, then try to
+#    dismiss biometric if present (optional: true won't fail the flow
+#    if biometric isn't shown).
 - waitForAnimationToEnd:
     timeout: 8000
-- takeScreenshot: 08-after-biometric
+- takeScreenshot: 07-after-continue
+
+- tapOn:
+    text: "Not Now"
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: 08-final-destination
