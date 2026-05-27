@@ -1,0 +1,141 @@
+diff --git a/node_modules/cordova-plugin-printer/plugin.xml b/node_modules/cordova-plugin-printer/plugin.xml
+index a1cab18..fa6fc9f 100644
+--- a/node_modules/cordova-plugin-printer/plugin.xml
++++ b/node_modules/cordova-plugin-printer/plugin.xml
+@@ -94,9 +94,11 @@
+             </feature>
+         </config-file>
+ 
+-        <preference name="ANDROID_SUPPORT_V4_VERSION" default="28.+"/>
+-
+-        <framework src="com.android.support:support-v4:$ANDROID_SUPPORT_V4_VERSION"/>
++        <!-- Migrated off the legacy com.android.support:support-v4 (Android X clash:
++             duplicate appComponentFactory / classes). The plugin only needs PrintHelper
++             + the annotation types, so depend on the AndroidX artifacts directly. -->
++        <framework src="androidx.print:print:1.0.0"/>
++        <framework src="androidx.annotation:annotation:1.7.1"/>
+ 
+         <source-file src="src/android/PrintAdapter.java"
+             target-dir="src/de/appplant/cordova/plugin/printer" />
+diff --git a/node_modules/cordova-plugin-printer/src/android/PrintAdapter.java b/node_modules/cordova-plugin-printer/src/android/PrintAdapter.java
+index 4c46df9..f72800c 100644
+--- a/node_modules/cordova-plugin-printer/src/android/PrintAdapter.java
++++ b/node_modules/cordova-plugin-printer/src/android/PrintAdapter.java
+@@ -28,8 +28,8 @@ import android.print.PageRange;
+ import android.print.PrintAttributes;
+ import android.print.PrintDocumentAdapter;
+ import android.print.PrintDocumentInfo;
+-import android.support.annotation.NonNull;
+-import android.support.v4.print.PrintHelper;
++import androidx.annotation.NonNull;
++import androidx.print.PrintHelper;
+ 
+ import java.io.FileOutputStream;
+ import java.io.IOException;
+diff --git a/node_modules/cordova-plugin-printer/src/android/PrintContent.java b/node_modules/cordova-plugin-printer/src/android/PrintContent.java
+index ccf0ec4..86a2aed 100644
+--- a/node_modules/cordova-plugin-printer/src/android/PrintContent.java
++++ b/node_modules/cordova-plugin-printer/src/android/PrintContent.java
+@@ -24,8 +24,8 @@ package de.appplant.cordova.plugin.printer;
+ import android.content.Context;
+ import android.graphics.Bitmap;
+ import android.graphics.BitmapFactory;
+-import android.support.annotation.NonNull;
+-import android.support.annotation.Nullable;
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
+ 
+ import java.io.BufferedInputStream;
+ import java.io.IOException;
+diff --git a/node_modules/cordova-plugin-printer/src/android/PrintIO.java b/node_modules/cordova-plugin-printer/src/android/PrintIO.java
+index 87a4686..8412ed5 100644
+--- a/node_modules/cordova-plugin-printer/src/android/PrintIO.java
++++ b/node_modules/cordova-plugin-printer/src/android/PrintIO.java
+@@ -26,8 +26,8 @@ import android.content.res.AssetManager;
+ import android.content.res.Resources;
+ import android.graphics.Bitmap;
+ import android.graphics.BitmapFactory;
+-import android.support.annotation.NonNull;
+-import android.support.annotation.Nullable;
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
+ import android.util.Base64;
+ 
+ import java.io.ByteArrayInputStream;
+diff --git a/node_modules/cordova-plugin-printer/src/android/PrintManager.java b/node_modules/cordova-plugin-printer/src/android/PrintManager.java
+index e0f7838..b363069 100644
+--- a/node_modules/cordova-plugin-printer/src/android/PrintManager.java
++++ b/node_modules/cordova-plugin-printer/src/android/PrintManager.java
+@@ -27,9 +27,9 @@ import android.graphics.Bitmap;
+ import android.print.PrintAttributes;
+ import android.print.PrintDocumentAdapter;
+ import android.print.PrintJob;
+-import android.support.annotation.NonNull;
+-import android.support.annotation.Nullable;
+-import android.support.v4.print.PrintHelper;
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.print.PrintHelper;
+ import android.webkit.CookieManager;
+ import android.webkit.WebSettings;
+ import android.webkit.WebView;
+diff --git a/node_modules/cordova-plugin-printer/src/android/PrintOptions.java b/node_modules/cordova-plugin-printer/src/android/PrintOptions.java
+index e5e19db..53d8fdb 100644
+--- a/node_modules/cordova-plugin-printer/src/android/PrintOptions.java
++++ b/node_modules/cordova-plugin-printer/src/android/PrintOptions.java
+@@ -22,8 +22,8 @@
+ package de.appplant.cordova.plugin.printer;
+ 
+ import android.print.PrintAttributes;
+-import android.support.annotation.NonNull;
+-import android.support.v4.print.PrintHelper;
++import androidx.annotation.NonNull;
++import androidx.print.PrintHelper;
+ 
+ import org.json.JSONObject;
+ 
+@@ -35,10 +35,10 @@ import static android.print.PrintAttributes.Margins.NO_MARGINS;
+ import static android.print.PrintAttributes.MediaSize.UNKNOWN_LANDSCAPE;
+ import static android.print.PrintAttributes.MediaSize.UNKNOWN_PORTRAIT;
+ import static android.print.PrintDocumentInfo.PAGE_COUNT_UNKNOWN;
+-import static android.support.v4.print.PrintHelper.ORIENTATION_LANDSCAPE;
+-import static android.support.v4.print.PrintHelper.ORIENTATION_PORTRAIT;
+-import static android.support.v4.print.PrintHelper.SCALE_MODE_FILL;
+-import static android.support.v4.print.PrintHelper.SCALE_MODE_FIT;
++import static androidx.print.PrintHelper.ORIENTATION_LANDSCAPE;
++import static androidx.print.PrintHelper.ORIENTATION_PORTRAIT;
++import static androidx.print.PrintHelper.SCALE_MODE_FILL;
++import static androidx.print.PrintHelper.SCALE_MODE_FIT;
+ 
+ /**
+  * Wrapper for the print job settings.
+diff --git a/node_modules/cordova-plugin-printer/src/android/PrintProxy.java b/node_modules/cordova-plugin-printer/src/android/PrintProxy.java
+index f258c51..918b0c5 100644
+--- a/node_modules/cordova-plugin-printer/src/android/PrintProxy.java
++++ b/node_modules/cordova-plugin-printer/src/android/PrintProxy.java
+@@ -27,8 +27,8 @@ import android.os.ParcelFileDescriptor;
+ import android.print.PageRange;
+ import android.print.PrintAttributes;
+ import android.print.PrintDocumentAdapter;
+-import android.support.annotation.NonNull;
+-import android.support.v4.print.PrintHelper;
++import androidx.annotation.NonNull;
++import androidx.print.PrintHelper;
+ 
+ /**
+  * Simple delegate class to have access to the onFinish method.
+diff --git a/node_modules/cordova-plugin-printer/src/android/Printer.java b/node_modules/cordova-plugin-printer/src/android/Printer.java
+index afb49bb..01784db 100644
+--- a/node_modules/cordova-plugin-printer/src/android/Printer.java
++++ b/node_modules/cordova-plugin-printer/src/android/Printer.java
+@@ -21,8 +21,8 @@
+ 
+ package de.appplant.cordova.plugin.printer;
+ 
+-import android.support.annotation.NonNull;
+-import android.support.annotation.Nullable;
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
+ import android.webkit.WebView;
+ 
+ import org.apache.cordova.CallbackContext;

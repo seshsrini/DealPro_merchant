@@ -242,22 +242,62 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
   }, [user?.id]);
 
   const fetchAnalytics = async () => {
-    setLoading(true);
-    setError(null);
+    // ---- Reliability rework ---------------------------------------------
+    // The previous version flipped the whole screen to "Unable to load
+    // analytics" on any transient supabase function blip, even when we had
+    // perfectly good analytics from a prior fetch. Testers hit the error
+    // page on every other open. New strategy:
+    //   1. Restore the last-known analytics from cache instantly so the screen
+    //      never blanks — the user sees their numbers immediately.
+    //   2. Refresh in the background with auto-retry + exponential backoff
+    //      (3 attempts: 0ms, ~800ms, ~1600ms) so a single bad request doesn't
+    //      surface as an error.
+    //   3. Only ever show the full-screen error UI when we have NOTHING to
+    //      show (no cache + all retries failed). If retries fail but cached
+    //      analytics are on screen, keep them visible and just log — the user
+    //      can pull to refresh / tap a period to retry.
+    const cacheKey = `merchant_analytics_${user?.id ?? 'anon'}_${selectedPeriod}`;
+    let haveSomethingOnScreen = false;
     try {
-      const { data, error } = await supabase.functions.invoke('merchant-analytics', {
-        body: { period: selectedPeriod }
-      });
-      if (error) {
-        setError('Unable to load analytics. Please try again.');
-        return;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        setAnalytics(JSON.parse(cached));
+        setLoading(false);
+        haveSomethingOnScreen = true;
       }
-      setAnalytics(data);
-    } catch (err: any) {
-      setError('Unable to load analytics. Please try again.');
-    } finally {
-      setLoading(false);
+    } catch { /* malformed cache — ignore */ }
+
+    if (!haveSomethingOnScreen) setLoading(true);
+    setError(null);
+
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const { data, error } = await supabase.functions.invoke('merchant-analytics', {
+          body: { period: selectedPeriod },
+        });
+        if (error) throw error;
+        setAnalytics(data);
+        setError(null);
+        try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch { /* quota — non-fatal */ }
+        setLoading(false);
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 800 * (attempt + 1))); // 800ms, 1600ms
+        }
+      }
     }
+
+    // All 3 attempts failed.
+    console.warn('[MerchantAnalytics] fetch failed after retries:', lastErr);
+    setLoading(false);
+    if (!haveSomethingOnScreen) {
+      // Truly nothing to show — surface the error screen + Retry button.
+      setError('Unable to load analytics. Please try again.');
+    }
+    // else: keep showing the cached analytics, don't blank the screen.
   };
 
   if (loading) {
