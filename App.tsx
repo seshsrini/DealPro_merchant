@@ -32,6 +32,8 @@ const AppContent: React.FC = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [loading, setLoading] = useState(false);
   const [hasBiometricSession, setHasBiometricSession] = useState(false);
+  const [subscriptionActivating, setSubscriptionActivating] = useState(false);
+  const [subscriptionActivationStuck, setSubscriptionActivationStuck] = useState(false);
   const [dealIdToEdit, setDealIdToEdit] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [preSelectedTab, setPreSelectedTab] = useState<'active' | 'expired' | null>(null);
@@ -108,14 +110,23 @@ const AppContent: React.FC = () => {
     if (mainRef.current) mainRef.current.scrollTo(0, 0);
   }, [view]);
 
+  // Tracks whether the first deals fetch has completed. The loading animation
+  // is shown only on this initial load — the 10s auto-refresh polls stay silent
+  // so the list doesn't flash a loader every cycle.
+  const dealsLoadedRef = useRef(false);
+  useEffect(() => { dealsLoadedRef.current = false; }, [user.id]);
+
   // refreshDeals fetches merchant's own campaigns
   const refreshDeals = useCallback(async () => {
     if (!user.isLoggedIn || !user.id || !user.access_token) {
       console.log("[App.tsx refreshDeals] Authentication state incomplete. Aborting fetch.");
       return;
     }
-    
+
     console.log(`[App.tsx refreshDeals] Pulse triggered for User: ${user.id} (${user.role})`);
+
+    const isInitialLoad = !dealsLoadedRef.current;
+    if (isInitialLoad) setLoading(true);
 
     try {
       let fetchedDeals: Deal[] = [];
@@ -124,10 +135,13 @@ const AppContent: React.FC = () => {
         fetchedDeals = await addCampaignService.getMerchantDeals(user.id);
         console.log(`[App.tsx refreshDeals] Pipeline Success: Received ${fetchedDeals.length} campaigns.`);
       }
-      
+
       setDeals(fetchedDeals);
+      dealsLoadedRef.current = true;
     } catch (err) {
       console.error("[App.tsx refreshDeals] Data pipeline failure:", err);
+    } finally {
+      if (isInitialLoad) setLoading(false);
     }
   }, [user.id, user.role, user.isLoggedIn, user.access_token]); // Removed 'loading' to prevent re-creation loops
 
@@ -138,6 +152,66 @@ const AppContent: React.FC = () => {
       }
     }
   }, [user.id, user.isLoggedIn, user.role, view, refreshDeals]);
+
+  // Razorpay return — both native deep link and web postMessage trigger the
+  // same activation polling flow. We poll instead of trusting either signal
+  // because the verify-subscription route writes `pending_activation` and the
+  // Supabase webhook handler is what flips to `active` (a few seconds lag).
+  const pollInFlightRef = useRef(false);
+  const pollForSubscriptionActivation = useCallback(async () => {
+    if (pollInFlightRef.current) return; // dedupe overlapping triggers
+    if (!user.id || !user.access_token) return;
+    pollInFlightRef.current = true;
+    setSubscriptionActivating(true);
+    try {
+      const deadline = Date.now() + 15_000;
+      let lastInfo: { hasActiveSubscription: boolean; subscription_status?: string; current_tier_id?: number } | null = null;
+      while (Date.now() < deadline) {
+        lastInfo = await merchantSubscriptionService.checkActiveSubscription(user.id, user.access_token);
+        if (lastInfo?.hasActiveSubscription) break;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      setSubscriptionActivating(false);
+      if (lastInfo?.hasActiveSubscription) {
+        setUser({
+          ...user,
+          hasActiveSubscription: true,
+          subscription_status: lastInfo.subscription_status as any,
+          current_tier_id: lastInfo.current_tier_id ?? user.current_tier_id,
+        });
+      } else {
+        setSubscriptionActivationStuck(true);
+      }
+    } catch (err) {
+      console.error('[App] activation polling error:', err);
+      setSubscriptionActivating(false);
+    } finally {
+      pollInFlightRef.current = false;
+    }
+  }, [user, setUser]);
+
+  // Razorpay Checkout now runs in-app (services/razorpayCheckoutService.ts) and
+  // dispatches a window 'dealpro:paid' CustomEvent on successful verification.
+  // This listener kicks off the merchant_subscriptions poll so the wizard
+  // unlocks once the razorpay-webhook function flips status to 'active'.
+  //
+  // Replaced two legacy listeners:
+  //   - `appUrlOpen` for `dealpro://paid?subscription_id=...` (native deep
+  //     link from the VedicJaalam /subscribe page)
+  //   - window `message` for `{ type: 'dealpro:paid' }` posted by the
+  //     VedicJaalam /subscribe page on web
+  // Both paths required the Vercel-hosted /subscribe page, which we no longer
+  // use. If that page is ever revived, restore those listeners from git.
+  useEffect(() => {
+    if (!user.isLoggedIn || user.role !== 'merchant' || !user.id) return;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      console.log('[App] dealpro:paid CustomEvent received:', detail);
+      pollForSubscriptionActivation();
+    };
+    window.addEventListener('dealpro:paid', handler as EventListener);
+    return () => window.removeEventListener('dealpro:paid', handler as EventListener);
+  }, [user.id, user.isLoggedIn, user.role, pollForSubscriptionActivation]);
 
   // Update Supabase client session whenever user.access_token changes
   const wasLoggedInRef = useRef(false);
@@ -663,6 +737,50 @@ const AppContent: React.FC = () => {
           />
         </>
       )}
+      {/* Subscription activation overlay — shown briefly while polling for
+          the webhook to flip status to 'active' after a Razorpay payment. */}
+      {(subscriptionActivating || subscriptionActivationStuck) && (
+        <div className="fixed inset-0 z-[400] bg-black/60 flex items-center justify-center px-8">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center">
+            {subscriptionActivating && (
+              <>
+                <div className="mx-auto mb-3 h-12 w-12 rounded-full border-4 border-amber-200 border-t-amber-500 animate-spin" />
+                <p className="text-base font-semibold text-slate-900">
+                  Activating your subscription
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Payment received — finalising with Razorpay.
+                </p>
+              </>
+            )}
+            {!subscriptionActivating && subscriptionActivationStuck && (
+              <>
+                <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center">
+                  <span className="text-2xl">⏳</span>
+                </div>
+                <p className="text-base font-semibold text-slate-900">
+                  Almost there
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Payment received, but Razorpay is taking longer than usual to
+                  confirm. Your subscription will activate within a few minutes —
+                  no need to pay again.
+                </p>
+                <button
+                  onClick={() => {
+                    setSubscriptionActivating(false);
+                    setSubscriptionActivationStuck(false);
+                  }}
+                  className="mt-4 h-10 px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98]"
+                >
+                  Got it
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <style>{`@keyframes loading { from { width: 0%; } to { width: 100%; } }`}</style>
     </div>
   );
