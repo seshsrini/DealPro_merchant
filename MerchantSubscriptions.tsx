@@ -8,6 +8,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { subscriptionService } from './services/subscriptionService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
+import { razorpayCheckoutService } from './services/razorpayCheckoutService';
 import { supabase } from './services/supabaseClient';
 import { useTranslation } from './contexts/LanguageContext';
 import {
@@ -184,6 +185,24 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       setError('An unexpected error occurred. Please try again.');
       setSelecting(false);
       setSelectedTierId(null);
+    }
+  };
+
+  // Opens Razorpay Checkout in-app via services/razorpayCheckoutService. That
+  // service calls Supabase Edge Functions `create-subscription` and
+  // `verify-subscription`, then dispatches a 'dealpro:paid' CustomEvent which
+  // App.tsx listens to and starts polling merchant_subscriptions for active.
+  const handlePayWithRazorpay = async () => {
+    if (!tierToConfirm || !user.id) return;
+    setShowConfirmation(false);
+    try {
+      await razorpayCheckoutService.openCheckout({
+        tierKey: tierToConfirm.tier_key,
+        merchantId: user.id,
+      });
+    } catch (err) {
+      console.error('[MerchantSubscriptions] Razorpay checkout open failed:', err);
+      setError('Could not open the payment page. Please try again.');
     }
   };
 
@@ -603,6 +622,15 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 <span>{t('m_confirm')}</span>
               </button>
             </div>
+
+            {/* Razorpay path — opens VedicJaalam /subscribe in an external browser. */}
+            <button
+              onClick={handlePayWithRazorpay}
+              className="w-full h-11 rounded-xl bg-amber-500 text-white text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            >
+              <CreditCard className="w-4 h-4" />
+              Pay with Razorpay (test)
+            </button>
           </div>
         </div>
       )}
