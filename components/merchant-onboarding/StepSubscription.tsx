@@ -12,7 +12,11 @@ import { floatIn } from './floatIn';
 interface StepSubscriptionProps {
   user: User;
   setUser: (user: User) => void;
-  onComplete: (subscriptionFee?: number, subscriptionId?: number) => void;
+  // alreadyActive: true if a subscription was created synchronously here
+  // (test bypass / dev trial path). Tells the parent to skip the loyalty +
+  // payment step and jump straight to congrats. Default false → loyalty
+  // step handles Razorpay.
+  onComplete: (subscriptionFee?: number, subscriptionId?: number, tierKey?: string, alreadyActive?: boolean) => void;
   onBack: () => void;
   theme: 'light' | 'dark';
   trialExpired?: boolean; // true when shown because trial period ended
@@ -39,12 +43,25 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
   const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true';
   const [testBypassing, setTestBypassing] = useState(false);
 
+  // Advances to the loyalty step without creating a subscription or charging
+  // anything. The Razorpay payment is taken on StepLoyaltyAddon so the user
+  // can decide whether to bundle the loyalty add-on into the same charge.
+  const handleContinueToLoyalty = useCallback(() => {
+    if (!tierToConfirm || !user.id) return;
+    setShowConfirm(false);
+    setError(null);
+    onComplete(tierToConfirm.subscription_fee, undefined, tierToConfirm.tier_key);
+  }, [tierToConfirm, user.id, onComplete]);
+
   const handleTestBypass = useCallback(async () => {
     if (!user.id || testBypassing) return;
     setTestBypassing(true);
     setError(null);
     try {
       const { data, error: efErr } = await supabase.functions.invoke('merchant-subscription', {
+        // Uses the dedicated 'pro_test' tier in subscription_tiers
+        // (is_active=false so it doesn't appear in the public tier list,
+        // limits are 999/999 so the test bypass never bumps into a cap).
         body: { action: 'create_test_subscription', tier_key: 'pro_test' },
       });
       if (efErr || !data?.success) {
@@ -57,7 +74,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
         subscription_status: 'active',
         current_tier_id: data.subscription?.id ?? null,
       });
-      onComplete(0, data.subscriptionId);
+      onComplete(0, data.subscriptionId, undefined, true);
     } catch (err: any) {
       console.error('[StepSubscription] Test bypass error:', err?.message || err);
       setError(err?.message || 'Test bypass failed.');
@@ -131,7 +148,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
             subscription_status: 'active',
             current_tier_id: tierToConfirm.id,
           });
-          onComplete(tierToConfirm.subscription_fee, result.subscriptionId);
+          onComplete(tierToConfirm.subscription_fee, result.subscriptionId, undefined, true);
         } else {
           setError('Purchase was not completed. Please try again.');
           setSelecting(false);
@@ -212,7 +229,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
         subscription_status: result.isTrialing ? 'trialing' : 'active',
         current_tier_id: tierToConfirm.id,
       });
-      onComplete(tierToConfirm.subscription_fee, result.subscriptionId);
+      onComplete(tierToConfirm.subscription_fee, result.subscriptionId, undefined, true);
     } catch (err: any) {
       console.error('[StepSubscription] Subscription error:', err.message);
 
@@ -235,7 +252,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
             subscription_status: 'active',
             current_tier_id: tierToConfirm.id,
           });
-          onComplete(tierToConfirm.subscription_fee, existingSub.id);
+          onComplete(tierToConfirm.subscription_fee, existingSub.id, undefined, true);
           return;
         }
       } catch {}
@@ -396,22 +413,38 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
                 </div>
               )}
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowConfirm(false)}
-                className={`flex-1 h-12 rounded-xl text-sm font-semibold ${
-                  isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                Cancel
-              </button>
+            {/* Primary action: advance to the loyalty step. Payment happens
+                there, after the merchant has decided about the loyalty add-on,
+                so the Razorpay total reflects the final amount. */}
+            <button
+              onClick={handleContinueToLoyalty}
+              className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+            >
+              Continue
+            </button>
+
+            {/* Legacy 120-day-trial path — left intact behind the dev-only
+                test bypass flag (allowTestBypass = VITE_ALLOW_TEST_SUBSCRIPTION).
+                Hidden in normal production builds. */}
+            {allowTestBypass && (
               <button
                 onClick={handleConfirm}
-                className="flex-1 h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold"
+                className={`mt-2 w-full h-10 rounded-lg text-xs font-medium underline-offset-2 hover:underline ${
+                  isDark ? 'text-slate-400' : 'text-slate-500'
+                }`}
               >
-                Confirm
+                [Dev] Start 120-day trial without payment
               </button>
-            </div>
+            )}
+
+            <button
+              onClick={() => setShowConfirm(false)}
+              className={`mt-1 w-full h-10 rounded-lg text-xs font-medium ${
+                isDark ? 'text-slate-500' : 'text-slate-400'
+              }`}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -444,7 +477,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
       )}
 
       {!trialExpired && (
-        <div style={floatIn(600, visible)} className="mt-auto pb-8 pt-4">
+        <div style={floatIn(600, visible)} className="mt-auto pb-safe-bottom pt-4">
           <button
             onClick={onBack}
             className={`w-full h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${

@@ -31,8 +31,12 @@ import {
   Store,
   Gift,
   Truck,
+  Printer,
 } from 'lucide-react';
 import { MediaLightbox } from './components/MediaLightbox';
+import { POSTER_TEMPLATES, openDealPoster, buildPosterHtml, type PosterTemplate } from './utils/printDealPoster';
+import { renderPosterMiniMock } from './components/PosterMiniMock';
+import { DealsLoader } from './components/DealsLoader';
 import { pickBadgeCornerForImage, BadgeCorner } from './utils/badgeCornerForImage';
 
 const EDIT_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
@@ -96,6 +100,9 @@ interface MerchantMyCampaignsProps {
   preSelectedTab?: CampaignTab | null;
   theme?: 'light' | 'dark';
   setDealIdToEdit?: (id: string | null) => void;
+  // 'dotd_only' filters to is_deal_of_the_day deals and retargets the
+  // create button + limit check at DOTD instead of regular campaigns.
+  mode?: 'all' | 'dotd_only';
 }
 
 type CampaignTab = 'active' | 'expired';
@@ -105,8 +112,9 @@ const DEFAULT_DEAL_IMAGE = 'https://images.unsplash.com/photo-1607082348824-0a96
 export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
   user, deals = [], loading, setLoading, refreshDeals, setView,
   preSelectedEditDealId, onClearPreSelected, preSelectedTab, theme = 'dark',
-  setDealIdToEdit,
+  setDealIdToEdit, mode = 'all',
 }) => {
+  const isDotdMode = mode === 'dotd_only';
   const { t, getLocalizedText } = useTranslation();
   const isDark = theme === 'dark';
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -123,6 +131,12 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
   const [showRoiCalculator, setShowRoiCalculator] = useState<Record<string, boolean>>({});
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [merchantStores, setMerchantStores] = useState<any[]>([]);
+  // Poster picker for in-store print (4 templates). Opened from the deal-detail
+  // top-right Printer button. Null when closed.
+  const [posterPickerForDeal, setPosterPickerForDeal] = useState<Deal | null>(null);
+  // Proof-read preview shown after the merchant picks a template, before the
+  // actual print window opens. They can confirm or go back to pick another.
+  const [posterPreview, setPosterPreview] = useState<{ deal: Deal; template: PosterTemplate } | null>(null);
 
   // DOTD badge corner — picked dynamically from the selected deal's cover image.
   const [dotdBadgeCorner, setDotdBadgeCorner] = useState<BadgeCorner>('tl');
@@ -239,17 +253,30 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
     }
   }, [user.id]);
 
-  // Fetch campaign usage
+  // Fetch campaign usage. One retry on transient failure (auth refresh blip,
+  // 5xx) so the New Deal button doesn't stay greyed forever just because the
+  // first request failed.
   useEffect(() => {
+    let cancelled = false;
     const fetchCampaignUsage = async () => {
+      const tryOnce = () => merchantSubscriptionService.getCampaignUsage(user.id);
       try {
-        const usage = await merchantSubscriptionService.getCampaignUsage(user.id);
-        setCampaignUsage(usage);
+        let usage;
+        try {
+          usage = await tryOnce();
+        } catch (firstErr) {
+          if (cancelled) return;
+          console.warn('[MerchantMyCampaigns] usage fetch failed, retrying:', firstErr);
+          await new Promise((r) => setTimeout(r, 800));
+          usage = await tryOnce();
+        }
+        if (!cancelled) setCampaignUsage(usage);
       } catch (err) {
-        console.error("Error fetching campaign usage:", err);
+        console.error('Error fetching campaign usage:', err);
       }
     };
     if (user.id) fetchCampaignUsage();
+    return () => { cancelled = true; };
   }, [user.id, deals]);
 
   // Handle pre-selected edit deal (from dashboard deep link)
@@ -268,9 +295,11 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
     if (!deals || !user.id) return [];
     return deals.filter(d => {
       const dMerchantId = String(d.merchantId || (d as any).merchant_id).toLowerCase();
-      return dMerchantId === String(user.id).toLowerCase();
+      if (dMerchantId !== String(user.id).toLowerCase()) return false;
+      if (isDotdMode && !d.is_deal_of_the_day) return false;
+      return true;
     }).sort((a, b) => (b.campaign_id || '').localeCompare(a.campaign_id || ''));
-  }, [deals, user.id]);
+  }, [deals, user.id, isDotdMode]);
 
   const filteredDeals = useMemo(() => {
     return merchantDeals.filter(d => {
@@ -308,7 +337,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
 
   const handleNewDeal = () => {
     if (setDealIdToEdit) setDealIdToEdit(null);
-    setView('campaign_wizard');
+    setView(isDotdMode ? 'dotd_wizard' : 'campaign_wizard');
   };
 
   const updateRoiInput = (campaignId: string, field: string, value: number) => {
@@ -335,8 +364,12 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_my_campaigns')}</h1>
-          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_create_manage_deals')}</p>
+          <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            {isDotdMode ? t('m_dotd_title') : t('m_my_campaigns')}
+          </h1>
+          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            {isDotdMode ? t('m_dotd_feature') : t('m_create_manage_deals')}
+          </p>
         </div>
         <button
           onClick={() => setView('merchant_dashboard')}
@@ -357,7 +390,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
               <div>
                 <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_campaigns')}</p>
                 <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  <span className={campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? 'text-rose-500' : 'text-emerald-500'}>
+                  <span className={campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? 'text-rose-500' : 'text-emerald-500'}>
                     {campaignUsage.campaigns_used}
                   </span>
                   <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>/{campaignUsage.campaigns_limit}</span>
@@ -371,7 +404,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
               <div>
                 <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_deal_of_day')}</p>
                 <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  <span className={campaignUsage.dotd_used >= campaignUsage.dotd_limit ? 'text-rose-500' : 'text-emerald-500'}>
+                  <span className={campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit ? 'text-rose-500' : 'text-emerald-500'}>
                     {campaignUsage.dotd_used}
                   </span>
                   <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>/{campaignUsage.dotd_limit}</span>
@@ -380,7 +413,10 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
             </div>
           </div>
 
-          {(campaignUsage.campaigns_used >= campaignUsage.campaigns_limit || campaignUsage.dotd_used >= campaignUsage.dotd_limit) && (() => {
+          {campaignUsage.has_subscription && (
+            (campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit) ||
+            (campaignUsage.dotd_limit > 0 && campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit)
+          ) && (() => {
             // Limits reset on the 1st of next month at 12 AM IST. Compute the
             // friendly label using the device's local time — Indian merchants
             // are already on IST, so this lines up with the server-side window.
@@ -391,7 +427,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
             const waitMsg = t('m_or_wait_until_reset').replace('{date}', nextResetLabel);
             return (
               <div className="mt-3 space-y-2">
-                {campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
+                {campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
                   <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-200'}`}>
                     <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
                     <p className={`text-xs ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>
@@ -399,7 +435,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                     </p>
                   </div>
                 )}
-                {campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
+                {campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
                   <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
                     <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                     <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
@@ -413,28 +449,43 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
         </div>
       )}
 
-      {/* New Deal Button — full width. Disabled when campaign limit is reached. */}
+      {/* New Deal Button — full width. Disabled when the relevant limit is reached.
+          Only treat the button as at-limit when we *know* there's a real
+          subscription with a positive limit — otherwise the default 0/0 state
+          (or a failed usage fetch) would silently grey the button. */}
       {(() => {
-        const atCampaignLimit = !!campaignUsage && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit;
+        const atLimit = !!campaignUsage && campaignUsage.has_subscription && (
+          isDotdMode
+            ? campaignUsage.dotd_limit > 0 && campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit
+            : campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit
+        );
+        const enabledClasses = isDotdMode
+          ? 'bg-amber-500 border-amber-400 active:translate-y-0.5 active:shadow-none shadow-lg shadow-amber-500/30'
+          : 'bg-blue-600 border-blue-500 active:translate-y-0.5 active:shadow-none shadow-lg shadow-blue-600/30';
+        const subTextClasses = isDotdMode ? 'text-amber-50' : 'text-blue-100';
         return (
           <button
             id="ctour-new-deal"
             onClick={handleNewDeal}
-            disabled={atCampaignLimit}
+            disabled={atLimit}
             className={`w-full relative overflow-hidden rounded-2xl p-4 border-2 transition-all flex items-center gap-4 ${
-              atCampaignLimit
+              atLimit
                 ? 'bg-slate-300 border-slate-300 cursor-not-allowed opacity-60 shadow-none'
-                : 'bg-blue-600 border-blue-500 active:translate-y-0.5 active:shadow-none shadow-lg shadow-blue-600/30'
+                : enabledClasses
             }`}
           >
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${atCampaignLimit ? 'bg-slate-400/40' : 'bg-white/20'}`}>
-              <Sparkles className="w-6 h-6 text-white" />
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${atLimit ? 'bg-slate-400/40' : 'bg-white/20'}`}>
+              {isDotdMode ? <Zap className="w-6 h-6 text-white" /> : <Sparkles className="w-6 h-6 text-white" />}
             </div>
             <div className="text-left flex-1">
-              <h3 className="text-base font-bold text-white">{t('m_new_deal')}</h3>
-              <p className={`text-xs ${atCampaignLimit ? 'text-slate-100' : 'text-blue-100'}`}>{t('m_launch_campaign')}</p>
+              <h3 className="text-base font-bold text-white">
+                {isDotdMode ? 'Create Deal of Day' : t('m_new_deal')}
+              </h3>
+              <p className={`text-xs ${atLimit ? 'text-slate-100' : subTextClasses}`}>
+                {isDotdMode ? t('m_dotd_create_sub') : t('m_launch_campaign')}
+              </p>
             </div>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${atCampaignLimit ? 'bg-slate-400/40' : 'bg-white/20'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${atLimit ? 'bg-slate-400/40' : 'bg-white/20'}`}>
               <ArrowLeft className="w-4 h-4 text-white rotate-180" />
             </div>
           </button>
@@ -474,7 +525,9 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
         </div>
 
         {/* Campaign Cards */}
-        {filteredDeals.length === 0 ? (
+        {loading && filteredDeals.length === 0 ? (
+          <DealsLoader theme={theme} />
+        ) : filteredDeals.length === 0 ? (
           <div className={`text-center py-16 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
             <Megaphone className={`w-8 h-8 mx-auto mb-3 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
             <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_no_campaigns_category')}</p>
@@ -715,13 +768,24 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
 
         return (
           <div className="fixed inset-0 z-[300] overflow-y-auto" style={{ background: isDark ? '#0f172a' : '#ffffff' }}>
-            {/* Close button */}
-            <button
-              onClick={() => setSelectedDeal(null)}
-              className="fixed top-4 right-4 z-[350] w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-all shadow-lg"
-            >
-              <X className="w-5 h-5 text-white" />
-            </button>
+            {/* Top-right action cluster: Print + Close */}
+            <div className="fixed top-4 right-4 z-[350] flex items-center gap-2">
+              <button
+                onClick={() => setPosterPickerForDeal(deal)}
+                aria-label="Print poster"
+                className="h-10 px-3 rounded-full bg-yellow-500 text-slate-900 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-lg"
+              >
+                <Printer className="w-4 h-4" />
+                Print
+              </button>
+              <button
+                onClick={() => setSelectedDeal(null)}
+                aria-label="Close"
+                className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-all shadow-lg"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
 
             {/* Consumer Preview badge */}
             <div className="fixed top-5 left-4 z-[350] px-2.5 py-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider">
@@ -1014,6 +1078,176 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
           slides={lightboxSlides}
           onClose={() => setLightboxOpen(false)}
         />
+      )}
+
+      {/* Poster Template Picker — opens when merchant taps Print on a deal */}
+      {posterPickerForDeal && (
+        <div
+          className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center"
+          onClick={() => setPosterPickerForDeal(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl ${
+              isDark ? 'bg-slate-900' : 'bg-white'
+            }`}
+          >
+            <div className={`sticky top-0 px-5 pt-5 pb-3 flex items-center justify-between ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+              <div>
+                <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  Pick a poster design
+                </h3>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  A4 portrait, high-resolution. Print and stick in your store.
+                </p>
+              </div>
+              <button
+                onClick={() => setPosterPickerForDeal(null)}
+                aria-label="Close"
+                className={`w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 px-5 pb-5">
+              {POSTER_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  onClick={() => {
+                    const dealForPreview = posterPickerForDeal;
+                    if (!dealForPreview) return;
+                    setPosterPickerForDeal(null);
+                    setPosterPreview({ deal: dealForPreview, template: tpl.id as PosterTemplate });
+                  }}
+                  className={`rounded-2xl p-4 text-left active:scale-[0.98] transition-all border ${
+                    isDark
+                      ? 'bg-slate-800 border-slate-700 hover:border-yellow-500'
+                      : 'bg-slate-50 border-slate-200 hover:border-yellow-500'
+                  }`}
+                >
+                  {renderPosterMiniMock(tpl.id as PosterTemplate)}
+                  <div className={`text-sm font-bold mt-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    {tpl.label}
+                  </div>
+                  <div className={`text-[11px] leading-snug mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {tpl.description}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className={`px-5 pb-6 pt-1 text-[11px] leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              Tip: you'll get a preview to proof-read before the print dialog opens.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Poster proof-read preview — shows the actual rendered poster in an
+          iframe so the merchant can verify wording/layout BEFORE the print
+          dialog fires. Confirm opens the print window; Back returns to picker. */}
+      {posterPreview && (
+        <div
+          className="fixed inset-0 z-[420] bg-black/80 backdrop-blur-sm flex flex-col"
+          onClick={() => setPosterPreview(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`flex flex-col flex-1 max-w-2xl w-full mx-auto ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}
+          >
+            {/* Header */}
+            <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+              <div className="min-w-0">
+                <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  Proof-read your poster
+                </h3>
+                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Check the wording fits cleanly before you print.
+                </p>
+              </div>
+              <button
+                onClick={() => setPosterPreview(null)}
+                aria-label="Close preview"
+                className={`w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-300' : 'bg-white text-slate-600'
+                }`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Iframe preview — same HTML the print window will use, with auto-print disabled.
+                Critical layout: the OUTER wrapper takes the SCALED pixel dimensions (380×538)
+                so document flow honors the visible size — otherwise the iframe's intrinsic 1123px
+                height pushes the footer (with the Print button) below the viewport.
+                The iframe inside renders at full A4 and is scaled via transform: scale(). */}
+            <div className="flex-1 overflow-auto p-3 flex items-start justify-center bg-slate-300/40">
+              <div
+                style={{
+                  width: 380,
+                  height: 538, /* 380 × (297/210) */
+                  flexShrink: 0,
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+                }}
+              >
+                <iframe
+                  key={posterPreview.template /* re-render on template change */}
+                  title="Poster preview"
+                  srcDoc={buildPosterHtml(posterPreview.deal, posterPreview.template, { autoPrint: false })}
+                  style={{
+                    width: '210mm',
+                    height: '297mm',
+                    border: 0,
+                    background: 'white',
+                    display: 'block',
+                    transform: 'scale(0.479)', /* 380 / 793 (210mm at 96dpi) */
+                    transformOrigin: 'top left',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                  }}
+                  sandbox="allow-same-origin"
+                />
+              </div>
+            </div>
+
+            {/* Footer action buttons — extra bottom padding via safe-area so the
+                Print/Back buttons sit clear of the Android gesture bar. */}
+            <div
+              className={`flex gap-3 px-5 pt-4 border-t ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'}`}
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)' }}
+            >
+              <button
+                onClick={() => {
+                  const previewed = posterPreview;
+                  setPosterPreview(null);
+                  setPosterPickerForDeal(previewed.deal);
+                }}
+                className={`flex-1 h-12 rounded-xl text-sm font-medium active:scale-[0.98] transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                Back to designs
+              </button>
+              <button
+                onClick={() => {
+                  const previewed = posterPreview;
+                  setPosterPreview(null);
+                  openDealPoster(previewed.deal, previewed.template);
+                }}
+                className="flex-1 h-12 rounded-xl bg-yellow-500 text-slate-900 text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+              >
+                <Printer className="w-4 h-4" />
+                Print this poster
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Renew Deal Modal */}

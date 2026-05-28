@@ -213,7 +213,13 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     loadData();
   }, [user.id]);
 
-  // Pre-populate for edit mode
+  // Pre-populate for edit mode. We also jump straight to the Review step so
+  // the merchant lands on the summary with per-section edit pencils instead
+  // of being walked through every step of the wizard. Tracked by a ref so we
+  // only do the jump once — subsequent re-renders / draft loads must not
+  // re-route the user back to Review (they may have tapped a pencil to edit
+  // a specific section).
+  const editJumpedRef = useRef(false);
   useEffect(() => {
     if (editDealId && deals.length > 0) {
       const deal = deals.find(d => d.campaign_id === editDealId);
@@ -222,7 +228,8 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
           imageFile: null, imageUrl: g.image_url || null, name: g.name || '',
         }));
         // If deal has free_gifts, enable Buy & Get Free mode
-        if (freeGifts.length > 0) {
+        const isBuyGetFree = freeGifts.length > 0;
+        if (isBuyGetFree) {
           setIsBuyGetFreeMode(true);
         }
         dispatch({
@@ -244,6 +251,15 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
           },
         });
         console.log('[CampaignWizard] Pre-populated from deal:', editDealId);
+
+        if (!editJumpedRef.current) {
+          editJumpedRef.current = true;
+          // Pick the right review index based on which step list applies to
+          // this deal — Buy & Get Free inserts an extra "freeGifts" step.
+          const stepsForDeal = isBuyGetFree ? BUY_GET_FREE_STEPS : NORMAL_STEPS;
+          const reviewIndex = stepsForDeal.indexOf('review');
+          if (reviewIndex >= 0) setCurrentStep(reviewIndex);
+        }
       }
     }
   }, [editDealId, deals]);

@@ -71,7 +71,7 @@ export const StepWelcome: React.FC<StepWelcomeProps> = ({ onNext, theme }) => {
         Takes about 3–5 minutes. Your progress is saved automatically.
       </p>
 
-      <div style={floatIn(900, visible)} className="mt-auto pb-6">
+      <div style={floatIn(900, visible)} className="mt-auto pb-safe-bottom">
         <button
           onClick={onNext}
           className="w-full h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"

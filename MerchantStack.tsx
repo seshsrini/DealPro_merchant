@@ -27,6 +27,7 @@ import { FeatureTour } from './components/FeatureTour'; // Import Feature Tour
 import { CampaignTour } from './components/CampaignTour'; // Import Campaign Tour
 import { CampaignWizard } from './CampaignWizard';
 import { DotdWizard } from './DotdWizard';
+import { MerchantDealOfDay } from './MerchantDealOfDay';
 import { ProductWizard } from './ProductWizard';
 import { CatalogueItem } from './MerchantCatalogue';
 
@@ -122,7 +123,19 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
       />
     );
   }
-  else if (view === 'merchant_deal_of_day' || view === 'dotd_wizard') currentView = (
+  else if (view === 'merchant_deal_of_day') currentView = (
+    <MerchantDealOfDay
+      user={user}
+      deals={deals}
+      loading={loading}
+      setLoading={setLoading}
+      refreshDeals={refreshDeals}
+      setView={setView}
+      theme={theme}
+      setDealIdToEdit={setDealIdToEdit}
+    />
+  );
+  else if (view === 'dotd_wizard') currentView = (
     <DotdWizard
       user={user}
       setView={setView}

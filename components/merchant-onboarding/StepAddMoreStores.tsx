@@ -71,7 +71,7 @@ export const StepAddMoreStores: React.FC<StepAddMoreStoresProps> = ({
         Add Another Store
       </button>
 
-      <div style={floatIn(600, visible)} className="mt-auto pb-8 flex gap-3">
+      <div style={floatIn(600, visible)} className="mt-auto pb-safe-bottom flex gap-3">
         {onBack && (
           <button
             onClick={onBack}

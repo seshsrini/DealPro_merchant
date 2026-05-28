@@ -58,7 +58,7 @@ export const StepStoreName: React.FC<StepStoreNameProps> = ({ value, onChange, o
           <p className="text-xs text-red-500 mt-2">Store name must be at least 2 characters.</p>
         )}
       </div>
-      <div style={floatIn(400, visible)} className="mt-auto pb-8 flex gap-3">
+      <div style={floatIn(400, visible)} className="mt-auto pb-safe-bottom flex gap-3">
         {onBack && (
           <button
             onClick={onBack}

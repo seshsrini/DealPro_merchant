@@ -77,7 +77,7 @@ export const LanguageSelection: React.FC<LanguageSelectionProps> = ({ setView, n
       </div>
 
       {/* Continue Button */}
-      <div className="shrink-0 px-6 py-6">
+      <div className="shrink-0 px-6 pt-6 pb-safe-bottom">
         <button
           onClick={handleContinue}
           className="w-full h-12 rounded-xl bg-slate-900 text-white font-semibold text-sm active:scale-[0.98] transition-all"

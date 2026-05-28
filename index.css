@@ -12,6 +12,12 @@
 .leaflet-container { width: 100%; height: 100%; }
 @keyframes map-pulse { 0% { transform: scale(0.8); opacity: 0.6; } 100% { transform: scale(2); opacity: 0; } }
 
+/* Safe-area bottom padding for pre-auth / onboarding button rows so primary
+ * CTAs sit clear of the Android gesture bar (and any device safe-area inset)
+ * on phones like Samsung where the system nav reservation is large. */
+.pb-safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem) !important; }
+.mb-safe-bottom { margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem) !important; }
+
 /* BARCODE SCANNER TRANSPARENCY PROTOCOL */
 body.barcode-scanner-active {
     background-color: transparent !important;

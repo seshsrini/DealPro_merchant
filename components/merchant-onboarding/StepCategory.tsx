@@ -71,7 +71,7 @@ export const StepCategory: React.FC<StepCategoryProps> = ({ value, onChange, onN
         </div>
       )}
 
-      <div style={floatIn(400, visible)} className="mt-auto pb-8 flex gap-3">
+      <div style={floatIn(400, visible)} className="mt-auto pb-safe-bottom flex gap-3">
         {onBack && (
           <button
             onClick={onBack}

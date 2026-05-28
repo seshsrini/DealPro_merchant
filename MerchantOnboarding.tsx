@@ -110,6 +110,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   const [hasExistingStores, setHasExistingStores] = useState(false);
   const [lastSubscriptionFee, setLastSubscriptionFee] = useState(0);
   const [lastSubscriptionId, setLastSubscriptionId] = useState<number | null>(null);
+  const [lastTierKey, setLastTierKey] = useState<string | null>(null);
 
   const DRAFT_KEY = `merchant_onboarding_draft_${user.id}`;
 
@@ -236,63 +237,18 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     }
   };
 
-  // Silently persist the data collected on the given step to the DB.
-  // Fire-and-forget — never blocks navigation.
-  const saveStepProgress = (step: number) => {
-    switch (step) {
-      case 1:
-        if (state.fullName)
-          merchantOnboardingService.patchProfile({ fullName: state.fullName });
-        break;
-      case 2:
-        if (state.storeName)
-          merchantOnboardingService.patchProfile({ storeName: state.storeName });
-        break;
-      case 5: {
-        // Save all geocoded stores after the "Add More Stores" confirmation step
-        const readyStores = state.stores.filter(s => s.pincode && s.street);
-        if (readyStores.length > 0) {
-          merchantOnboardingService.patchProfile({
-            stores: readyStores.map(s => ({
-              store_name:     s.store_name || state.storeName,
-              address:        s.street,
-              pincode:        s.pincode,
-              locality:       s.locality,
-              city:           s.city,
-              state:          s.state,
-              landmark:       s.landmark,
-              store_category: s.store_category || '',
-              latitude:       s.coords?.latitude  || 0,
-              longitude:      s.coords?.longitude || 0,
-              store_hrs:      s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`,
-              store_phone:    s.store_phone || null,
-              store_phone_alt: s.store_phone_alt || null,
-              delivers:       s.delivers || false,
-              delivery_radius_km: s.delivers && s.delivery_radius_km != null ? Number(s.delivery_radius_km) : null,
-            })),
-          });
-        }
-        break;
-      }
-      case 6:
-        if (state.businessType) {
-          merchantOnboardingService.patchProfile({
-            businessType:    state.businessType,
-            gstin:           state.businessType === 'gstin'          ? state.gstinValue    : null,
-            pan:             state.businessType === 'gstin'          ? state.panValue      : null,
-            udyamNo:         state.businessType === 'udyam'          ? state.udyamValue    : null,
-            fssaiNo:         state.businessType === 'fssai'          ? state.fssaiValue    : null,
-            tradeLicenseNo:  state.businessType === 'trade_license'  ? state.tradeLicenseValue : null,
-          });
-        }
-        break;
-      case 8:
-        merchantOnboardingService.patchProfile({ termsAccepted: true });
-        break;
-      // step 9 (Privacy) is handled by handlePrivacyNext → handleFinalSubmit
-      default:
-        break;
-    }
+  // In-progress wizard data is staged in the server-side `signup_drafts` table
+  // via saveDraft() → signupDraftService.scheduleSave. We intentionally do NOT
+  // write to merchant_profiles / merchant_stores step-by-step anymore — that
+  // used to leak partial rows into the real tables, which then made any
+  // abandoned signup look like an "existing merchant with an incomplete profile"
+  // on next login (the user had to refill everything from the first missing
+  // step). The proper commit happens once, at the end, via completeMerchantProfile.
+  //
+  // Kept as a no-op so we don't have to remove every call site — if a step
+  // genuinely needs a side-effect (e.g. uploading an image), wire it there.
+  const saveStepProgress = (_step: number) => {
+    /* intentionally empty — see comment above */
   };
 
   const handleNext = () => {
@@ -447,16 +403,30 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     goToStep(9); // Privacy step
   };
 
-  // Subscription complete → show congrats
-  // Note: StepSubscription calls setUser() with updated subscription info
-  // right before calling onComplete(), but due to React closures 'user' here
-  // still references the pre-setUser value. The useEffect([user]) in App.tsx
-  // auto-saves the latest user to biometric session, so we don't need to
-  // save here (which would overwrite with stale data).
-  const handleSubscriptionComplete = async (subscriptionFee?: number, subscriptionId?: number) => {
+  // StepSubscription's "Continue" advances here without creating a
+  // subscription. The Razorpay payment now happens in StepLoyaltyAddon (next
+  // step), where the loyalty add-on can be bundled into the charge.
+  //
+  // Exception: when a subscription was already created synchronously
+  // (alreadyActive=true — dev test bypass / legacy trial path), skip the
+  // loyalty + payment step entirely so the merchant doesn't get charged
+  // twice. The user can manage the loyalty add-on later from the
+  // subscriptions screen.
+  const handleSubscriptionComplete = async (
+    subscriptionFee?: number,
+    subscriptionId?: number,
+    tierKey?: string,
+    alreadyActive?: boolean,
+  ) => {
     setLastSubscriptionFee(subscriptionFee || 0);
     setLastSubscriptionId(subscriptionId || null);
-    goToStep(11); // Loyalty add-on step
+    setLastTierKey(tierKey || null);
+    if (alreadyActive) {
+      localStorage.removeItem(DRAFT_KEY);
+      goToStep(12); // Congrats
+      return;
+    }
+    goToStep(11); // Loyalty step (where Razorpay is taken).
   };
 
   const handleLoyaltyComplete = () => {
@@ -606,9 +576,8 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
           <StepLoyaltyAddon
             user={user}
             subscriptionFee={lastSubscriptionFee}
-            subscriptionId={lastSubscriptionId}
+            tierKey={lastTierKey}
             onComplete={handleLoyaltyComplete}
-            onSkip={handleLoyaltyComplete}
             theme={theme}
           />
         );

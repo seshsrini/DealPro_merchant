@@ -53,22 +53,54 @@ supabase.auth.onAuthStateChange((event, session) => {
 // ──────────────────────────────────────────────────────────────────────────
 if (typeof document !== 'undefined') {
   let lastResumeRefresh = 0;
-  const refreshOnResume = () => {
+  // Once a refresh fails because the refresh token is dead, don't bother
+  // retrying every 30s — clear the stored session and stop trying until the
+  // user logs in again.
+  let refreshDisabledUntilLogin = false;
+
+  const refreshOnResume = async () => {
+    if (refreshDisabledUntilLogin) return;
     if (document.visibilityState !== 'visible') return;
     const now = Date.now();
     if (now - lastResumeRefresh < 30_000) return;
+
+    // Don't try to refresh if there's no session at all (e.g. user is on
+    // the signup screen and hasn't logged in yet). Avoids the 401 noise
+    // from supabase-js calling /auth/v1/token without a real refresh token.
+    const { data: existing } = await supabase.auth.getSession();
+    if (!existing?.session?.refresh_token) return;
+
     lastResumeRefresh = now;
     console.log('[SupabaseClient] App became visible — refreshing session.');
-    supabase.auth.refreshSession().then((res) => {
+    try {
+      const res = await supabase.auth.refreshSession();
       if (res.error) {
         console.warn('[SupabaseClient] Resume refresh failed:', res.error.message);
+        // "Invalid API key", "Invalid Refresh Token", "Refresh Token Not Found",
+        // etc. — the stored session is dead. Clear it so we don't keep
+        // hitting /token every 30s and burning the user's console with
+        // 401s until login.
+        const msg = res.error.message || '';
+        if (/invalid|not.found|expired|missing/i.test(msg)) {
+          refreshDisabledUntilLogin = true;
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          console.log('[SupabaseClient] Cleared stale local session; pause until next login.');
+        }
       } else {
         console.log('[SupabaseClient] Resume refresh succeeded.');
       }
-    }).catch(err => {
+    } catch (err: any) {
       console.warn('[SupabaseClient] Resume refresh threw:', err?.message || err);
-    });
+    }
   };
+
+  // Re-enable resume-refresh when a fresh login happens.
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      refreshDisabledUntilLogin = false;
+    }
+  });
+
   document.addEventListener('visibilitychange', refreshOnResume);
   // Also refresh immediately on focus events for desktop browsers where
   // visibilitychange may not always fire on tab refocus.

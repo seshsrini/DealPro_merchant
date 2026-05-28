@@ -1125,7 +1125,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   }`;
 
   const renderRoleSelector = () => (
-    <div className={`px-6 pt-8 flex flex-col justify-center min-h-screen ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+    <div className={`px-6 pt-10 pb-safe-bottom flex flex-col ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
       <div className="w-full text-center mb-10">
         <h2 className={`text-2xl font-semibold leading-tight mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
           {t('reg_title')}
@@ -1201,7 +1201,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   );
 
   const renderRegisterForm = () => (
-    <div className={`px-6 pt-8 flex flex-col ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+    <div className={`px-6 pt-8 pb-safe-bottom flex flex-col ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
       <div className="w-full text-left mb-6">
         <h2 className={`text-2xl font-semibold leading-tight mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
           {t('reg_title')}

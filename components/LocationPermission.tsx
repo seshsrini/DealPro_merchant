@@ -71,7 +71,7 @@ export const LocationPermission: React.FC<LocationPermissionProps> = ({ setView,
       </div>
 
       {/* Buttons */}
-      <div className="shrink-0 px-6 py-6 space-y-3">
+      <div className="shrink-0 px-6 pt-6 pb-safe-bottom space-y-3">
         <button
           onClick={handleAllowLocation}
           disabled={requesting}

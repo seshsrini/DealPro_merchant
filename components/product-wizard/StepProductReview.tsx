@@ -361,21 +361,25 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
         </div>
       )}
 
-      {/* Save button */}
+      {/* Save button. Back button is hidden in edit mode — editing jumps
+          straight to Review and uses per-section pencil edits, so there's
+          no previous step to go back to. The header X still closes. */}
       <div style={floatIn(450, visible)} className="mt-auto pb-8 flex gap-3">
-        <button
-          onClick={onBack}
-          disabled={saving}
-          className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
-            isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
-          } disabled:opacity-40`}
-        >
-          Back
-        </button>
+        {!editingId && (
+          <button
+            onClick={onBack}
+            disabled={saving}
+            className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
+              isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+            } disabled:opacity-40`}
+          >
+            Back
+          </button>
+        )}
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex-[2] h-14 rounded-xl bg-emerald-500 text-white text-base font-bold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className={`${editingId ? 'w-full' : 'flex-[2]'} h-14 rounded-xl bg-emerald-500 text-white text-base font-bold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
         >
           {saving ? (
             <Loader2 className="w-5 h-5 animate-spin" />

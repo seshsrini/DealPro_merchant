@@ -1,10 +1,8 @@
 
 import React, { useState } from 'react';
 import { AppView } from '../types';
-import { KeyRound, ArrowRight, Users, Share2 } from 'lucide-react';
-
-// Known app-level invite codes (gatekeeper for new merchants)
-const APP_INVITE_CODES = ['BALA10', 'DEALPRO', 'MERCHANT2026'];
+import { KeyRound, ArrowRight, Users, Share2, Loader2 } from 'lucide-react';
+import { supabase } from '../services/supabaseClient';
 
 interface InviteCodeScreenProps {
   setView: (view: AppView) => void;
@@ -15,9 +13,12 @@ interface InviteCodeScreenProps {
 export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nextView, onInviteCodeValidated }) => {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [validatedHint, setValidatedHint] = useState<string | null>(null);
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     setError(null);
+    setValidatedHint(null);
     const trimmed = code.trim().toUpperCase();
     if (!trimmed) {
       setError('Please enter an invite code.');
@@ -27,10 +28,45 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
       setError('Code is too short. Please check and try again.');
       return;
     }
-    // Accept all codes — app invite, merchant referral, or staff invite.
-    // The backend (login-merchant) will validate and handle each type.
-    onInviteCodeValidated(trimmed);
-    setView(nextView);
+
+    setVerifying(true);
+    try {
+      // Validates against the contractor_codes table; rejects codes that
+      // don't exist or have active_status = false.
+      const { data, error: efErr } = await supabase.functions.invoke('validate-invite-code', {
+        body: { code: trimmed },
+      });
+      if (efErr) {
+        // Try to surface the function-side error message if present
+        const ctxJson = await (efErr as any).context?.json?.().catch(() => null);
+        throw new Error(ctxJson?.error || efErr.message || 'Could not verify code right now.');
+      }
+      if (!data?.valid) {
+        const reason = data?.reason as string | undefined;
+        if (reason === 'inactive') {
+          setError('This invite code has been deactivated. Ask for an active code.');
+        } else if (reason === 'staff_invite_consumed') {
+          setError('This staff invite has already been used.');
+        } else {
+          setError("This invite code isn't recognised. Double-check and try again.");
+        }
+        setVerifying(false);
+        return;
+      }
+      // Briefly show what kind of code matched, then advance.
+      const label = data.label as string | undefined;
+      if (label) setValidatedHint(`Verified — ${label}.`);
+      onInviteCodeValidated(trimmed);
+      // Small delay so the merchant sees the confirmation before the screen swaps.
+      setTimeout(() => {
+        setVerifying(false);
+        setView(nextView);
+      }, 600);
+    } catch (err) {
+      console.error('[InviteCodeScreen] verify failed:', err);
+      setError(err instanceof Error ? err.message : 'Could not verify code right now.');
+      setVerifying(false);
+    }
   };
 
   const handleSkip = () => {
@@ -72,6 +108,9 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
           {error && (
             <p className="text-sm text-red-500 font-medium">{error}</p>
           )}
+          {validatedHint && (
+            <p className="text-sm text-emerald-600 font-medium">{validatedHint}</p>
+          )}
 
           {/* Code type hints */}
           <div className="space-y-2 pt-2">
@@ -89,9 +128,16 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
             </div>
           </div>
 
+          {/* Skip disabled the moment the merchant starts typing a code — if
+              they have one, they should verify it, not skip past it. */}
           <button
             onClick={handleSkip}
-            className="w-full h-12 rounded-xl bg-slate-900 text-white font-semibold text-sm active:scale-[0.98] transition-all mt-4"
+            disabled={code.trim().length > 0}
+            className={`w-full h-12 rounded-xl text-white font-semibold text-sm transition-all mt-4 ${
+              code.trim().length > 0
+                ? 'bg-slate-300 cursor-not-allowed'
+                : 'bg-slate-900 active:scale-[0.98]'
+            }`}
           >
             I don&apos;t have an invite code
           </button>
@@ -102,10 +148,24 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
       <div className="shrink-0 px-6 py-6">
         <button
           onClick={handleVerify}
-          className="w-full h-12 rounded-xl bg-slate-900 text-white font-semibold text-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          disabled={verifying || code.trim().length < 4}
+          className={`w-full h-12 rounded-xl text-white font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+            verifying || code.trim().length < 4
+              ? 'bg-slate-400 cursor-not-allowed'
+              : 'bg-slate-900 active:scale-[0.98]'
+          }`}
         >
-          Verify & Continue
-          <ArrowRight className="w-4 h-4" />
+          {verifying ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Verifying…
+            </>
+          ) : (
+            <>
+              Verify & Continue
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
         </button>
       </div>
     </div>

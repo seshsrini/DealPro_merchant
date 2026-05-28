@@ -163,11 +163,24 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
       }
     }
 
-    // An existing merchant has at minimum store_name + full_name from their original signup.
-    // Missing flags like terms_accepted, privacy_accepted, business_type can be backfilled —
-    // don't force the entire onboarding wizard again for these.
-    const isExistingMerchant = !!(userProfile.full_name && userProfile.store_name);
-    const profileOk = isExistingMerchant; // Trust that existing merchants completed signup
+    // A merchant has only completed onboarding when ALL of the wizard's
+    // required fields are populated. The old check just looked for full_name +
+    // store_name — which broke for partial-completion cases: a merchant who
+    // filled their name + store name then closed the app would get sent
+    // straight to the dashboard on next login, skipping business_type, terms,
+    // privacy, etc. (see e.g. Sapna / 9591132539).
+    //
+    // The onboarding wizard has resume-from-step logic in MerchantOnboarding.tsx,
+    // so it's safe to route a partially-complete profile back into the wizard —
+    // they pick up from the first missing field.
+    const isExistingMerchant = !!(
+      userProfile.full_name &&
+      userProfile.store_name &&
+      userProfile.business_type &&
+      userProfile.terms_accepted &&
+      userProfile.privacy_accepted
+    );
+    const profileOk = isExistingMerchant;
 
     // Check if this user is a staff member (not the owner) — they skip onboarding entirely
     const isStaffMember = userProfile.staff_role && userProfile.staff_role !== 'owner';
@@ -491,7 +504,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
 
   if (view === 'login') {
     return (
-      <div className={`px-6 pt-8 flex flex-col ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+      <div className={`px-6 pt-8 pb-safe-bottom flex flex-col ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
         <div className="w-full text-left mb-8">
           <h2 className={`text-2xl font-semibold leading-tight mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
             Partner Success

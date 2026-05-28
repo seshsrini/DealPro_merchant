@@ -77,7 +77,7 @@ export const StepCongrats: React.FC<StepCongratsProps> = ({ storeName, onGoToDas
         ))}
       </div>
 
-      <div style={floatIn(900, visible)} className="w-full pb-6">
+      <div style={floatIn(900, visible)} className="w-full pb-safe-bottom">
         <button
           onClick={onGoToDashboard}
           className="w-full h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"

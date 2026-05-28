@@ -9,6 +9,7 @@ import { perfTimer } from './services/perfLogger';
 import { NotificationBadge } from './components/NotificationBadge';
 import { getUpcomingFestivals, getDaysUntilDate, FestivalEvent } from './components/festivalCalendar';
 import { MediaLightbox } from './components/MediaLightbox';
+import { DealsLoader } from './components/DealsLoader';
 import {
   Store,
   Plus,
@@ -31,8 +32,11 @@ import {
   Edit2,
   Gift,
   Truck,
+  Printer,
 } from 'lucide-react';
 import { pickBadgeCornerForImage, BadgeCorner } from './utils/badgeCornerForImage';
+import { POSTER_TEMPLATES, openDealPoster, buildPosterHtml, type PosterTemplate } from './utils/printDealPoster';
+import { renderPosterMiniMock } from './components/PosterMiniMock';
 
 type CampaignTab = 'active' | 'expired';
 
@@ -141,6 +145,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   const [claimClickCounts, setClaimClickCounts] = useState<Record<string, number>>({});
   const [redeemCounts, setRedeemCounts] = useState<Record<string, number>>({});
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  // Print-poster picker & proof-read preview — mirrors the flow in MerchantMyCampaigns
+  // so the merchant gets the same Print → pick design → preview → confirm experience
+  // wherever they tap a deal card.
+  const [posterPickerForDeal, setPosterPickerForDeal] = useState<Deal | null>(null);
+  const [posterPreview, setPosterPreview] = useState<{ deal: Deal; template: PosterTemplate } | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxSlides, setLightboxSlides] = useState<Array<{ kind: 'image' | 'video'; url: string }>>([]);
 
@@ -161,22 +170,36 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchCampaignUsage = async () => {
       const timer = perfTimer('load_merchant_dashboard', 'merchant_dashboard');
-      try {
+      // One retry on transient failure (auth refresh blip, 5xx) so we don't
+      // leave the dashboard stuck at the default 0/0 — which used to grey
+      // the New Deal / DOTD buttons indefinitely.
+      const tryOnce = async () => {
         timer.mark('campaign_usage_call');
-        const usage = await merchantSubscriptionService.getCampaignUsage(user.id);
-        setCampaignUsage(usage);
+        return merchantSubscriptionService.getCampaignUsage(user.id);
+      };
+      try {
+        let usage;
+        try {
+          usage = await tryOnce();
+        } catch (firstErr) {
+          if (cancelled) return;
+          console.warn('[MerchantDashboard] usage fetch failed, retrying:', firstErr);
+          await new Promise((r) => setTimeout(r, 800));
+          usage = await tryOnce();
+        }
+        if (!cancelled) setCampaignUsage(usage);
         timer.end('campaign_usage_done');
       } catch (err) {
-        console.error("[MerchantDashboard] Error fetching campaign usage:", err);
+        console.error('[MerchantDashboard] Error fetching campaign usage:', err);
         timer.end('error');
       }
     };
 
-    if (user?.id) {
-      fetchCampaignUsage();
-    }
+    if (user?.id) fetchCampaignUsage();
+    return () => { cancelled = true; };
   }, [user?.id, deals]);
 
   // Fetch per-deal clicks & redemptions for active deals
@@ -263,7 +286,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
               }`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {totalActiveDeals} {t('m_live_deals')}
+                {loading && deals.length === 0 ? (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-3 h-2 rounded bg-emerald-500/30 animate-pulse" />
+                    {t('m_live_deals')}
+                  </span>
+                ) : (
+                  <>{totalActiveDeals} {t('m_live_deals')}</>
+                )}
               </div>
               {user.store_name && (
                 <span className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -295,7 +325,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     <UsageRing
                       used={campaignUsage.campaigns_used}
                       limit={campaignUsage.campaigns_limit}
-                      color={campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? '#f43f5e' : '#3b82f6'}
+                      color={campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? '#f43f5e' : '#3b82f6'}
                       bgColor={isDark ? '#1e293b' : '#f1f5f9'}
                     />
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -312,7 +342,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     </p>
                   </div>
                 </div>
-                {campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
+                {campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit && (
                   <div className={`mt-2 flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>
                     <AlertCircle className="w-3 h-3" />
                     {t('m_limit_reached')}
@@ -329,7 +359,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     <UsageRing
                       used={campaignUsage.dotd_used}
                       limit={campaignUsage.dotd_limit}
-                      color={campaignUsage.dotd_used >= campaignUsage.dotd_limit ? '#f43f5e' : '#f59e0b'}
+                      color={campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit ? '#f43f5e' : '#f59e0b'}
                       bgColor={isDark ? '#1e293b' : '#f1f5f9'}
                     />
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -346,7 +376,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     </p>
                   </div>
                 </div>
-                {campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
+                {campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit && (
                   <div className={`mt-2 flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>
                     <AlertCircle className="w-3 h-3" />
                     {t('m_limit_reached')}
@@ -356,7 +386,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
             </div>
 
             {/* Upgrade nudge */}
-            {(campaignUsage.campaigns_used >= campaignUsage.campaigns_limit || campaignUsage.dotd_used >= campaignUsage.dotd_limit) && (
+            {(campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit || campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit) && (
               <button
                 onClick={() => setView('merchant_subscriptions')}
                 className={`w-full mt-2 flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-[0.98] ${
@@ -373,7 +403,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
         {/* ─── Quick Actions Grid ─── */}
         <div style={fi(160)} className="grid grid-cols-2 gap-3">
           {(() => {
-            const atCampaignLimit = !!campaignUsage && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit;
+            // Only gray the button when we've actually confirmed a subscription
+            // and a real positive limit has been hit. Default 0/0 state (or a
+            // failed usage fetch) used to leave the button grayed indefinitely.
+            const atCampaignLimit = !!campaignUsage
+              && campaignUsage.has_subscription
+              && campaignUsage.campaigns_limit > 0
+              && campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit;
             return (
               <button
                 id="tour-new-deal"
@@ -581,6 +617,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
           </div>
         )}
 
+        {/* ─── Loading state: deals still being fetched ─── */}
+        {activeDeals.length === 0 && loading && (
+          <div style={fi(240)}>
+            <DealsLoader theme={theme} />
+          </div>
+        )}
+
         {/* ─── Empty state: no deals ─── */}
         {activeDeals.length === 0 && !loading && (
           <div style={fi(240)} className={`rounded-2xl p-6 text-center border ${
@@ -643,13 +686,24 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
         return (
           <div className="fixed inset-0 z-[300] overflow-y-auto" style={{ background: isDark ? '#0f172a' : '#ffffff' }}>
-            {/* Close button */}
-            <button
-              onClick={() => setSelectedDeal(null)}
-              className="fixed top-4 right-4 z-[350] w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-all shadow-lg"
-            >
-              <X className="w-5 h-5 text-white" />
-            </button>
+            {/* Top-right action cluster: Print + Close */}
+            <div className="fixed top-4 right-4 z-[350] flex items-center gap-2">
+              <button
+                onClick={() => setPosterPickerForDeal(deal)}
+                aria-label="Print poster"
+                className="h-10 px-3 rounded-full bg-yellow-500 text-slate-900 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-lg"
+              >
+                <Printer className="w-4 h-4" />
+                Print
+              </button>
+              <button
+                onClick={() => setSelectedDeal(null)}
+                aria-label="Close"
+                className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-all shadow-lg"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
 
             {/* Consumer Preview badge */}
             <div className="fixed top-5 left-4 z-[350] px-2.5 py-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider">
@@ -916,6 +970,169 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
           slides={lightboxSlides}
           onClose={() => setLightboxOpen(false)}
         />
+      )}
+
+      {/* Poster Template Picker — opens when merchant taps Print on a deal */}
+      {posterPickerForDeal && (
+        <div
+          className="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center"
+          onClick={() => setPosterPickerForDeal(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl ${
+              isDark ? 'bg-slate-900' : 'bg-white'
+            }`}
+          >
+            <div className={`sticky top-0 px-5 pt-5 pb-3 flex items-center justify-between ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+              <div>
+                <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  Pick a poster design
+                </h3>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  A4 portrait, high-resolution. Print and stick in your store.
+                </p>
+              </div>
+              <button
+                onClick={() => setPosterPickerForDeal(null)}
+                aria-label="Close"
+                className={`w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 px-5 pb-5">
+              {POSTER_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  onClick={() => {
+                    const dealForPreview = posterPickerForDeal;
+                    if (!dealForPreview) return;
+                    setPosterPickerForDeal(null);
+                    setPosterPreview({ deal: dealForPreview, template: tpl.id as PosterTemplate });
+                  }}
+                  className={`rounded-2xl p-4 text-left active:scale-[0.98] transition-all border ${
+                    isDark
+                      ? 'bg-slate-800 border-slate-700 hover:border-yellow-500'
+                      : 'bg-slate-50 border-slate-200 hover:border-yellow-500'
+                  }`}
+                >
+                  {renderPosterMiniMock(tpl.id as PosterTemplate)}
+                  <div className={`text-sm font-bold mt-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    {tpl.label}
+                  </div>
+                  <div className={`text-[11px] leading-snug mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {tpl.description}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className={`px-5 pb-6 pt-1 text-[11px] leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              Tip: you'll get a preview to proof-read before the print dialog opens.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Proof-read preview — shows the actual rendered poster in an iframe
+          BEFORE the print dialog fires. Same component pattern as MerchantMyCampaigns. */}
+      {posterPreview && (
+        <div
+          className="fixed inset-0 z-[420] bg-black/80 backdrop-blur-sm flex flex-col"
+          onClick={() => setPosterPreview(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`flex flex-col flex-1 max-w-2xl w-full mx-auto ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}
+          >
+            <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+              <div className="min-w-0">
+                <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  Proof-read your poster
+                </h3>
+                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Check the wording fits cleanly before you print.
+                </p>
+              </div>
+              <button
+                onClick={() => setPosterPreview(null)}
+                aria-label="Close preview"
+                className={`w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-300' : 'bg-white text-slate-600'
+                }`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-3 flex items-start justify-center bg-slate-300/40">
+              <div
+                style={{
+                  width: 380,
+                  height: 538,
+                  flexShrink: 0,
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+                }}
+              >
+                <iframe
+                  key={posterPreview.template}
+                  title="Poster preview"
+                  srcDoc={buildPosterHtml(posterPreview.deal, posterPreview.template, { autoPrint: false })}
+                  style={{
+                    width: '210mm',
+                    height: '297mm',
+                    border: 0,
+                    background: 'white',
+                    display: 'block',
+                    transform: 'scale(0.479)',
+                    transformOrigin: 'top left',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                  }}
+                  sandbox="allow-same-origin"
+                />
+              </div>
+            </div>
+
+            {/* Footer action buttons — extra bottom padding via safe-area so the
+                Print/Back buttons sit clear of the Android gesture bar. */}
+            <div
+              className={`flex gap-3 px-5 pt-4 border-t ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'}`}
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)' }}
+            >
+              <button
+                onClick={() => {
+                  const previewed = posterPreview;
+                  setPosterPreview(null);
+                  setPosterPickerForDeal(previewed.deal);
+                }}
+                className={`flex-1 h-12 rounded-xl text-sm font-medium active:scale-[0.98] transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                Back to designs
+              </button>
+              <button
+                onClick={() => {
+                  const previewed = posterPreview;
+                  setPosterPreview(null);
+                  openDealPoster(previewed.deal, previewed.template);
+                }}
+                className="flex-1 h-12 rounded-xl bg-yellow-500 text-slate-900 text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+              >
+                <Printer className="w-4 h-4" />
+                Print this poster
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -117,7 +117,7 @@ export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView
   ];
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md pointer-events-none">
+    <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+2.5rem)] left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md pointer-events-none">
        <nav className={`pointer-events-auto rounded-2xl px-1.5 py-1.5 flex items-center border ${
          isDark
            ? 'bg-slate-900 border-slate-800 shadow-lg shadow-black/30'
@@ -144,7 +144,7 @@ export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView
                 }`}
               >
                 <Icon className="w-[18px] h-[18px]" />
-                <span className={`text-[7px] leading-tight ${isActive ? 'font-bold' : 'font-medium'}`}>{tab.label}</span>
+                <span className="text-[7px] leading-tight font-black">{tab.label}</span>
               </button>
             );
           })}
@@ -170,7 +170,7 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
   const tabs = allTabs.filter(tab => !tab.permission || can(tab.permission));
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md pointer-events-none">
+    <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+2.5rem)] left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md pointer-events-none">
        <nav className={`pointer-events-auto rounded-2xl px-1.5 py-1.5 flex items-center border ${
          isDark
            ? 'bg-slate-900 border-slate-800 shadow-lg shadow-black/30'
@@ -196,7 +196,7 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
                 }`}
               >
                 <Icon className="w-[18px] h-[18px]" />
-                <span className={`text-[8px] leading-tight ${isActive ? 'font-bold' : 'font-medium'}`}>{tab.label}</span>
+                <span className="text-[8px] leading-tight font-black">{tab.label}</span>
               </button>
             );
           })}

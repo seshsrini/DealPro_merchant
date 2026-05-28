@@ -273,7 +273,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
         )}
       </div>
 
-      <div style={floatIn(400, visible)} className="mt-auto pb-8 pt-4 flex gap-3">
+      <div style={floatIn(400, visible)} className="mt-auto pb-safe-bottom pt-4 flex gap-3">
         {onBack && (
           <button
             onClick={onBack}

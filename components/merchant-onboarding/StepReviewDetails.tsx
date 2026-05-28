@@ -214,7 +214,7 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
       </div>
 
       {/* Navigation */}
-      <div style={floatIn(600, visible)} className="pb-8 pt-4 flex gap-3">
+      <div style={floatIn(600, visible)} className="pb-safe-bottom pt-4 flex gap-3">
         <button
           onClick={onBack}
           className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
