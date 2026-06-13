@@ -13,4 +13,8 @@ ext {
     androidxJunitVersion = '1.1.5'
     androidxEspressoCoreVersion = '3.5.1'
     cordovaAndroidVersion = '10.1.1'
+    // Bumped from Capacitor's default 21.1.0 — that build of Play Services
+    // Location triggers a benign-but-noisy D8 "Companion object could not be
+    // found in class ...location.zze" warning under Jetifier. 21.3.0 fixes it.
+    playServicesLocationVersion = '21.3.0'
 }

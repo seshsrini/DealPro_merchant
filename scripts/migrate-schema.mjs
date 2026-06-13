@@ -1,7 +1,16 @@
 /**
- * Schema Migration Script: DEV → QA
- * Usage: node scripts/migrate-schema.mjs --dev-pass DEV_PASSWORD --qa-pass QA_PASSWORD
- *        node scripts/migrate-schema.mjs --qa-pass QA_PASSWORD --apply-only   (skip DEV dump, apply existing schema-dump.sql)
+ * Schema Migration Script: DEV → target (QA or PROD)
+ * Dumps the full public schema from DEV (tables, PKs/uniques/FKs, indexes,
+ * functions, triggers, RLS + policies) to scripts/schema-dump.sql, and can apply
+ * it to a target project.
+ *
+ * Usage:
+ *   Dump only (writes scripts/schema-dump.sql, applies nothing):
+ *     node scripts/migrate-schema.mjs --dev-pass DEV_PASSWORD --dump-only
+ *   Dump + apply to a target (default target = QA; pass --target-ref for PROD):
+ *     node scripts/migrate-schema.mjs --dev-pass DEV_PASSWORD --qa-pass TARGET_PASSWORD --target-ref TARGET_REF
+ *   Apply an existing dump only:
+ *     node scripts/migrate-schema.mjs --qa-pass TARGET_PASSWORD --target-ref TARGET_REF --apply-only
  */
 
 import pkg from 'pg';
@@ -11,22 +20,45 @@ import { readFileSync as readFS, existsSync as existsFS, writeFileSync as writeF
 const args = process.argv.slice(2);
 const getArg = (name) => { const idx = args.indexOf(name); return idx !== -1 ? args[idx + 1] : null; };
 const hasFlag = (name) => args.includes(name);
+// Double-quote a SQL identifier so mixed-case names (e.g. "VEDIC_profiles")
+// survive — Postgres lowercases unquoted identifiers, which then no longer match
+// the quoted references emitted for FKs / policies / functions.
+const q = (id) => '"' + String(id).replace(/"/g, '""') + '"';
 
 const DEV_PASS  = getArg('--dev-pass');
 const QA_PASS   = getArg('--qa-pass');
 const APPLY_ONLY = hasFlag('--apply-only');
+const DUMP_ONLY  = hasFlag('--dump-only');                            // dump schema to file, apply nothing
+const SEED_ONLY  = hasFlag('--seed-data');                           // export INSERTs for lookup tables to scripts/seed-data.sql
+const TARGET_REF = getArg('--target-ref') || 'brgamwtcsnsnkdssyarn'; // apply target (default = QA; pass PROD ref here)
+// Reference/lookup tables to seed by default — GLOBAL lookups with no user FKs.
+// Excludes campaign_templates (merchant_id → auth.users = merchant-owned data,
+// not reference). states is listed before cities so the cities→states FK holds.
+// Override with --tables a,b,c. Geo data (localities) can be large — see
+// copy-geo-data.mjs for that.
+const SEED_TABLES = (getArg('--tables') || 'subscription_tiers,store_categories,states,cities')
+  .split(',').map(s => s.trim()).filter(Boolean);
 
-if (!QA_PASS || (!DEV_PASS && !APPLY_ONLY)) {
+if (DUMP_ONLY || SEED_ONLY) {
+  if (!DEV_PASS) {
+    console.error(`Usage: node scripts/migrate-schema.mjs --dev-pass DEV_PASSWORD ${SEED_ONLY ? '--seed-data [--tables a,b,c]' : '--dump-only'}`);
+    process.exit(1);
+  }
+} else if (!QA_PASS || (!DEV_PASS && !APPLY_ONLY)) {
   console.error('Usage:');
-  console.error('  node scripts/migrate-schema.mjs --dev-pass DEV_PASSWORD --qa-pass QA_PASSWORD');
-  console.error('  node scripts/migrate-schema.mjs --qa-pass QA_PASSWORD --apply-only');
+  console.error('  Dump only (writes scripts/schema-dump.sql, applies nothing):');
+  console.error('    node scripts/migrate-schema.mjs --dev-pass DEV_PASSWORD --dump-only');
+  console.error('  Dump + apply to a target (PROD = pass its ref):');
+  console.error('    node scripts/migrate-schema.mjs --dev-pass DEV_PASSWORD --qa-pass TARGET_PASSWORD --target-ref TARGET_REF');
+  console.error('  Apply an existing dump only:');
+  console.error('    node scripts/migrate-schema.mjs --qa-pass TARGET_PASSWORD --target-ref TARGET_REF --apply-only');
   process.exit(1);
 }
 
 const encodedDevPass = DEV_PASS ? encodeURIComponent(DEV_PASS) : '';
-const encodedQaPass  = encodeURIComponent(QA_PASS);
+const encodedQaPass  = QA_PASS ? encodeURIComponent(QA_PASS) : '';
 const DEV_URL = `postgresql://postgres:${encodedDevPass}@db.gkulyxglzqlhpqxlwjqw.supabase.co:5432/postgres`;
-const QA_URL  = `postgresql://postgres:${encodedQaPass}@db.brgamwtcsnsnkdssyarn.supabase.co:5432/postgres`;
+const QA_URL  = `postgresql://postgres:${encodedQaPass}@db.${TARGET_REF}.supabase.co:5432/postgres`;
 
 async function safeQuery(client, label, sql, params = []) {
   try {
@@ -98,10 +130,10 @@ async function dumpSchema(devUrl) {
         type += `(${col.numeric_precision},${col.numeric_scale})`;
       const def = col.column_default ? ` DEFAULT ${col.column_default}` : '';
       const nullable = col.is_nullable === 'NO' ? ' NOT NULL' : '';
-      return `  ${col.column_name} ${type}${def}${nullable}`;
+      return `  ${q(col.column_name)} ${type}${def}${nullable}`;
     });
 
-    tableDDLs.push(`CREATE TABLE IF NOT EXISTS public.${table_name} (\n${colDefs.join(',\n')}\n);`);
+    tableDDLs.push(`CREATE TABLE IF NOT EXISTS public.${q(table_name)} (\n${colDefs.join(',\n')}\n);`);
   }
 
   // --- Primary Keys ---
@@ -129,19 +161,19 @@ async function dumpSchema(devUrl) {
   `);
 
   // --- Foreign Keys ---
+  // Use pg_get_constraintdef for the exact definition. The information_schema
+  // approach (key_column_usage × constraint_column_usage) makes a cartesian
+  // product for multi-column FKs → duplicated column lists (ERROR 42830) and
+  // also loses ON DELETE/UPDATE actions. This emits correct, mixed-case-safe DDL.
   const fkeys = await safeQuery(c, 'Foreign keys', `
-    SELECT 'ALTER TABLE public.' || quote_ident(tc.table_name) ||
-      ' ADD CONSTRAINT ' || quote_ident(tc.constraint_name) ||
-      ' FOREIGN KEY (' || string_agg(quote_ident(kcu.column_name), ', ') || ')' ||
-      ' REFERENCES public.' || quote_ident(ccu.table_name) ||
-      ' (' || string_agg(quote_ident(ccu.column_name), ', ') || ');' AS ddl
-    FROM information_schema.table_constraints AS tc
-    JOIN information_schema.key_column_usage AS kcu
-      ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
-    JOIN information_schema.constraint_column_usage AS ccu
-      ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
-    WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public'
-    GROUP BY tc.table_name, tc.constraint_name, ccu.table_name
+    SELECT 'ALTER TABLE public.' || quote_ident(rel.relname) ||
+      ' ADD CONSTRAINT ' || quote_ident(con.conname) || ' ' ||
+      pg_get_constraintdef(con.oid) || ';' AS ddl
+    FROM pg_constraint con
+    JOIN pg_class rel ON rel.oid = con.conrelid
+    JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+    WHERE con.contype = 'f' AND nsp.nspname = 'public'
+    ORDER BY rel.relname, con.conname
   `);
 
   // --- Indexes ---
@@ -251,11 +283,76 @@ async function dumpSchema(devUrl) {
     ...rlsPolicies.map(r => r.ddl),
   ];
 
-  const sql = parts.join('\n');
+  // Drop statements we can't / shouldn't replay on a fresh target:
+  //  - spatial_ref_sys: PostGIS-owned table; any CREATE/ALTER/ENABLE-RLS on it
+  //    fails with "must be owner" (42501) under the postgres role.
+  //  - supabase_functions: Database Webhook triggers call
+  //    supabase_functions.http_request(); that schema doesn't exist on a fresh
+  //    project (3F000), and webhooks are environment-specific — recreate them on
+  //    the target via Dashboard → Database → Webhooks pointing at PROD endpoints.
+  const SKIP = /spatial_ref_sys|supabase_functions/i;
+  const sql = parts.filter((p) => !SKIP.test(p)).join('\n');
   writeFS('scripts/schema-dump.sql', sql);
   console.log(`\n✓ Schema written to scripts/schema-dump.sql`);
   console.log(`  ${sequences.length} sequences, ${enumTypes.length} enums, ${tableDDLs.length} tables, ${functions.length} functions, ${rlsPolicies.length} policies`);
   return sql;
+}
+
+/**
+ * Export INSERTs for the given reference/lookup tables to scripts/seed-data.sql.
+ * Values are formatted server-side via quote_nullable(col::text), which round-
+ * trips text/numeric/bool/json/array/geometry(hex) on re-insert. Also bumps each
+ * table's owned sequence so future inserts don't collide with seeded ids.
+ */
+async function dumpSeedData(devUrl, tables) {
+  console.log('\nConnecting to DEV database...');
+  const c = new Client({ connectionString: devUrl, ssl: { rejectUnauthorized: false } });
+  await c.connect();
+  console.log(`Connected. Exporting seed data for: ${tables.join(', ')}\n`);
+
+  const parts = [
+    '-- Seed data (reference / lookup tables)',
+    `-- Generated: ${new Date().toISOString()}`,
+    '',
+  ];
+
+  for (const t of tables) {
+    const cols = await safeQuery(c, `Columns(${t})`,
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`, [t]);
+    if (!cols || cols.length === 0) { console.warn(`  ⚠ ${t}: not found — skipping`); continue; }
+
+    const colList = cols.map((col) => q(col.column_name)).join(', ');
+    const valExpr = cols.map((col) => `quote_nullable(${q(col.column_name)}::text)`).join(" || ', ' || ");
+    const rows = await safeQuery(c, `Data(${t})`,
+      `SELECT 'INSERT INTO public.${q(t)} (${colList}) VALUES (' || ${valExpr} || ');' AS ins FROM public.${q(t)}`);
+
+    parts.push(`-- ${t} (${rows.length} rows)`);
+    parts.push(...rows.map((r) => r.ins));
+    parts.push('');
+  }
+
+  // Bump owned sequences past the seeded ids.
+  const seqs = await safeQuery(c, 'Owned sequences', `
+    SELECT s.relname AS seqname, t.relname AS tablename, a.attname AS colname
+    FROM pg_class s
+    JOIN pg_depend d ON d.objid = s.oid AND d.deptype = 'a'
+    JOIN pg_class t ON t.oid = d.refobjid
+    JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
+    JOIN pg_namespace n ON n.oid = s.relnamespace
+    WHERE s.relkind = 'S' AND n.nspname = 'public' AND t.relname = ANY($1::text[])
+  `, [tables]);
+  if (seqs.length) {
+    parts.push('-- Sequence resets');
+    for (const s of seqs) {
+      parts.push(`SELECT setval('public.${q(s.seqname)}', (SELECT COALESCE(MAX(${q(s.colname)}), 1) FROM public.${q(s.tablename)}), true);`);
+    }
+    parts.push('');
+  }
+
+  await c.end();
+  writeFS('scripts/seed-data.sql', parts.join('\n'));
+  console.log(`\n✓ Seed data written to scripts/seed-data.sql`);
 }
 
 /**
@@ -378,7 +475,7 @@ async function applySchema(qaUrl, sql) {
       ok++;
     } catch (err) {
       // Silently skip "already exists" errors
-      if (['42P07','42710','42723','42P16','42704'].includes(err.code)) {
+      if (['42P07','42710','42723','42P16','42704','42501'].includes(err.code)) {
         skip++;
       } else {
         console.warn(`  [SKIP] ${err.message.substring(0, 120)}`);
@@ -392,6 +489,13 @@ async function applySchema(qaUrl, sql) {
 }
 
 try {
+  if (SEED_ONLY) {
+    await dumpSeedData(DEV_URL, SEED_TABLES);
+    console.log('\n✅ Seed data written to scripts/seed-data.sql.');
+    console.log('   Paste it into the PROD SQL Editor (run AFTER the schema is loaded).');
+    process.exit(0);
+  }
+
   let sql;
   if (APPLY_ONLY) {
     if (!existsFS('scripts/schema-dump.sql')) {
@@ -404,9 +508,15 @@ try {
     sql = await dumpSchema(DEV_URL);
   }
 
-  await applySchema(QA_URL, sql);
-  console.log('\n✅ Schema migration complete!');
-  console.log('Next: bash scripts/deploy-functions-qa.sh');
+  if (DUMP_ONLY) {
+    console.log('\n✅ Dump-only: wrote scripts/schema-dump.sql. Nothing was applied.');
+    console.log('   Apply it by pasting that file into the target project\'s SQL Editor,');
+    console.log('   or re-run with: --qa-pass <TARGET_DB_PASSWORD> --target-ref <TARGET_REF>');
+  } else {
+    await applySchema(QA_URL, sql);
+    console.log('\n✅ Schema migration complete!');
+    console.log('Next: deploy the edge functions + secrets to the target project.');
+  }
 } catch (err) {
   console.error('\n❌ Fatal error:', err.message);
   console.error(err.stack);

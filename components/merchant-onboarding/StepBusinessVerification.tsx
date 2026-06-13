@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ShieldCheck, Loader2, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { userService } from '../../services/userService';
+import { kycVerificationService, KycDocType } from '../../services/kycVerificationService';
 import { floatIn } from './floatIn';
 
 // Validation regex — same as memberJoin.tsx
@@ -52,6 +53,9 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   const [fssaiTaken, setFssaiTaken] = useState<boolean | null>(fssaiValue && isFssaiValid(fssaiValue) ? false : null);
   const [tradeLicenseTaken, setTradeLicenseTaken] = useState<boolean | null>(tradeLicenseValue && isTradeLicenseValid(tradeLicenseValue) ? false : null);
   const [checking, setChecking] = useState<string | null>(null);
+  // Government-database verification (Verify button) per document.
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [verifyResult, setVerifyResult] = useState<Record<string, { ok: boolean; value: string; msg: string }>>({});
 
   const debounceRef = useRef<number | null>(null);
   // Track the original values so we can skip duplicate check for unchanged data
@@ -137,6 +141,40 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
     }
   };
 
+  // Verify the number against the government database (via the KYC provider).
+  const handleVerify = async (docType: KycDocType, value: string) => {
+    setVerifying(docType);
+    try {
+      const r = await kycVerificationService.verify(docType, value);
+      setVerifyResult((prev) => ({
+        ...prev,
+        [docType]: { ok: r.verified, value, msg: r.verified ? (r.mock ? 'Verified ✓ (test mode)' : 'Verified ✓') : (r.error || 'Could not verify') },
+      }));
+    } finally {
+      setVerifying(null);
+    }
+  };
+
+  // Verify button + result; result auto-hides if the number is edited (value mismatch).
+  const VerifyButton = ({ docType, value, valid }: { docType: KycDocType; value: string; valid: boolean }) => {
+    const res = verifyResult[docType];
+    const show = res && res.value === value;
+    const isV = verifying === docType;
+    return (
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => handleVerify(docType, value)}
+          disabled={!valid || isV}
+          className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isV ? 'Verifying…' : show && res.ok ? 'Re-verify' : 'Verify'}
+        </button>
+        {show && <span className={`text-xs font-medium ${res.ok ? 'text-emerald-600' : 'text-red-500'}`}>{res.msg}</span>}
+      </div>
+    );
+  };
+
   const StatusIcon = ({ taken, checking: isChecking, fieldName }: { taken: boolean | null; checking: boolean; fieldName: string }) => {
     if (isChecking) return <Loader2 className="w-4 h-4 animate-spin text-blue-500" />;
     if (taken === true) return <ShieldAlert className="w-4 h-4 text-red-500" />;
@@ -215,6 +253,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
               </div>
               {gstinValue && !isGstValid(gstinValue) && <p className="text-xs text-red-500 mt-1">Invalid GSTIN format</p>}
               {gstinTaken === true && <p className="text-xs text-red-500 mt-1">This GSTIN is already registered</p>}
+              <VerifyButton docType="gstin" value={gstinValue} valid={isGstValid(gstinValue)} />
             </div>
             <div>
               <label className={labelClass}>PAN Number</label>
@@ -241,6 +280,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
             </div>
             {udyamValue && !isUdyamValid(udyamValue) && <p className="text-xs text-red-500 mt-1">Format: UDYAM-XX-00-0000000</p>}
             {udyamTaken === true && <p className="text-xs text-red-500 mt-1">This Udyam number is already registered</p>}
+            <VerifyButton docType="udyam" value={udyamValue} valid={isUdyamValid(udyamValue)} />
           </div>
         )}
 
@@ -255,6 +295,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
             </div>
             {fssaiValue && !isFssaiValid(fssaiValue) && <p className="text-xs text-red-500 mt-1">Must be exactly 14 digits</p>}
             {fssaiTaken === true && <p className="text-xs text-red-500 mt-1">This FSSAI number is already registered</p>}
+            <VerifyButton docType="fssai" value={fssaiValue} valid={isFssaiValid(fssaiValue)} />
           </div>
         )}
 
@@ -269,6 +310,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
             </div>
             {tradeLicenseValue && !isTradeLicenseValid(tradeLicenseValue) && <p className="text-xs text-red-500 mt-1">Format: XX/YYYY/NNNNNN</p>}
             {tradeLicenseTaken === true && <p className="text-xs text-red-500 mt-1">This trade license is already registered</p>}
+            <VerifyButton docType="trade_license" value={tradeLicenseValue} valid={isTradeLicenseValid(tradeLicenseValue)} />
           </div>
         )}
       </div>

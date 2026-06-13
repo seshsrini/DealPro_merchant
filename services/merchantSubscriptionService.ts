@@ -3,6 +3,22 @@ import { supabase } from "./supabaseClient";
 
 export const merchantSubscriptionService = {
   /**
+   * Change tier for an ALREADY-ACTIVE merchant. The change is parked server-side
+   * and takes effect at the next billing cycle (no new mandate / immediate charge).
+   */
+  changeTier: async (tierKey: string): Promise<{ success: boolean; message?: string; effective_date?: string; new_amount?: number; error?: string }> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('merchant-subscription', {
+        body: { action: 'change_tier', tier_key: tierKey },
+      });
+      if (error) return { success: false, error: 'Unable to change plan. Please try again.' };
+      return data;
+    } catch {
+      return { success: false, error: 'Unable to change plan. Please try again.' };
+    }
+  },
+
+  /**
    * Check if a merchant has an active subscription
    */
   checkActiveSubscription: async (merchantId: string, accessToken?: string): Promise<{

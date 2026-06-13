@@ -86,6 +86,54 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (action === 'change_tier') {
+      // Upgrade/downgrade: takes effect NEXT cycle, never mid-cycle. We park the
+      // change in pending_* and the billing run applies + charges it at the next
+      // billing date. The current amount keeps billing until then.
+      const { tier_key } = body;
+      if (!tier_key) {
+        return new Response(JSON.stringify({ error: 'tier_key is required' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+      }
+      const { data: sub } = await supabaseAdmin
+        .from('merchant_subscriptions')
+        .select('id, plan_name, current_period_end, loyalty_redemption_enabled')
+        .eq('merchant_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!sub) {
+        return new Response(JSON.stringify({ error: 'No active subscription to change. Subscribe first.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+      }
+      const { data: tier } = await supabaseAdmin
+        .from('subscription_tiers')
+        .select('id, tier_key, tier_name, subscription_fee')
+        .eq('tier_key', tier_key)
+        .maybeSingle();
+      if (!tier) {
+        return new Response(JSON.stringify({ error: `Tier '${tier_key}' not found` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 });
+      }
+      if (tier.tier_key === sub.plan_name) {
+        return new Response(JSON.stringify({ success: true, message: 'Already on this plan.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+      }
+      const pendingAmount = Number(tier.subscription_fee || 0) + (sub.loyalty_redemption_enabled ? 10 : 0);
+      const { error: updErr } = await supabaseAdmin
+        .from('merchant_subscriptions')
+        .update({
+          pending_tier_id: tier.id,
+          pending_plan_name: tier.tier_key,
+          pending_amount: pendingAmount,
+          pending_effective_date: sub.current_period_end,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sub.id);
+      if (updErr) throw updErr;
+      return new Response(
+        JSON.stringify({ success: true, effective_date: sub.current_period_end, new_amount: pendingAmount, message: `Your plan changes to ${tier.tier_name} on your next billing date — you keep your current plan until then.` }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
+      );
+    }
+
     if (action === 'fetch') {
       // Fetch current active subscription with tier details
       const { data, error } = await supabaseAdmin

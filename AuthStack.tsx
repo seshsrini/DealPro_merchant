@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { AppView } from './types';
 import { userService } from './services/userService';
 import { biometricService } from './services/biometricService';
+import { isSignupKnownComplete } from './services/signupCompleteCache';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { fcmService } from './services/fcmService';
 import { useTranslation } from './contexts/LanguageContext';
@@ -173,7 +174,14 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     // The onboarding wizard has resume-from-step logic in MerchantOnboarding.tsx,
     // so it's safe to route a partially-complete profile back into the wizard —
     // they pick up from the first missing field.
-    const isExistingMerchant = !!(
+    // Cache short-circuit: if this device has previously seen this merchant
+    // finish the signup wizard, trust that flag instead of re-evaluating the
+    // 5-field check on every cold open. The cache is set in
+    // MerchantOnboarding.handleFinalSubmit() only after the atomic write
+    // succeeds, so true here guarantees the DB has those fields populated.
+    // See services/signupCompleteCache.ts for the safety argument.
+    const cachedSignupComplete = isSignupKnownComplete(userProfile.id);
+    const isExistingMerchant = cachedSignupComplete || !!(
       userProfile.full_name &&
       userProfile.store_name &&
       userProfile.business_type &&
@@ -184,7 +192,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
 
     // Check if this user is a staff member (not the owner) — they skip onboarding entirely
     const isStaffMember = userProfile.staff_role && userProfile.staff_role !== 'owner';
-    console.log('[AuthStack] Post-login — isExistingMerchant:', isExistingMerchant, 'profileOk:', profileOk, 'isStaffMember:', isStaffMember, 'staff_role:', userProfile.staff_role,
+    console.log('[AuthStack] Post-login — isExistingMerchant:', isExistingMerchant, 'profileOk:', profileOk, 'cachedSignupComplete:', cachedSignupComplete, 'isStaffMember:', isStaffMember, 'staff_role:', userProfile.staff_role,
       'fields:', { full_name: !!userProfile.full_name, store_name: !!userProfile.store_name, category: !!userProfile.category, business_type: !!userProfile.business_type, terms: !!userProfile.terms_accepted, privacy: !!userProfile.privacy_accepted });
 
     const updatedUser = {
@@ -209,9 +217,12 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
         targetView = 'merchant_dashboard';
       } else if (!subscriptionInfo.hasActiveSubscription) {
         if (profileOk) {
-          console.log('[AuthStack] Subscription check failed but profile is complete — going to dashboard');
-          updatedUser.hasActiveSubscription = true;
-          targetView = 'merchant_dashboard';
+          // Profile complete but NO active subscription/trial → send to the plan
+          // picker, NOT the dashboard. The old hack here force-set
+          // hasActiveSubscription=true and routed to the dashboard, letting
+          // unsubscribed merchants in (and create deals) — a gate bypass.
+          console.log('[AuthStack] Profile complete but no active subscription — routing to subscription selection');
+          targetView = 'merchant_subscriptions';
         } else {
           console.log('[AuthStack] No active subscription — forcing subscription selection');
           targetView = 'merchant_onboarding';
@@ -231,19 +242,26 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
       targetView = 'onboarding';
     }
 
-    // Check if user already opted in/out of biometric
+    // Snapshot these BEFORE the unconditional save below — saveSession makes
+    // getSavedUser() truthy, which would otherwise hide the first-time screen.
     const alreadyAsked = localStorage.getItem('dealpro_merchant_biometric_asked') === 'true';
     const alreadyOptedIn = !!biometricService.getSavedUser();
 
-    if (alreadyOptedIn) {
-      await biometricService.saveSession(updatedUser);
-      setUser(updatedUser);
-      setView(targetView as AppView);
-    } else if (alreadyAsked) {
+    // Persist the session UNCONDITIONALLY. Goal: once a merchant has signed in on
+    // this device, they must never have to enter an OTP again. The saved session
+    // (phone + tokens) is what App.tsx's splash restore + cached-phone silent
+    // re-auth rely on. Previously this was gated on the "Quick Login" choice, so
+    // merchants who tapped "Not Now" (or had already been asked once) were never
+    // remembered and got OTP-prompted on every cold open. Persistence is no longer
+    // a function of that choice — the consent screen below is now purely UX.
+    await biometricService.saveSession(updatedUser);
+
+    if (alreadyOptedIn || alreadyAsked) {
       setUser(updatedUser);
       setView(targetView as AppView);
     } else {
-      // First time — show biometric consent screen
+      // First login on this device — show the quick-login consent screen once.
+      // The session is already saved above regardless of what they choose.
       setPendingUser({ user: updatedUser, targetView });
       setLoginPhase('biometric_consent');
     }
@@ -279,6 +297,10 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
   const handleBiometricDecline = async () => {
     if (!pendingUser) return;
     localStorage.setItem('dealpro_merchant_biometric_asked', 'true');
+    // Declining "Quick Login" must NOT log you out of the device — the session
+    // was already saved in handlePostLoginNavigation, but re-save defensively so
+    // this path can never strand a merchant back into the OTP flow.
+    await biometricService.saveSession(pendingUser.user);
 
     // Establish Supabase session BEFORE navigating
     if (pendingUser.user.access_token && pendingUser.user.refresh_token) {

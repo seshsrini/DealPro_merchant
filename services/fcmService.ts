@@ -243,6 +243,12 @@ class FCMService {
         body: notification.body,
         data: notification.data
       });
+
+      // Web-login approval: pop the in-app approval modal immediately instead of
+      // waiting on the foreground poll. App.tsx listens for this event.
+      if (notification.data?.type === 'web_login_approval') {
+        window.dispatchEvent(new CustomEvent('dealpro:web-login-push', { detail: notification.data }));
+      }
     });
 
     // Called when user taps on a notification
@@ -258,6 +264,12 @@ class FCMService {
 
       // Handle notification tap - navigate to specific screen based on data
       // Example: if (notification.data.dealId) { navigateToDeal(notification.data.dealId); }
+
+      // Web-login approval tapped from the tray (app was backgrounded) — surface
+      // the approval modal once the app is in front.
+      if (notification.data?.type === 'web_login_approval') {
+        window.dispatchEvent(new CustomEvent('dealpro:web-login-push', { detail: notification.data }));
+      }
     });
   }
 

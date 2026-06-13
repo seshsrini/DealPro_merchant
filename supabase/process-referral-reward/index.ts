@@ -150,7 +150,8 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { merchant_id, subscription_id: subDbId } = body;
+    const { merchant_id, subscription_id: subDbId, referral_count } = body;
+    const refCount = Number(referral_count) || 10;
 
     if (!merchant_id) {
       return new Response(
@@ -239,7 +240,7 @@ Deno.serve(async (req) => {
       .insert({
         merchant_id,
         reward_type: 'free_month',
-        referral_count: 20,
+        referral_count: refCount,
         reward_month: new Date().toISOString().slice(0, 10).replace(/-\d{2}$/, '-01'), // first of month
         days_extended: 30,
         old_end_date: currentEnd.toISOString(),
@@ -255,7 +256,7 @@ Deno.serve(async (req) => {
           notification_type: 'referral_reward',
           channel: 'in_app',
           subject: 'You earned a free month!',
-          body: `Amazing! You hit 20 referrals this month. Your next DealPro bill has been pushed back by 30 days!`,
+          body: `Amazing! You hit ${refCount} referrals this month. Your next DealPro bill has been pushed back by 30 days!`,
           status: 'sent',
         });
     } catch (notifErr: any) {

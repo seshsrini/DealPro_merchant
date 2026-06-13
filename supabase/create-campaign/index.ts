@@ -245,6 +245,33 @@ Deno.serve(async (req) => {
     if (merchant_id !== user.id) {
       return new Response(JSON.stringify({ error: 'Unauthorized: Merchant ID mismatch.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 });
     }
+
+    // Subscription gate (server-side, authoritative). The client routing/UI can be
+    // bypassed, so the server itself must refuse deal creation for a merchant with
+    // no active subscription or trial. Active staff inherit the owner's access and
+    // are exempt from this self-check.
+    {
+      const { data: staffRow } = await supabase
+        .from('merchant_staff')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .limit(1)
+        .maybeSingle();
+      if (!staffRow) {
+        const { data: activeSub } = await supabase
+          .from('merchant_subscriptions')
+          .select('id')
+          .eq('merchant_id', merchant_id)
+          .eq('status', 'active')
+          .gte('current_period_end', new Date().toISOString())
+          .limit(1)
+          .maybeSingle();
+        if (!activeSub) {
+          return new Response(JSON.stringify({ error: 'An active subscription is required to create deals.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 });
+        }
+      }
+    }
     if (!isString(latlong as string) || (latlong as string).length < 1) {
       return new Response(JSON.stringify({ error: 'LatLong string is required.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
     }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AppView, User, Deal } from './types'; // Import User type
-import { biometricService } from './services/biometricService';
+import { biometricService, hydrateSessionFromDurableStore } from './services/biometricService';
 import { AuthStack } from './AuthStack';
 import { MemberJoin } from './memberJoin';
 import { MerchantStack } from './MerchantStack';
@@ -15,7 +15,10 @@ import { Header, MerchantBottomNav } from './components/Navigation';
 import { DealProLogo } from './components/DealProLogo';
 import { MerchantOnboarding } from './MerchantOnboarding';
 import { QRscan } from './QRscan';
+import { WebLoginApprovalModal } from './components/WebLoginApprovalModal';
+import { webLoginApprovalService, type PendingWebLogin } from './services/webLoginApprovalService';
 import { supabase, updateSupabaseSession } from './services/supabaseClient';
+import { App as CapApp } from '@capacitor/app';
 import { userService } from './services/userService';
 import { addCampaignService } from './services/addCampaignService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
@@ -36,6 +39,7 @@ const AppContent: React.FC = () => {
   const [subscriptionActivationStuck, setSubscriptionActivationStuck] = useState(false);
   const [dealIdToEdit, setDealIdToEdit] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [pendingWebLogin, setPendingWebLogin] = useState<PendingWebLogin | null>(null);
   const [preSelectedTab, setPreSelectedTab] = useState<'active' | 'expired' | null>(null);
   const [pendingAuthView, setPendingAuthView] = useState<AppView>('login');
 
@@ -190,27 +194,56 @@ const AppContent: React.FC = () => {
     }
   }, [user, setUser]);
 
-  // Razorpay Checkout now runs in-app (services/razorpayCheckoutService.ts) and
-  // dispatches a window 'dealpro:paid' CustomEvent on successful verification.
-  // This listener kicks off the merchant_subscriptions poll so the wizard
-  // unlocks once the razorpay-webhook function flips status to 'active'.
-  //
-  // Replaced two legacy listeners:
-  //   - `appUrlOpen` for `dealpro://paid?subscription_id=...` (native deep
-  //     link from the VedicJaalam /subscribe page)
-  //   - window `message` for `{ type: 'dealpro:paid' }` posted by the
-  //     VedicJaalam /subscribe page on web
-  // Both paths required the Vercel-hosted /subscribe page, which we no longer
-  // use. If that page is ever revived, restore those listeners from git.
+  // Razorpay subscription returns from the VedicJaalam /subscribe web page
+  // (Play-compliant redirect — see services/razorpayCheckoutService.ts). Three
+  // signals all kick off the same activation poll (verify-subscription writes
+  // `pending_activation`; the razorpay-webhook function flips it to 'active' a
+  // few seconds later):
+  //   - native deep link: appUrlOpen `dealpro://paid?...`
+  //   - web:  window `message` `{ type: 'dealpro:paid' }` from the page opener
+  //   - legacy in-app: `dealpro:paid` CustomEvent (kept, harmless)
   useEffect(() => {
     if (!user.isLoggedIn || user.role !== 'merchant' || !user.id) return;
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      console.log('[App] dealpro:paid CustomEvent received:', detail);
+
+    const onPaid = (detail?: any) => {
+      console.log('[App] Razorpay paid signal received:', detail);
       pollForSubscriptionActivation();
     };
-    window.addEventListener('dealpro:paid', handler as EventListener);
-    return () => window.removeEventListener('dealpro:paid', handler as EventListener);
+
+    const customHandler = (e: Event) => onPaid((e as CustomEvent).detail);
+    window.addEventListener('dealpro:paid', customHandler as EventListener);
+
+    const messageHandler = (e: MessageEvent) => {
+      if (e?.data && (e.data as any).type === 'dealpro:paid') onPaid(e.data);
+    };
+    window.addEventListener('message', messageHandler);
+
+    let urlListener: { remove: () => void } | undefined;
+    CapApp.addListener('appUrlOpen', (data: { url?: string }) => {
+      if (typeof data?.url === 'string' && data.url.includes('dealpro://paid')) {
+        // Close the system browser (Capacitor Browser) if still up, then poll.
+        import('@capacitor/browser').then(({ Browser }) => Browser.close().catch(() => {}));
+        onPaid({ url: data.url });
+      }
+    }).then((l) => { urlListener = l; }).catch(() => {});
+
+    // Fallback: the dealpro:// deep link is unreliable on modern Android Chrome
+    // (JS-initiated custom-scheme redirects are often blocked). So when the
+    // merchant returns to the app after the Razorpay browser, re-check — this is
+    // what actually un-sticks the subscription/loyalty step in the common case.
+    let stateListener: { remove: () => void } | undefined;
+    CapApp.addListener('appStateChange', ({ isActive }: { isActive: boolean }) => {
+      if (isActive && user.role === 'merchant' && !user.hasActiveSubscription) {
+        pollForSubscriptionActivation();
+      }
+    }).then((l) => { stateListener = l; }).catch(() => {});
+
+    return () => {
+      window.removeEventListener('dealpro:paid', customHandler as EventListener);
+      window.removeEventListener('message', messageHandler);
+      urlListener?.remove();
+      stateListener?.remove();
+    };
   }, [user.id, user.isLoggedIn, user.role, pollForSubscriptionActivation]);
 
   // Update Supabase client session whenever user.access_token changes
@@ -291,9 +324,56 @@ const AppContent: React.FC = () => {
     }
   }, [user.isLoggedIn, user.id, user.email, user.phone]);
 
+  // Web-login approval: when a logged-in merchant opens or foregrounds the app,
+  // check for pending "approve web sign-in" requests and prompt them. We check
+  // on launch, on every foreground, AND on a light 5s poll while the app is in
+  // the foreground. The poll matters because a request created while the app is
+  // ALREADY foreground produces no `visibilitychange` to react to — without it,
+  // a merchant whose app was already open wouldn't see the prompt until they
+  // happened to background→foreground (the ~20s "delay" testers hit). Frequent
+  // polling also keeps the edge function warm, avoiding cold-start lag on the
+  // first check. The check self-gates on visibility, so it's a no-op (no network)
+  // while backgrounded — negligible battery cost.
+  useEffect(() => {
+    if (!user.isLoggedIn || !user.id) return;
+    let cancelled = false;
+
+    const check = async (force = false) => {
+      // The poll self-gates on visibility; a push (force) checks regardless, since
+      // on tap-to-open the app may still be mid-foreground transition.
+      if (!force && typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      const pending = await webLoginApprovalService.listPending();
+      if (!cancelled && pending.length > 0) {
+        setPendingWebLogin((prev) => prev || pending[0]); // don't replace an open prompt
+      }
+    };
+
+    check(); // immediate on launch / login
+    const interval = setInterval(check, 5000); // light foreground poll (self-gates on visibility)
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    // Instant path: web-login-request sends an FCM push (data.type ===
+    // 'web_login_approval'); fcmService re-broadcasts it as this window event, so
+    // the prompt appears immediately with no poll wait.
+    const onPush = () => check(true);
+    window.addEventListener('dealpro:web-login-push', onPush as EventListener);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('dealpro:web-login-push', onPush as EventListener);
+    };
+  }, [user.isLoggedIn, user.id]);
+
   useEffect(() => {
     if (view === 'splash') {
       const timer = setTimeout(async () => {
+        // Recover the saved session from durable native storage if the WebView
+        // evicted localStorage. MUST run before getSavedUser() so an evicted
+        // merchant is restored silently instead of being dropped into the OTP
+        // flow. No-op when localStorage is intact or the native plugin is absent.
+        await hydrateSessionFromDurableStore();
+
         // Try to restore saved user from localStorage (instant, no network calls)
         const savedUser = biometricService.getSavedUser();
 
@@ -347,12 +427,26 @@ const AppContent: React.FC = () => {
                   } else {
                     throw new Error('No session returned');
                   }
-                } catch (reAuthErr) {
-                  console.warn('[App] Silent re-auth failed — redirecting to login:', reAuthErr);
-                  await biometricService.clearSession();
-                  setUser({ id: '', username: '', isLoggedIn: false, role: 'consumer', full_name: '', access_token: null, refresh_token: null, onboarding_complete: false, hasActiveSubscription: false } as User);
-                  setView('login');
-                  return;
+                } catch (reAuthErr: any) {
+                  // Goal: a signed-up merchant never sees OTP again on this device.
+                  // A transient network failure (offline cold open, flaky mobile
+                  // data) must NOT wipe the saved session — that would strand them
+                  // back in the OTP flow forever. Keep the session and proceed
+                  // optimistically; the functions.invoke 401-retry and resume-time
+                  // recoverSessionOrSilentReauth will repair tokens once the network
+                  // returns. Only a definitive rejection logs them out.
+                  const m = (reAuthErr?.message || String(reAuthErr)).toLowerCase();
+                  const transient = /failed to fetch|failed to send|network|timeout|timed out|offline/.test(m);
+                  if (transient) {
+                    console.warn('[App] Silent re-auth hit a transient network error — keeping saved session, proceeding to dashboard:', reAuthErr);
+                    // fall through to the subscription/routing check below using savedUser
+                  } else {
+                    console.warn('[App] Silent re-auth failed definitively — redirecting to login:', reAuthErr);
+                    await biometricService.clearSession();
+                    setUser({ id: '', username: '', isLoggedIn: false, role: 'consumer', full_name: '', access_token: null, refresh_token: null, onboarding_complete: false, hasActiveSubscription: false } as User);
+                    setView('login');
+                    return;
+                  }
                 }
               } else {
                 console.warn('[App] No phone for re-auth — redirecting to login');
@@ -414,11 +508,17 @@ const AppContent: React.FC = () => {
               userWithSub.hasActiveSubscription = true;
               navigateTo('merchant_dashboard');
             } else if (profileComplete) {
-              if (!subscriptionInfo.hasActiveSubscription) {
-                console.log('[App] Subscription check failed but profile complete — trusting saved session → dashboard');
-                userWithSub.hasActiveSubscription = savedUser.hasActiveSubscription ?? true;
+              if (subscriptionInfo.hasActiveSubscription) {
+                navigateTo('merchant_dashboard');
+              } else {
+                // Profile complete but NO active subscription/trial → enforce the
+                // subscription gate. The previous "trust saved session" hack sent
+                // these merchants to the dashboard, which let a fresh signup who
+                // abandoned or failed the payment step straight in (and create
+                // deals) without ever subscribing — a serious gate bypass.
+                console.log('[App] Profile complete but no active subscription — routing to subscription selection');
+                navigateTo('merchant_subscriptions');
               }
-              navigateTo('merchant_dashboard');
             } else {
               if (!subscriptionInfo.hasActiveSubscription) {
                 console.log('[App] No subscription and profile incomplete — onboarding');
@@ -499,7 +599,7 @@ const AppContent: React.FC = () => {
             Deal<span className="text-yellow-500">Pro</span>
           </h1>
           <p className="mt-4 text-xs text-slate-400 text-center font-medium">Engineered by Vedic Jaalam</p>
-          <img src="/assets/vedicjaalam.svg?v=2" alt="Vedic Jaalam" className="mt-2 h-6 w-auto" />
+          <img src={`${import.meta.env.BASE_URL}assets/vedicjaalam.svg?v=2`} alt="Vedic Jaalam" className="mt-2 h-6 w-auto" />
         </div>
       ) : view === 'welcome' ? (
         <div className="h-screen bg-white flex flex-col px-8 pt-16 pb-10">
@@ -709,6 +809,21 @@ const AppContent: React.FC = () => {
             user={user}
             theme={theme}
           />
+
+          {pendingWebLogin && (
+            <WebLoginApprovalModal
+              request={pendingWebLogin}
+              theme={theme}
+              onApprove={async () => {
+                await webLoginApprovalService.decide(pendingWebLogin.request_id, true);
+                setPendingWebLogin(null);
+              }}
+              onDeny={async () => {
+                await webLoginApprovalService.decide(pendingWebLogin.request_id, false);
+                setPendingWebLogin(null);
+              }}
+            />
+          )}
 
           {/* OTP Modal is rendered globally */}
           <OtpVerificationModal

@@ -249,6 +249,15 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
   };
 
   const handleBack = () => {
+    // Pencil-edit return: when the merchant jumped here from Review's per-section
+    // pencil, the back button must take them back to Review (the page with all
+    // the pencils + data), not to the previous wizard step. Mirrors handleNext
+    // above and matches CampaignWizard / DotdWizard behavior.
+    if (returnToReviewRef.current) {
+      returnToReviewRef.current = false;
+      goToStep(STEP_LABELS.length - 1);
+      return;
+    }
     const firstStep = editProduct ? 1 : 0;
     if (currentStep === firstStep) {
       setView('merchant_catalogue');

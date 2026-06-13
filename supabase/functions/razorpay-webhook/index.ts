@@ -116,17 +116,31 @@ Deno.serve(async (req: Request) => {
 
   const subEntity = event.payload?.subscription?.entity;
   const payEntity = event.payload?.payment?.entity;
-  if (!subEntity?.id) {
-    // Some non-subscription events may slip through if the dashboard config
-    // includes extras — ack so they don't retry forever.
-    console.log('[razorpay-webhook] Skipping event without subscription:', event.event);
-    return new Response('ok', { status: 200 });
-  }
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
+
+  // Recurring-charge reconciliation — the admin billing run records each debit
+  // optimistically as 'captured'; these payment.* events (which carry a payment
+  // entity but no subscription) confirm the real outcome.
+  if (!subEntity?.id && payEntity?.id && (event.event === 'payment.captured' || event.event === 'payment.failed')) {
+    const ok = event.event === 'payment.captured';
+    await supabase.from('merchant_payments')
+      .update({ payment_status: ok ? 'captured' : 'failed', failure_reason: ok ? null : 'payment failed' })
+      .eq('transaction_id', payEntity.id);
+    await supabase.from('billing_run_items')
+      .update({ status: ok ? 'captured' : 'failed', error: ok ? null : 'payment failed' })
+      .eq('razorpay_payment_id', payEntity.id);
+    return new Response('ok', { status: 200 });
+  }
+
+  if (!subEntity?.id) {
+    // Some non-subscription events may slip through — ack so they don't retry forever.
+    console.log('[razorpay-webhook] Skipping event without subscription:', event.event);
+    return new Response('ok', { status: 200 });
+  }
 
   // Idempotency: log every event so retries don't double-apply business logic.
   // The unique key is (razorpay_event_id) — Razorpay sends an id header.
@@ -238,6 +252,34 @@ Deno.serve(async (req: Request) => {
     console.error('[razorpay-webhook] Upsert failed:', upsertErr);
     // Returning 500 makes Razorpay retry — desired so we don't drop state.
     return new Response('DB error', { status: 500 });
+  }
+
+  // Billing ledger — record the actual charge so revenue/billing analytics
+  // (PrismIQ "Billing" cube) have real payment HISTORY. merchant_subscriptions
+  // only holds the current state. Idempotent on razorpay_payment_id so webhook
+  // retries never double-count; non-fatal so a ledger hiccup can't block
+  // subscription activation (the upsert above is the critical write).
+  if (event.event === 'subscription.charged' && payEntity?.id && typeof payEntity.amount === 'number') {
+    const rupees = payEntity.amount / 100; // Razorpay sends paise
+    // Matches the EXISTING merchant_payments schema (GST-invoice ledger). We record
+    // the gross charge for analytics; the GST split (cgst/sgst/igst) is left at the
+    // table defaults and can be computed by a dedicated invoicing flow later.
+    // order_id is NOT NULL and subscription charges have no separate order, so we
+    // use the payment id. Idempotent on transaction_id (unique).
+    const { error: payErr } = await supabase
+      .from('merchant_payments')
+      .upsert({
+        merchant_id: merchantId,
+        subscription_id: existingSub?.id ?? null,
+        transaction_id: payEntity.id,
+        order_id: payEntity.id,
+        amount_base: rupees,
+        amount_total: rupees,
+        currency: payEntity.currency || 'INR',
+        payment_method: payEntity.method ?? null,
+        payment_status: 'captured',
+      }, { onConflict: 'transaction_id', ignoreDuplicates: true });
+    if (payErr) console.error('[razorpay-webhook] merchant_payments ledger insert failed (non-fatal):', payErr.message);
   }
 
   return new Response('ok', { status: 200 });

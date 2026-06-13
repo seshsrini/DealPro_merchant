@@ -52,6 +52,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
 
   // ── Derived subscription info ──
   const isTrialing = currentSubscription?.status === 'active' &&
@@ -195,6 +196,26 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const handlePayWithRazorpay = async () => {
     if (!tierToConfirm || !user.id) return;
     setShowConfirmation(false);
+    setNoticeMsg(null);
+
+    // Already-active merchant changing plan → park the change for the NEXT cycle
+    // (no new mandate, no immediate charge — the existing Autopay mandate covers
+    // it and the billing run applies the new amount next cycle). New/expired
+    // merchant → register a fresh mandate via the web checkout.
+    const hasActive = currentSubscription?.status === 'active';
+    if (hasActive && tierToConfirm.id !== currentTierId) {
+      try {
+        const res = await merchantSubscriptionService.changeTier(tierToConfirm.tier_key);
+        if (!res.success) throw new Error(res.error || 'change failed');
+        setNoticeMsg(res.message || 'Your plan change takes effect on your next billing date.');
+        await fetchData();
+      } catch (err) {
+        console.error('[MerchantSubscriptions] change_tier failed:', err);
+        setError('Could not change your plan. Please try again.');
+      }
+      return;
+    }
+
     try {
       await razorpayCheckoutService.openCheckout({
         tierKey: tierToConfirm.tier_key,
@@ -233,6 +254,13 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           <CreditCard className="w-5 h-5 text-blue-500" />
         </div>
       </div>
+
+      {/* Plan-change confirmation (takes effect next cycle) */}
+      {noticeMsg && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+          {noticeMsg}
+        </div>
+      )}
 
       {/* ════════════════════════════════════════════
           SUBSCRIPTION STATUS CARD

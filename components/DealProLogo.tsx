@@ -28,7 +28,10 @@ export const DealProLogo: React.FC<DealProLogoProps> = ({ className, iconClassNa
 
   return (
     <img
-      src="/assets/merchantlogo.svg"
+      // BASE_URL is '/' for the native build and '/merchant/' for the web build,
+      // so this resolves to the right asset path in both. A hardcoded
+      // '/assets/...' would 404 under the web build's /merchant/ base.
+      src={`${import.meta.env.BASE_URL}assets/merchantlogo.svg`}
       alt={alt || 'DealPro'}
       className={className}
       onError={() => setFailed(true)}

@@ -24,6 +24,7 @@
     "@capacitor/cli": "^6.2.1",
     "@capacitor/core": "^6.2.1",
     "@capacitor/geolocation": "^6.0.0",
+    "@capacitor/preferences": "^6.0.4",
     "@capacitor/push-notifications": "^6.0.5",
     "@google/genai": "^1.35.0",
     "@sentry/react": "^10.51.0",

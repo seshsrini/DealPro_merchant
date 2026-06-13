@@ -35,13 +35,14 @@ export const StepLoyaltyAddon: React.FC<StepLoyaltyAddonProps> = ({
     return () => clearTimeout(t);
   }, []);
 
-  // Activation succeeded → advance.
+  // Activation succeeded → advance. Not gated on `pending`: the deep link can be
+  // blocked and the app may have been backgrounded during payment, so advance
+  // whenever the subscription goes active (App.tsx re-checks on resume).
   useEffect(() => {
-    if (!pending) return;
     if (!user.hasActiveSubscription) return;
     setPending(null);
     onComplete();
-  }, [pending, user.hasActiveSubscription, onComplete]);
+  }, [user.hasActiveSubscription, onComplete]);
 
   // Safety: if the merchant opens the Razorpay tab and never completes
   // payment (or closes it), un-stick the buttons after 30s so they can

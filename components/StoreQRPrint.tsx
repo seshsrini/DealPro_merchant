@@ -208,7 +208,7 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
     try {
       const logo = new Image();
       logo.crossOrigin = 'anonymous';
-      logo.src = '/assets/logo.png';
+      logo.src = `${import.meta.env.BASE_URL}assets/logo.png`; // base-aware: '/' native, '/merchant/' web
       await new Promise((resolve, reject) => {
         logo.onload = resolve;
         logo.onerror = reject;
@@ -282,7 +282,7 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
           {/* Logo */}
           <div className="rounded-xl p-3 pb-0 mb-5 bg-white flex flex-col items-center" style={{ backgroundColor: '#ffffff' }}>
             <img
-              src="/assets/logo.svg"
+              src={`${import.meta.env.BASE_URL}assets/logo.svg`}
               alt="DealPro"
               className="w-24 h-auto"
               style={{ background: '#ffffff' }}
