@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Camera, Upload, Image as ImageIcon, Loader2, X, Sparkles, AlertCircle, CheckCircle2, ArrowRight, RotateCcw, Plus, Video, Play } from 'lucide-react';
 import { floatIn } from './floatIn';
-import { productLookupService, AiProductAnalysis } from '../../services/productLookupService';
+import { productLookupService, AiProductAnalysis, mapCategoryToSchemaId } from '../../services/productLookupService';
 import { addCampaignService } from '../../services/addCampaignService';
 import { supabase } from '../../services/supabaseClient';
 
@@ -276,6 +276,28 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
         setMediaError(mod.reason || 'This image cannot be used.');
         return;
       }
+
+      // Relevance check — extra photos must be the SAME kind of product as the
+      // recognised cover (e.g. block a TV added to a shirt). Only runs when the
+      // cover was identified by AI; fails open if the check itself errors.
+      if (analysis?.category) {
+        try {
+          const { analysis: extraAi } = await productLookupService.analyzeProductImage(file);
+          if (extraAi?.category) {
+            const coverSchema = mapCategoryToSchemaId(analysis.category);
+            const extraSchema = mapCategoryToSchemaId(extraAi.category);
+            if (coverSchema !== 'general' && extraSchema !== 'general' && coverSchema !== extraSchema) {
+              setMediaError(
+                `That looks like a different product. Please add more photos of "${analysis.product_name || analysis.category}" — not ${extraAi.product_name || extraAi.category}.`
+              );
+              return;
+            }
+          }
+        } catch {
+          /* relevance check failed (network/AI) — don't block the upload */
+        }
+      }
+
       const url = await uploadToCloudinary(file, 'image');
       setAdditionalImages(prev => [...prev, url]);
     } catch (err: any) {
