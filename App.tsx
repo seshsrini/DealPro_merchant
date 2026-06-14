@@ -22,6 +22,7 @@ import { App as CapApp } from '@capacitor/app';
 import { userService } from './services/userService';
 import { addCampaignService } from './services/addCampaignService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
+import { isPaymentPending, clearPaymentPending } from './services/razorpayCheckoutService';
 import { OtpVerificationModal } from './OtpVerificationModal';
 import { TrendingUp, BarChart3, Zap } from 'lucide-react';
 import { PrivacyPolicy } from './PrivacyPolicy'; // Privacy Policy component
@@ -177,6 +178,7 @@ const AppContent: React.FC = () => {
       }
       setSubscriptionActivating(false);
       if (lastInfo?.hasActiveSubscription) {
+        clearPaymentPending(); // payment resolved — stop re-polling on foreground
         setUser({
           ...user,
           hasActiveSubscription: true,
@@ -233,7 +235,10 @@ const AppContent: React.FC = () => {
     // what actually un-sticks the subscription/loyalty step in the common case.
     let stateListener: { remove: () => void } | undefined;
     CapApp.addListener('appStateChange', ({ isActive }: { isActive: boolean }) => {
-      if (isActive && user.role === 'merchant' && !user.hasActiveSubscription) {
+      // Only re-poll (and show the activation overlay) when the merchant actually
+      // started a payment. Without this gate the overlay popped up on EVERY
+      // foreground for any non-subscribed merchant — e.g. mid-signup wizard.
+      if (isActive && user.role === 'merchant' && !user.hasActiveSubscription && isPaymentPending()) {
         pollForSubscriptionActivation();
       }
     }).then((l) => { stateListener = l; }).catch(() => {});
@@ -885,6 +890,7 @@ const AppContent: React.FC = () => {
                   onClick={() => {
                     setSubscriptionActivating(false);
                     setSubscriptionActivationStuck(false);
+                    clearPaymentPending();
                   }}
                   className="mt-4 h-10 px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98]"
                 >
