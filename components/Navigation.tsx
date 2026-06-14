@@ -170,37 +170,39 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
   const tabs = allTabs.filter(tab => !tab.permission || can(tab.permission));
 
   return (
-    <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+2.5rem)] left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md pointer-events-none">
-       <nav className={`pointer-events-auto rounded-2xl px-1.5 py-1.5 flex items-center border ${
-         isDark
-           ? 'bg-slate-900 border-slate-800 shadow-lg shadow-black/30'
-           : 'bg-white border-slate-200 shadow-lg shadow-slate-200/60'
-       }`}>
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = currentView === tab.id;
+    // Flush, full-width bar pinned to the bottom (constrained to the app's
+    // max-w-md width), above the system gesture bar via the safe-area inset.
+    // Mirrors the consumer app's bottom nav — no floating/rounded card.
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 w-full max-w-md">
+      <nav
+        className={`flex items-stretch border-t ${
+          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+        }`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = currentView === tab.id;
+          const activeColor = isDark ? 'text-amber-400' : 'text-amber-600';
 
-            return (
-              <button
-                key={tab.id}
-                id={tab.tourId}
-                onClick={() => setView(tab.id as AppView)}
-                className={`flex flex-col items-center justify-center gap-0.5 transition-all rounded-xl py-2 flex-1 ${
-                  isActive
-                    ? isDark
-                      ? 'text-slate-900 bg-amber-400'
-                      : 'text-slate-900 bg-amber-400'
-                    : isDark
-                      ? 'text-slate-400'
-                      : 'text-slate-900'
-                }`}
-              >
-                <Icon className="w-[18px] h-[18px]" />
-                <span className="text-[8px] leading-tight font-black">{tab.label}</span>
-              </button>
-            );
-          })}
-       </nav>
+          return (
+            <button
+              key={tab.id}
+              id={tab.tourId}
+              onClick={() => setView(tab.id as AppView)}
+              className={`relative flex flex-col items-center justify-center gap-1 pt-2.5 pb-1.5 flex-1 min-w-0 transition-colors ${
+                isActive ? activeColor : isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}
+            >
+              {isActive && (
+                <span className={`absolute top-0 h-[3px] w-8 rounded-full ${isDark ? 'bg-amber-400' : 'bg-amber-500'}`} />
+              )}
+              <Icon className="w-[21px] h-[21px]" strokeWidth={isActive ? 2.4 : 1.9} />
+              <span className={`text-[9px] leading-none truncate max-w-full ${isActive ? 'font-bold' : `font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}`}>{tab.label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 };
