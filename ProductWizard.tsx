@@ -131,9 +131,11 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
 
   const DRAFT_KEY = `product_wizard_draft_${user.id}`;
 
-  // Load merchant stores on mount; auto-assign if single store
+  // Load merchant stores on mount; auto-assign if single store. Force a fresh
+  // fetch (bypass the 1-hour cache) so a recently-added 2nd store immediately
+  // unlocks the multi-store "Select stores" step instead of auto-assigning.
   useEffect(() => {
-    merchantService.getMerchantStores(user.id)
+    merchantService.getMerchantStores(user.id, true)
       .then(stores => {
         const active = (stores || []).filter((s: any) => s.active_status !== 'disabled');
         setMerchantStores(active);

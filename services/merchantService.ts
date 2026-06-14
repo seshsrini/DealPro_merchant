@@ -15,9 +15,9 @@ export const merchantService = {
    *     expiry or offline state doesn't break dependent UI like the deal modal).
    *   - Cache is busted explicitly on add/update/delete so edits show up immediately.
    */
-  getMerchantStores: async (merchantId: string): Promise<MerchantStore[]> => {
+  getMerchantStores: async (merchantId: string, forceRefresh = false): Promise<MerchantStore[]> => {
     const cached = loadCachedStores(merchantId);
-    if (cached?.isFresh) {
+    if (!forceRefresh && cached?.isFresh) {
       console.log(`[merchantService] Returning fresh cached stores (${cached.stores.length}, age ${Math.round(cached.ageMs / 1000)}s)`);
       return cached.stores;
     }
