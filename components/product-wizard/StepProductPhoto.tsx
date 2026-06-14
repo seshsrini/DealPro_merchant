@@ -72,7 +72,7 @@ async function addDealProWatermark(file: File): Promise<File> {
 }
 
 export interface PhotoStepResult {
-  imageUrl: string;
+  imageUrl: string | null;
   additionalImages: string[];
   videoUrl: string | null;
   analysis: AiProductAnalysis | null;
@@ -93,27 +93,38 @@ interface StepProductPhotoProps {
 // Uploads a file to Cloudinary using a signed URL from cloudinary-sign.
 // Same signature works for both image and video — only the endpoint differs.
 async function uploadToCloudinary(file: File, kind: 'image' | 'video'): Promise<string> {
-  const { data: signData, error: signErr } = await supabase.functions.invoke('cloudinary-sign', {
-    body: { folder: 'dealpro-products' },
-  });
-  if (signErr) throw new Error('Upload preparation failed');
+  // Retry transient failures (slow networks / timeouts) before giving up.
+  const ATTEMPTS = kind === 'image' ? 3 : 2;
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    try {
+      const { data: signData, error: signErr } = await supabase.functions.invoke('cloudinary-sign', {
+        body: { folder: 'dealpro-products' },
+      });
+      if (signErr) throw new Error('Upload preparation failed');
 
-  const { signature, timestamp, api_key, cloud_name, folder } = signData;
-  const form = new FormData();
-  form.append('file', file);
-  form.append('signature', signature);
-  form.append('timestamp', String(timestamp));
-  form.append('api_key', api_key);
-  form.append('folder', folder);
+      const { signature, timestamp, api_key, cloud_name, folder } = signData;
+      const form = new FormData();
+      form.append('file', file);
+      form.append('signature', signature);
+      form.append('timestamp', String(timestamp));
+      form.append('api_key', api_key);
+      form.append('folder', folder);
 
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${cloud_name}/${kind}/upload`,
-    { method: 'POST', body: form, signal: AbortSignal.timeout(kind === 'video' ? 90000 : 30000) }
-  );
-  if (!res.ok) throw new Error('Upload failed');
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloud_name}/${kind}/upload`,
+        { method: 'POST', body: form, signal: AbortSignal.timeout(kind === 'video' ? 90000 : 45000) }
+      );
+      if (!res.ok) throw new Error('Upload failed');
 
-  const json = await res.json();
-  return json.secure_url as string;
+      const json = await res.json();
+      return json.secure_url as string;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < ATTEMPTS) await new Promise(r => setTimeout(r, 700 * attempt));
+    }
+  }
+  throw lastErr || new Error('Upload failed');
 }
 
 // Reads a video file's duration via a hidden <video> element.
@@ -149,6 +160,9 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
   const [analysis, setAnalysis] = useState<AiProductAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  // Set when the cover image upload fails after retries — lets the merchant
+  // continue without the photo instead of being stuck.
+  const [coverUploadFailed, setCoverUploadFailed] = useState(false);
 
   // ── Additional media state ─────────────────────────────────────────────────
   const [additionalImages, setAdditionalImages] = useState<string[]>(initialAdditionalImages || []);
@@ -192,6 +206,7 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
     setCoverUrl(null); // invalidate any previously-uploaded cover
     setAnalysis(null);
     setError(null);
+    setCoverUploadFailed(false);
     setAnalyzing(true);
 
     try {
@@ -235,6 +250,7 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
     setCoverUrl(null);
     setAnalysis(null);
     setError(null);
+    setCoverUploadFailed(false);
   };
 
   // ── Additional image handlers ───────────────────────────────────────────────
@@ -309,11 +325,13 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
   const handleContinue = async () => {
     if (!previewUrl) return;
     setUploading(true);
+    setCoverUploadFailed(false);
     try {
       let finalCoverUrl = coverUrl;
       // If the merchant just picked a new cover file, upload it now.
       if (selectedFile && !finalCoverUrl) {
         finalCoverUrl = await uploadToCloudinary(selectedFile, 'image');
+        setCoverUrl(finalCoverUrl); // cache so a retry doesn't re-upload
       }
       if (!finalCoverUrl) throw new Error('Missing cover image');
 
@@ -324,11 +342,19 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
         analysis,
       });
     } catch (err: any) {
+      // Don't block — surface a fallback so the merchant can retry or continue
+      // without the photo (the product supports a null cover image).
       console.error('[StepProductPhoto] Cover upload failed:', err);
-      setError('Image upload failed. Please try again.');
+      setCoverUploadFailed(true);
     } finally {
       setUploading(false);
     }
+  };
+
+  // Fallback when the cover image just won't upload: proceed without it,
+  // keeping any extra images / video / AI analysis already gathered.
+  const continueWithoutPhoto = () => {
+    onResult({ imageUrl: null, additionalImages, videoUrl, analysis });
   };
 
   const confidenceColor = analysis?.confidence === 'high'
@@ -462,6 +488,29 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
                     Continue Manually
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Cover upload failed — fallback so the merchant is never stuck */}
+            {coverUploadFailed && !uploading && (
+              <div className={`p-4 rounded-xl ${isDark ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50 border border-amber-200'}`}>
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className={`text-sm font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Couldn't upload your photo</p>
+                    <p className={`text-[11px] mt-0.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                      Check your connection and tap Continue to retry — or add this product now and attach a photo later.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={continueWithoutPhoto}
+                  className={`mt-3 w-full h-10 rounded-lg text-xs font-semibold active:scale-[0.98] transition-all ${
+                    isDark ? 'bg-slate-800 text-slate-200 border border-slate-700' : 'bg-white text-slate-700 border border-slate-200'
+                  }`}
+                >
+                  Continue without photo
+                </button>
               </div>
             )}
 

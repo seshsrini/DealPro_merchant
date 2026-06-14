@@ -309,6 +309,11 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
           {hasDiscount && (
             <span className={`text-sm line-through ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>₹{wizardState.mrp}</span>
           )}
+          {discountPct > 0 && (
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isDark ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+              {discountPct}% off
+            </span>
+          )}
         </div>
         <p className={`text-xs font-medium ${stockMeta.color}`}>{stockMeta.label}</p>
       </ReviewSection>

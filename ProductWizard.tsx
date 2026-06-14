@@ -299,7 +299,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
     videoUrl,
     analysis,
   }: {
-    imageUrl: string;
+    imageUrl: string | null;
     additionalImages: string[];
     videoUrl: string | null;
     analysis: AiProductAnalysis | null;

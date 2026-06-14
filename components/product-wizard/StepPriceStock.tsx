@@ -74,6 +74,12 @@ export const StepPriceStock: React.FC<StepPriceStockProps> = ({
     ? Math.round((1 - parseFloat(price) / parseFloat(mrp)) * 100)
     : 0;
 
+  // Selling price AND MRP are mandatory (must be a positive number) before the
+  // merchant can continue.
+  const priceValid = price.trim() !== '' && parseFloat(price) > 0;
+  const mrpValid = mrp.trim() !== '' && parseFloat(mrp) > 0;
+  const canContinue = priceValid && mrpValid;
+
   const inputClass = `w-full h-14 px-4 rounded-xl text-base font-medium outline-none transition-all border ${
     isDark
       ? 'bg-slate-800 text-white placeholder-slate-500 border-slate-700 focus:border-slate-500'
@@ -151,6 +157,12 @@ export const StepPriceStock: React.FC<StepPriceStockProps> = ({
         </div>
       </div>
 
+      {!canContinue && (
+        <p style={floatIn(350, visible)} className={`mt-4 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+          Enter both the selling price and MRP to continue.
+        </p>
+      )}
+
       <div style={floatIn(400, visible)} className="mt-auto pb-8 flex gap-3">
         <button
           onClick={onBack}
@@ -162,7 +174,12 @@ export const StepPriceStock: React.FC<StepPriceStockProps> = ({
         </button>
         <button
           onClick={onNext}
-          className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all"
+          disabled={!canContinue}
+          className={`flex-[2] h-14 rounded-xl text-base font-semibold transition-all ${
+            canContinue
+              ? 'bg-slate-900 text-white active:scale-[0.98]'
+              : isDark ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+          }`}
         >
           Continue
         </button>
