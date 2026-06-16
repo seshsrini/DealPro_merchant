@@ -426,7 +426,10 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       }
     } catch (err: any) {
       console.error('[MerchantOnboarding] Submit error:', err);
-      setSubmitError('Unable to save profile. Please try again.');
+      // Surface the real reason (e.g. a missing column / RLS) so issues are
+      // diagnosable instead of always showing a generic message.
+      const detail = err?.message && !/^unable to/i.test(err.message) ? ` (${err.message})` : '';
+      setSubmitError(`Unable to save profile. Please try again.${detail}`);
     } finally {
       setSubmitting(false);
     }

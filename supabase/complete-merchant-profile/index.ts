@@ -77,25 +77,40 @@ Deno.serve(async (req: Request) => {
     console.log('[CompleteMerchantProfile] Updating profile for:', user.id);
 
     // Update merchant_profiles
-    const { data: profileData, error: profileError } = await adminClient
+    const profileUpdate: Record<string, unknown> = {
+      full_name: fullName,
+      store_name: storeName,
+      legal_name: legalName || storeName,
+      category: category || 'General',
+      business_type: effectiveBusinessType,
+      gstin: effectiveBusinessType === 'gstin' ? gstin : null,
+      pan: effectiveBusinessType === 'gstin' ? pan : null,
+      udyam_no: effectiveBusinessType === 'udyam' ? (udyamNo ? udyamNo.toUpperCase() : null) : null,
+      fssai_no: effectiveBusinessType === 'fssai' ? fssaiNo : null,
+      trade_license_no: effectiveBusinessType === 'trade_license' ? (tradeLicenseNo ? tradeLicenseNo.toUpperCase() : null) : null,
+      terms_accepted: true,
+      privacy_accepted: true,
+    };
+
+    let { data: profileData, error: profileError } = await adminClient
       .from('merchant_profiles')
-      .update({
-        full_name: fullName,
-        store_name: storeName,
-        legal_name: legalName || storeName,
-        category: category || 'General',
-        business_type: effectiveBusinessType,
-        gstin: effectiveBusinessType === 'gstin' ? gstin : null,
-        pan: effectiveBusinessType === 'gstin' ? pan : null,
-        udyam_no: effectiveBusinessType === 'udyam' ? (udyamNo ? udyamNo.toUpperCase() : null) : null,
-        fssai_no: effectiveBusinessType === 'fssai' ? fssaiNo : null,
-        trade_license_no: effectiveBusinessType === 'trade_license' ? (tradeLicenseNo ? tradeLicenseNo.toUpperCase() : null) : null,
-        terms_accepted: true,
-        privacy_accepted: true,
-      })
+      .update(profileUpdate)
       .eq('id', user.id)
       .select()
       .single();
+
+    // Resilience: if the legal_name column hasn't been added yet (migration not
+    // applied), don't fail onboarding — retry the save without it.
+    if (profileError && /legal_name/i.test(profileError.message || '')) {
+      console.warn('[CompleteMerchantProfile] legal_name column missing — saving without it.');
+      delete profileUpdate.legal_name;
+      ({ data: profileData, error: profileError } = await adminClient
+        .from('merchant_profiles')
+        .update(profileUpdate)
+        .eq('id', user.id)
+        .select()
+        .single());
+    }
 
     if (profileError) {
       console.error('[CompleteMerchantProfile] Profile update error:', profileError);
