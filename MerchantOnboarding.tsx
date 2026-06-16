@@ -110,6 +110,9 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   // Set when the merchant taps "Edit legal name" on a GST mismatch — Continue/Back
   // from step 2 then returns them straight to the verification step.
   const [returnToVerification, setReturnToVerification] = useState(false);
+  // Bumped when returning to verification after a legal-name edit → triggers
+  // an automatic GST re-verify with the corrected name.
+  const [gstReverifyNonce, setGstReverifyNonce] = useState(0);
   const [hasExistingStores, setHasExistingStores] = useState(false);
   const [lastSubscriptionFee, setLastSubscriptionFee] = useState(0);
   const [lastSubscriptionId, setLastSubscriptionId] = useState<number | null>(null);
@@ -262,9 +265,11 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     saveDraft();
     // Persist step data to DB before navigating away
     saveStepProgress(currentStep);
-    // Editing the legal name from the verification step → jump straight back.
+    // Editing the legal name from the verification step → jump straight back
+    // and auto re-verify GST with the corrected name.
     if (returnToVerification && currentStep === 2) {
       setReturnToVerification(false);
+      setGstReverifyNonce((n) => n + 1);
       goToStep(6);
       return;
     }
@@ -291,6 +296,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   const handleBack = () => {
     if (returnToVerification && currentStep === 2) {
       setReturnToVerification(false);
+      setGstReverifyNonce((n) => n + 1);
       goToStep(6);
       return;
     }
@@ -549,6 +555,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             onNext={handleNext}
             onBack={returnToReview ? undefined : handleBack}
             onEditLegalName={handleEditLegalName}
+            reverifyTrigger={gstReverifyNonce}
             theme={theme}
           />
         );

@@ -34,12 +34,14 @@ interface StepBusinessVerificationProps {
   onBack?: () => void;
   /** Jump back to step 2 to edit the legal name (shown on a GST name mismatch). */
   onEditLegalName?: () => void;
+  /** Bumped when the merchant returns after editing the legal name → auto re-verify GST. */
+  reverifyTrigger?: number;
   theme: 'light' | 'dark';
 }
 
 export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> = ({
   businessType, legalName, gstinValue, panValue, udyamValue, fssaiValue, tradeLicenseValue,
-  onChangeType, onChangeField, onNext, onBack, onEditLegalName, theme,
+  onChangeType, onChangeField, onNext, onBack, onEditLegalName, reverifyTrigger, theme,
 }) => {
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
@@ -161,6 +163,15 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
       setVerifying(null);
     }
   };
+
+  // When the merchant returns after editing the legal name, auto re-verify GST
+  // with the corrected name — so they see a fresh result, not the stale error.
+  useEffect(() => {
+    if (reverifyTrigger && businessType === 'gstin' && isGstValid(gstinValue) && (legalName || '').trim()) {
+      handleVerify('gstin', gstinValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reverifyTrigger]);
 
   // Verify button + result; result auto-hides if the number is edited (value mismatch).
   const VerifyButton = ({ docType, value, valid }: { docType: KycDocType; value: string; valid: boolean }) => {
