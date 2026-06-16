@@ -12,7 +12,6 @@ import { Loader2 } from 'lucide-react';
 import { StepWelcome } from './components/merchant-onboarding/StepWelcome';
 import { StepFullName } from './components/merchant-onboarding/StepFullName';
 import { StepStoreName } from './components/merchant-onboarding/StepStoreName';
-import { StepCategory } from './components/merchant-onboarding/StepCategory';
 import { StepStoreAddress } from './components/merchant-onboarding/StepStoreAddress';
 import { StepAddMoreStores } from './components/merchant-onboarding/StepAddMoreStores';
 import { StepBusinessVerification } from './components/merchant-onboarding/StepBusinessVerification';
@@ -288,7 +287,11 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       return;
     }
     if (currentStep <= 0) return; // Don't go before welcome
-    goToStep(currentStep - 1);
+    // Skip structurally-removed steps (empty label, e.g. the old Category step
+    // at index 3) so Back never lands on a screen that no longer exists.
+    let prev = currentStep - 1;
+    while (prev > 0 && STEP_LABELS[prev] === '') prev--;
+    goToStep(prev);
   };
 
   const handleEditFromReview = (targetStep: number, storeIndex?: number) => {
@@ -484,15 +487,9 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
           />
         );
       case 3:
-        return (
-          <StepCategory
-            value={state.category}
-            onChange={(v) => dispatch({ type: 'SET_FIELD', field: 'category', value: v })}
-            onNext={handleNext}
-            onBack={returnToReview ? undefined : handleBack}
-            theme={theme}
-          />
-        );
+        // Category step removed — auto-computed (single/multiple) at submission.
+        // Never navigated to; render nothing so the old screen can't appear.
+        return null;
       case 4:
         return (
           <StepStoreAddress
