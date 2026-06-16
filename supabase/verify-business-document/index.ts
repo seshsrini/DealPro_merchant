@@ -151,6 +151,44 @@ function mockVerify(docType: DocType, number: string): VerifyOut {
   };
 }
 
+// ── Legal-name cross-check ───────────────────────────────────────────────────
+// Normalise a business name for comparison: uppercase, expand '&', drop common
+// legal/entity suffixes and noise, collapse to alphanumerics + single spaces.
+function normalizeName(s: string): string {
+  return (s || '')
+    .toUpperCase()
+    .replace(/&/g, ' AND ')
+    .replace(/\b(PRIVATE|PVT|LIMITED|LTD|LLP|LLC|INC|CORPORATION|CORP|COMPANY|ENTERPRISES?|ENTERPRISE|TRADERS?|INDIA|AND|THE|M\/S|MS)\b/g, ' ')
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Fuzzy match — exact normalised match, containment, or ≥70% token overlap.
+function namesMatch(a: string, b: string): boolean {
+  const na = normalizeName(a), nb = normalizeName(b);
+  if (!na || !nb) return false;
+  if (na === nb || na.includes(nb) || nb.includes(na)) return true;
+  const ta = na.split(' ').filter((t) => t.length > 1);
+  const tb = nb.split(' ').filter((t) => t.length > 1);
+  if (!ta.length || !tb.length) return false;
+  const [shortToks, longSet] = ta.length <= tb.length ? [ta, new Set(tb)] : [tb, new Set(ta)];
+  const overlap = shortToks.filter((t) => longSet.has(t)).length;
+  return overlap / shortToks.length >= 0.7;
+}
+
+// Pull the registry's legal name out of a provider's raw GSTIN response.
+function extractProviderLegalName(provider: string, raw: any): string | null {
+  try {
+    if (provider === 'sandbox') return raw?.data?.data?.lgnm || raw?.data?.data?.tradeNam || null;
+    if (provider === 'surepass') return raw?.data?.legal_name || raw?.data?.business_name || raw?.data?.company_name || null;
+    if (provider === 'deepvue') return raw?.data?.legal_name || raw?.data?.business_name || null;
+    return raw?.data?.legal_name || raw?.data?.lgnm || raw?.data?.data?.lgnm || null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Handler ──────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -164,13 +202,14 @@ Deno.serve(async (req) => {
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) return json({ error: 'Unauthorized' }, 401);
 
-    const { doc_type, number } = await req.json();
+    const { doc_type, number, legal_name } = await req.json();
     if (!PREFIX[doc_type as DocType]) return json({ error: 'Invalid doc_type' }, 400);
     if (!number || typeof number !== 'string' || number.trim().length < 4) {
       return json({ error: 'A valid document number is required' }, 400);
     }
     const docType = doc_type as DocType;
     const value = number.trim().toUpperCase();
+    const expectedLegalName = typeof legal_name === 'string' ? legal_name.trim() : '';
 
     const mock = String(Deno.env.get('KYC_MOCK_MODE') || '').toLowerCase() === 'true';
     const provider = (Deno.env.get('KYC_PROVIDER') || 'surepass').toLowerCase();
@@ -181,6 +220,23 @@ Deno.serve(async (req) => {
     else if (provider === 'deepvue') out = await verifyDeepvue(docType, value);
     else out = await verifySurepass(docType, value);
 
+    // Cross-check the GST registry's legal name against the name the merchant
+    // entered. A GSTIN that resolves but to a DIFFERENT business is NOT verified.
+    // (Skipped in mock mode, and when no legal name was supplied.)
+    let nameMatch: boolean | null = null;
+    let providerLegalName: string | null = null;
+    if (!mock && docType === 'gstin' && expectedLegalName && out.verified) {
+      providerLegalName = extractProviderLegalName(provider, out.raw);
+      if (providerLegalName) {
+        nameMatch = namesMatch(expectedLegalName, providerLegalName);
+        out.verified = out.verified && nameMatch;
+      }
+      out.raw = {
+        ...out.raw,
+        _legal_name_check: { expected: expectedLegalName, registry: providerLegalName, matched: nameMatch },
+      };
+    }
+
     // Persist the raw response + verified flag on the merchant's own profile.
     const admin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const patch: Record<string, unknown> = {};
@@ -189,7 +245,14 @@ Deno.serve(async (req) => {
     const { error: upErr } = await admin.from('merchant_profiles').update(patch).eq('id', user.id);
     if (upErr) return json({ error: `Save failed: ${upErr.message}` }, 500);
 
-    return json({ verified: out.verified, data: out.raw, mock, provider: mock ? 'mock' : provider });
+    return json({
+      verified: out.verified,
+      data: out.raw,
+      mock,
+      provider: mock ? 'mock' : provider,
+      legal_name_match: nameMatch,
+      registry_legal_name: providerLegalName,
+    });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }

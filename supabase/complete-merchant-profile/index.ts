@@ -45,7 +45,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
 
     const {
-      fullName, storeName, category, businessType,
+      fullName, storeName, legalName, category, businessType,
       gstin, pan, udyamNo, fssaiNo, tradeLicenseNo,
       termsAccepted, privacyAccepted, stores,
     } = body;
@@ -82,6 +82,7 @@ Deno.serve(async (req: Request) => {
       .update({
         full_name: fullName,
         store_name: storeName,
+        legal_name: legalName || storeName,
         category: category || 'General',
         business_type: effectiveBusinessType,
         gstin: effectiveBusinessType === 'gstin' ? gstin : null,

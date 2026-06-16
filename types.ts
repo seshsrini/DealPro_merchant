@@ -165,6 +165,7 @@ export interface User {
   socialHandle?: string;
   // Merchant-specific fields, now optional for all users
   store_name?: string;
+  legal_name?: string; // registered legal name of business (onboarding step 2)
   category?: string;
   gstin?: string;
   pan?: string;

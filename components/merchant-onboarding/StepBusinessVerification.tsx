@@ -21,6 +21,8 @@ type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
 
 interface StepBusinessVerificationProps {
   businessType: BusinessType;
+  /** Legal name of business (onboarding step 2) — cross-checked against GST. */
+  legalName?: string;
   gstinValue: string;
   panValue: string;
   udyamValue: string;
@@ -34,7 +36,7 @@ interface StepBusinessVerificationProps {
 }
 
 export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> = ({
-  businessType, gstinValue, panValue, udyamValue, fssaiValue, tradeLicenseValue,
+  businessType, legalName, gstinValue, panValue, udyamValue, fssaiValue, tradeLicenseValue,
   onChangeType, onChangeField, onNext, onBack, theme,
 }) => {
   const isDark = theme === 'dark';
@@ -145,10 +147,13 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   const handleVerify = async (docType: KycDocType, value: string) => {
     setVerifying(docType);
     try {
-      const r = await kycVerificationService.verify(docType, value);
+      const r = await kycVerificationService.verify(docType, value, docType === 'gstin' ? legalName : undefined);
+      const failMsg = r.legalNameMatch === false
+        ? `Legal name doesn't match this GST${r.registryLegalName ? ` (registered as "${r.registryLegalName}")` : ''}`
+        : (r.error || 'Could not verify');
       setVerifyResult((prev) => ({
         ...prev,
-        [docType]: { ok: r.verified, value, msg: r.verified ? (r.mock ? 'Verified ✓ (test mode)' : 'Verified ✓') : (r.error || 'Could not verify') },
+        [docType]: { ok: r.verified, value, msg: r.verified ? (r.mock ? 'Verified ✓ (test mode)' : 'Verified ✓') : failMsg },
       }));
     } finally {
       setVerifying(null);

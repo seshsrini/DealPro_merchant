@@ -121,7 +121,11 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
 
     // Pre-fill from existing profile
     if (user.full_name) dispatch({ type: 'SET_FIELD', field: 'fullName', value: user.full_name });
-    if (user.store_name) dispatch({ type: 'SET_FIELD', field: 'storeName', value: user.store_name });
+    // Step 2 now holds the legal name of business; fall back to the legacy
+    // store_name for merchants who onboarded before this field existed.
+    if ((user as any).legal_name || user.store_name) {
+      dispatch({ type: 'SET_FIELD', field: 'storeName', value: (user as any).legal_name || user.store_name });
+    }
     if (user.category) dispatch({ type: 'SET_FIELD', field: 'category', value: user.category });
     if (user.business_type) dispatch({ type: 'SET_FIELD', field: 'businessType', value: user.business_type });
     if (user.gstin) dispatch({ type: 'SET_FIELD', field: 'gstinValue', value: user.gstin });
@@ -330,6 +334,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         userId: user.id,
         fullName: state.fullName,
         storeName: state.storeName,
+        legalName: state.storeName, // step 2 is now the legal name of business
         category: filteredStores.length > 1 ? 'multiple' : 'single',
         businessType: state.businessType,
         gstin: encryptedGstin,
@@ -373,6 +378,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         ...user,
         full_name: state.fullName,
         store_name: state.storeName,
+        legal_name: state.storeName,
         category: filteredStores.length > 1 ? 'multiple' : 'single',
         business_type: state.businessType,
         terms_accepted: true,
@@ -514,6 +520,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         return (
           <StepBusinessVerification
             businessType={state.businessType}
+            legalName={state.storeName}
             gstinValue={state.gstinValue}
             panValue={state.panValue}
             udyamValue={state.udyamValue}

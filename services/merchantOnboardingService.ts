@@ -50,6 +50,7 @@ export const merchantOnboardingService = {
     userId: string;
     fullName: string;
     storeName: string;
+    legalName?: string;
     category: string;
     businessType: string;
     gstin?: string | null;

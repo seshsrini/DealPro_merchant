@@ -35,10 +35,10 @@ export const StepStoreName: React.FC<StepStoreNameProps> = ({ value, onChange, o
         <Store className="w-8 h-8 text-emerald-500" />
       </div>
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Your store name
+        Legal name of business
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-8 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        Your brand or business name that customers will see.
+        The registered legal name of your business. You'll add your store name in the next step.
       </p>
       <div style={floatIn(300, visible)}>
         <input
@@ -47,7 +47,7 @@ export const StepStoreName: React.FC<StepStoreNameProps> = ({ value, onChange, o
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Enter store / brand name"
+          placeholder="Enter legal business name"
           className={`w-full h-14 px-4 rounded-xl text-base font-medium outline-none transition-all border ${
             isDark
               ? 'bg-slate-800 text-white placeholder-slate-500 border-slate-700 focus:border-emerald-500'
@@ -55,8 +55,11 @@ export const StepStoreName: React.FC<StepStoreNameProps> = ({ value, onChange, o
           }`}
         />
         {value.length > 0 && !isValid && (
-          <p className="text-xs text-red-500 mt-2">Store name must be at least 2 characters.</p>
+          <p className="text-xs text-red-500 mt-2">Legal name must be at least 2 characters.</p>
         )}
+        <p className={`text-xs mt-3 font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+          This will be verified against GST records for validation.
+        </p>
       </div>
       <div style={floatIn(400, visible)} className="mt-auto pb-safe-bottom flex gap-3">
         {onBack && (
