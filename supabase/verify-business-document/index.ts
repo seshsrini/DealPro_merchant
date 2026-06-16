@@ -177,16 +177,28 @@ function namesMatch(a: string, b: string): boolean {
   return overlap / shortToks.length >= 0.7;
 }
 
-// Pull the registry's legal name out of a provider's raw GSTIN response.
-function extractProviderLegalName(provider: string, raw: any): string | null {
+// Pull the registry's name candidates out of a provider's raw GSTIN response.
+// Returns BOTH the legal name and the trade name — for proprietorships the legal
+// name is the owner's personal name while the trade name is the shop/brand, so a
+// merchant may legitimately enter either. We accept a match against any of them.
+function extractProviderNames(provider: string, raw: any): string[] {
+  const names: Array<string | null | undefined> = [];
   try {
-    if (provider === 'sandbox') return raw?.data?.data?.lgnm || raw?.data?.data?.tradeNam || null;
-    if (provider === 'surepass') return raw?.data?.legal_name || raw?.data?.business_name || raw?.data?.company_name || null;
-    if (provider === 'deepvue') return raw?.data?.legal_name || raw?.data?.business_name || null;
-    return raw?.data?.legal_name || raw?.data?.lgnm || raw?.data?.data?.lgnm || null;
-  } catch {
-    return null;
-  }
+    if (provider === 'sandbox') {
+      const d = raw?.data?.data;
+      names.push(d?.lgnm, d?.tradeNam);
+    } else if (provider === 'surepass') {
+      const d = raw?.data;
+      names.push(d?.legal_name, d?.trade_name, d?.business_name, d?.company_name);
+    } else if (provider === 'deepvue') {
+      const d = raw?.data;
+      names.push(d?.legal_name, d?.trade_name, d?.business_name);
+    } else {
+      const d = raw?.data;
+      names.push(d?.legal_name, d?.trade_name, d?.lgnm, d?.data?.lgnm, d?.data?.tradeNam);
+    }
+  } catch { /* ignore */ }
+  return [...new Set(names.filter((n): n is string => typeof n === 'string' && n.trim().length > 0))];
 }
 
 // ── Handler ──────────────────────────────────────────────────────────────────
@@ -225,15 +237,19 @@ Deno.serve(async (req) => {
     // (Skipped in mock mode, and when no legal name was supplied.)
     let nameMatch: boolean | null = null;
     let providerLegalName: string | null = null;
+    let registryNames: string[] = [];
     if (!mock && docType === 'gstin' && expectedLegalName && out.verified) {
-      providerLegalName = extractProviderLegalName(provider, out.raw);
-      if (providerLegalName) {
-        nameMatch = namesMatch(expectedLegalName, providerLegalName);
+      const candidates = extractProviderNames(provider, out.raw);
+      registryNames = candidates;
+      providerLegalName = candidates[0] || null; // legal name (for display)
+      if (candidates.length > 0) {
+        // Match against the legal name OR the trade name.
+        nameMatch = candidates.some((c) => namesMatch(expectedLegalName, c));
         out.verified = out.verified && nameMatch;
       }
       out.raw = {
         ...out.raw,
-        _legal_name_check: { expected: expectedLegalName, registry: providerLegalName, matched: nameMatch },
+        _legal_name_check: { expected: expectedLegalName, registry: candidates, matched: nameMatch },
       };
     }
 
@@ -290,6 +306,7 @@ Deno.serve(async (req) => {
       provider: mock ? 'mock' : provider,
       legal_name_match: nameMatch,
       registry_legal_name: providerLegalName,
+      registry_names: registryNames,
     });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);

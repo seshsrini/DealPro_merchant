@@ -152,8 +152,12 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
     setVerifying(docType);
     try {
       const r = await kycVerificationService.verify(docType, value, docType === 'gstin' ? legalName : undefined);
+      const registered = (r.registryNames && r.registryNames.length
+        ? r.registryNames
+        : (r.registryLegalName ? [r.registryLegalName] : []))
+        .map((n) => `"${n}"`).join(' or ');
       const failMsg = r.legalNameMatch === false
-        ? `Legal name doesn't match this GST${r.registryLegalName ? ` (registered as "${r.registryLegalName}")` : ''}`
+        ? `Name doesn't match this GST${registered ? ` — it's registered as ${registered}` : ''}`
         : (r.error || 'Could not verify');
       setVerifyResult((prev) => ({
         ...prev,

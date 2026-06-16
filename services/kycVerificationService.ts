@@ -15,6 +15,8 @@ export interface KycVerifyResult {
   legalNameMatch?: boolean | null;
   /** GST only: the legal name returned by the registry. */
   registryLegalName?: string | null;
+  /** GST only: the registry names we matched against (legal + trade). */
+  registryNames?: string[];
 }
 
 export const kycVerificationService = {
@@ -33,6 +35,7 @@ export const kycVerificationService = {
         mock: data?.mock,
         legalNameMatch: data?.legal_name_match ?? null,
         registryLegalName: data?.registry_legal_name ?? null,
+        registryNames: Array.isArray(data?.registry_names) ? data.registry_names : undefined,
       };
     } catch (e) {
       return { verified: false, error: e instanceof Error ? e.message : "Verification failed" };
