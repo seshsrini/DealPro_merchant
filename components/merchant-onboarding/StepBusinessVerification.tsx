@@ -32,12 +32,14 @@ interface StepBusinessVerificationProps {
   onChangeField: (field: string, value: string) => void;
   onNext: () => void;
   onBack?: () => void;
+  /** Jump back to step 2 to edit the legal name (shown on a GST name mismatch). */
+  onEditLegalName?: () => void;
   theme: 'light' | 'dark';
 }
 
 export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> = ({
   businessType, legalName, gstinValue, panValue, udyamValue, fssaiValue, tradeLicenseValue,
-  onChangeType, onChangeField, onNext, onBack, theme,
+  onChangeType, onChangeField, onNext, onBack, onEditLegalName, theme,
 }) => {
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
@@ -57,7 +59,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   const [checking, setChecking] = useState<string | null>(null);
   // Government-database verification (Verify button) per document.
   const [verifying, setVerifying] = useState<string | null>(null);
-  const [verifyResult, setVerifyResult] = useState<Record<string, { ok: boolean; value: string; msg: string }>>({});
+  const [verifyResult, setVerifyResult] = useState<Record<string, { ok: boolean; value: string; msg: string; nameMismatch?: boolean }>>({});
 
   const debounceRef = useRef<number | null>(null);
   // Track the original values so we can skip duplicate check for unchanged data
@@ -153,7 +155,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
         : (r.error || 'Could not verify');
       setVerifyResult((prev) => ({
         ...prev,
-        [docType]: { ok: r.verified, value, msg: r.verified ? (r.mock ? 'Verified ✓ (test mode)' : 'Verified ✓') : failMsg },
+        [docType]: { ok: r.verified, value, msg: r.verified ? (r.mock ? 'Verified ✓ (test mode)' : 'Verified ✓') : failMsg, nameMismatch: r.legalNameMatch === false },
       }));
     } finally {
       setVerifying(null);
@@ -166,7 +168,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
     const show = res && res.value === value;
     const isV = verifying === docType;
     return (
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         <button
           type="button"
           onClick={() => handleVerify(docType, value)}
@@ -175,7 +177,20 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
         >
           {isV ? 'Verifying…' : show && res.ok ? 'Re-verify' : 'Verify'}
         </button>
-        {show && <span className={`text-xs font-medium ${res.ok ? 'text-emerald-600' : 'text-red-500'}`}>{res.msg}</span>}
+        {show && (
+          <span className={`text-xs font-medium ${res.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+            {res.msg}
+            {!res.ok && res.nameMismatch && onEditLegalName && (
+              <button
+                type="button"
+                onClick={onEditLegalName}
+                className="ml-1 underline font-semibold text-blue-600"
+              >
+                Edit legal name
+              </button>
+            )}
+          </span>
+        )}
       </div>
     );
   };

@@ -107,6 +107,9 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [returnToReview, setReturnToReview] = useState(false);
+  // Set when the merchant taps "Edit legal name" on a GST mismatch — Continue/Back
+  // from step 2 then returns them straight to the verification step.
+  const [returnToVerification, setReturnToVerification] = useState(false);
   const [hasExistingStores, setHasExistingStores] = useState(false);
   const [lastSubscriptionFee, setLastSubscriptionFee] = useState(0);
   const [lastSubscriptionId, setLastSubscriptionId] = useState<number | null>(null);
@@ -259,6 +262,12 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     saveDraft();
     // Persist step data to DB before navigating away
     saveStepProgress(currentStep);
+    // Editing the legal name from the verification step → jump straight back.
+    if (returnToVerification && currentStep === 2) {
+      setReturnToVerification(false);
+      goToStep(6);
+      return;
+    }
     if (returnToReview && currentStep >= 1 && currentStep <= 6) {
       // After editing from review, return to review step
       // Special case: step 4 (Address) always goes to step 5 (Store List) first
@@ -280,6 +289,11 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   };
 
   const handleBack = () => {
+    if (returnToVerification && currentStep === 2) {
+      setReturnToVerification(false);
+      goToStep(6);
+      return;
+    }
     if (returnToReview && currentStep !== 7) {
       // When editing from review, "Back" returns to review instead of previous step
       setReturnToReview(false);
@@ -292,6 +306,12 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     let prev = currentStep - 1;
     while (prev > 0 && STEP_LABELS[prev] === '') prev--;
     goToStep(prev);
+  };
+
+  // From a GST legal-name mismatch: go edit the legal name (step 2), then return.
+  const handleEditLegalName = () => {
+    setReturnToVerification(true);
+    goToStep(2);
   };
 
   const handleEditFromReview = (targetStep: number, storeIndex?: number) => {
@@ -528,6 +548,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             onChangeField={(field, value) => dispatch({ type: 'SET_FIELD', field: field as keyof WizardState, value })}
             onNext={handleNext}
             onBack={returnToReview ? undefined : handleBack}
+            onEditLegalName={handleEditLegalName}
             theme={theme}
           />
         );
