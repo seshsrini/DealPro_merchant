@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     const { field, value } = body;
 
     // Validation
-    const allowedFields = ['gstin', 'pan', 'udyam_no', 'fssai_no', 'trade_license_no'];
+    const allowedFields = ['gstin', 'pan', 'udyam_no', 'fssai_no', 'trade_license_no', 'legal_name'];
     if (!isString(field) || !allowedFields.includes(field)) {
       return new Response(JSON.stringify({ error: `Invalid field. Must be one of: ${allowedFields.join(', ')}.` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -50,25 +50,43 @@ Deno.serve(async (req) => {
       });
     }
 
-    const cleanValue = value.trim().toUpperCase(); // Normalize to uppercase
+    // Resolve the caller so we never flag their OWN saved profile as a conflict.
+    let selfId: string | null = null;
+    try {
+      const authHeader = req.headers.get('Authorization') || '';
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+      if (authHeader && anonKey) {
+        const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
+        const { data: { user } } = await userClient.auth.getUser();
+        selfId = user?.id ?? null;
+      }
+    } catch { /* ignore — fall back to no self-exclusion */ }
 
-    // Check if field already exists in merchant_profiles table
-    const { data, error } = await supabase
-      .from('merchant_profiles')
-      .select('id')
-      .eq(field, cleanValue)
-      .maybeSingle();
+    const dbFail = () => new Response(JSON.stringify({ error: 'Database query failed.' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500,
+    });
 
-    if (error) {
-      console.error(`[validate-merchant-field] Database error checking ${field}:`, error);
-      return new Response(JSON.stringify({ error: 'Database query failed.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      });
+    let isTaken = false;
+
+    if (field === 'legal_name') {
+      // Business-name uniqueness: case-insensitive, and also matched against the
+      // legacy store_name (so pre-existing merchants' names count). Exclude self.
+      const v = value.trim();
+      for (const col of ['legal_name', 'store_name']) {
+        let q = supabase.from('merchant_profiles').select('id').ilike(col, v).limit(1);
+        if (selfId) q = q.neq('id', selfId);
+        const { data, error } = await q;
+        if (error) { console.error(`[validate-merchant-field] DB error checking ${col}:`, error); return dbFail(); }
+        if (data && data.length > 0) { isTaken = true; break; }
+      }
+    } else {
+      const cleanValue = value.trim().toUpperCase(); // Normalize to uppercase
+      let q = supabase.from('merchant_profiles').select('id').eq(field, cleanValue).limit(1);
+      if (selfId) q = q.neq('id', selfId);
+      const { data, error } = await q;
+      if (error) { console.error(`[validate-merchant-field] Database error checking ${field}:`, error); return dbFail(); }
+      isTaken = !!(data && data.length > 0);
     }
-
-    // If data exists, it means the field is taken
-    const isTaken = !!data;
 
     return new Response(JSON.stringify({ isTaken }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

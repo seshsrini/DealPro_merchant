@@ -480,6 +480,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             onNext={handleNext}
             onBack={returnToReview ? undefined : handleBack}
             theme={theme}
+            originalValue={(user as any).legal_name || user.store_name || ''}
           />
         );
       case 3:

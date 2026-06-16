@@ -195,7 +195,7 @@ export const userService = {
    * @param value The GSTIN or PAN value to check
    * @returns Promise<boolean> true if value exists (taken), false otherwise.
    */
-  validateMerchantField: async (field: 'gstin' | 'pan' | 'udyam_no' | 'fssai_no' | 'trade_license_no', value: string): Promise<boolean> => {
+  validateMerchantField: async (field: 'gstin' | 'pan' | 'udyam_no' | 'fssai_no' | 'trade_license_no' | 'legal_name', value: string): Promise<boolean> => {
     try {
       const { data, error: invokeError } = await supabase.functions.invoke('validate-merchant-field', {
         body: { field, value },
