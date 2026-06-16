@@ -5,10 +5,12 @@
 // Body: { doc_type: 'gstin' | 'udyam' | 'fssai' | 'trade_license', number: string }
 // Auth: merchant's Supabase JWT (a merchant can only verify their own profile).
 //
-// Provider is chosen by KYC_PROVIDER = 'surepass' | 'deepvue' (default surepass).
+// Provider is chosen by KYC_PROVIDER = 'surepass' | 'deepvue' | 'sandbox' (default surepass).
 //   KYC_MOCK_MODE=true            → simulate success (DEV/testing), no provider call.
 //   Surepass:  SUREPASS_TOKEN (Bearer).
 //   Deepvue:   DEEPVUE_CLIENT_ID + DEEPVUE_CLIENT_SECRET.
+//   Sandbox:   SANDBOX_API_KEY + SANDBOX_API_SECRET (GST only; optional SANDBOX_API_BASE
+//              for the test host https://test-api.sandbox.co.in).
 
 // @ts-ignore
 declare const Deno: {
@@ -92,6 +94,56 @@ async function verifyDeepvue(docType: DocType, number: string): Promise<VerifyOu
   return { verified, raw };
 }
 
+// Sandbox (sandbox.co.in / Quicko) — two-step auth: api_key + api_secret →
+// /authenticate returns a JWT access_token (valid 24h, NOT a bearer token).
+// Its public compliance suite covers GST; Udyam/FSSAI/Trade-License aren't part
+// of it, so those fall back to "not supported".
+let sandboxTokenCache: { token: string; exp: number } | null = null;
+function sandboxBase(): string {
+  return (Deno.env.get('SANDBOX_API_BASE') || 'https://api.sandbox.co.in').replace(/\/$/, '');
+}
+async function sandboxToken(): Promise<string> {
+  if (sandboxTokenCache && sandboxTokenCache.exp > Date.now()) return sandboxTokenCache.token;
+  const key = Deno.env.get('SANDBOX_API_KEY');
+  const secret = Deno.env.get('SANDBOX_API_SECRET');
+  if (!key || !secret) throw new Error('SANDBOX_API_KEY / SANDBOX_API_SECRET not configured');
+  const res = await fetch(`${sandboxBase()}/authenticate`, {
+    method: 'POST',
+    headers: { 'x-api-key': key, 'x-api-secret': secret, 'x-api-version': '1.0' },
+  });
+  const j = await res.json().catch(() => ({}));
+  const token = j?.data?.access_token;
+  if (!res.ok || !token) throw new Error(`Sandbox auth failed (${res.status})`);
+  // Valid 24h — cache for 23h.
+  sandboxTokenCache = { token, exp: Date.now() + 23 * 3600 * 1000 };
+  return token;
+}
+
+async function verifySandbox(docType: DocType, number: string): Promise<VerifyOut> {
+  if (docType !== 'gstin') {
+    return { verified: false, raw: { success: false, error: 'not_supported', message: 'Sandbox supports GST verification only. Use mock or another provider for this document.' } };
+  }
+  const key = Deno.env.get('SANDBOX_API_KEY')!;
+  const token = await sandboxToken();
+  const res = await fetch(`${sandboxBase()}/gst/compliance/public/gstin/search`, {
+    method: 'POST',
+    headers: {
+      // Sandbox tokens are NOT bearer — pass the raw token in `authorization`.
+      'authorization': token,
+      'x-api-key': key,
+      'x-api-version': '1.0.0',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ gstin: number }),
+  });
+  const raw = await res.json().catch(() => ({ success: false, error: `provider_${res.status}` }));
+  // A real GSTIN resolves to a taxpayer record (data.data.gstin) with status_cd '1'.
+  const inner = (raw as any)?.data?.data;
+  const statusCd = (raw as any)?.data?.status_cd;
+  const verified = res.ok && (raw as any)?.code === 200 && statusCd === '1' && !!inner?.gstin;
+  return { verified, raw };
+}
+
 function mockVerify(docType: DocType, number: string): VerifyOut {
   return {
     verified: true,
@@ -125,6 +177,7 @@ Deno.serve(async (req) => {
 
     let out: VerifyOut;
     if (mock) out = mockVerify(docType, value);
+    else if (provider === 'sandbox') out = await verifySandbox(docType, value);
     else if (provider === 'deepvue') out = await verifyDeepvue(docType, value);
     else out = await verifySurepass(docType, value);
 
