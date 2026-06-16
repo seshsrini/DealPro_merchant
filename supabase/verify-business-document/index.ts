@@ -239,10 +239,48 @@ Deno.serve(async (req) => {
 
     // Persist the raw response + verified flag on the merchant's own profile.
     const admin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+    // Append this external API call to the append-only audit log
+    // (api_response_payload). Best-effort read of the existing log; tolerate a
+    // missing column / null. Capped to the most recent 100 entries.
+    const auditEntry = {
+      source: 'verify-business-document',
+      doc_type: docType,
+      number: value,
+      provider: mock ? 'mock' : provider,
+      verified: out.verified,
+      legal_name_match: nameMatch,
+      registry_legal_name: providerLegalName,
+      at: new Date().toISOString(),
+      response: out.raw,
+    };
+    let auditLog: unknown[] = [];
+    try {
+      const { data: existing } = await admin
+        .from('merchant_profiles')
+        .select('api_response_payload')
+        .eq('id', user.id)
+        .single();
+      const cur = (existing as any)?.api_response_payload;
+      if (Array.isArray(cur)) auditLog = cur;
+      else if (cur && Array.isArray(cur.entries)) auditLog = cur.entries;
+    } catch { /* column may not exist yet — start fresh */ }
+    auditLog.push(auditEntry);
+    if (auditLog.length > 100) auditLog = auditLog.slice(-100);
+
     const patch: Record<string, unknown> = {};
     patch[`${PREFIX[docType]}_verified`] = out.verified;
     patch[`${PREFIX[docType]}_verification`] = out.raw;
-    const { error: upErr } = await admin.from('merchant_profiles').update(patch).eq('id', user.id);
+    patch['api_response_payload'] = auditLog;
+
+    let { error: upErr } = await admin.from('merchant_profiles').update(patch).eq('id', user.id);
+    // Resilience: if the audit column isn't present yet (migration not applied),
+    // save the verification without it rather than failing the whole call.
+    if (upErr && /api_response_payload/i.test(upErr.message || '')) {
+      console.warn('[verify-business-document] api_response_payload column missing — saving without it.');
+      delete patch['api_response_payload'];
+      ({ error: upErr } = await admin.from('merchant_profiles').update(patch).eq('id', user.id));
+    }
     if (upErr) return json({ error: `Save failed: ${upErr.message}` }, 500);
 
     return json({
