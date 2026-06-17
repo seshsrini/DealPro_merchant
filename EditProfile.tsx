@@ -208,9 +208,10 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
 
           <input
             value={fullName}
-            onChange={e => setFullName(e.target.value)}
+            onChange={e => setFullName(e.target.value.slice(0, 40))}
             placeholder={t('m_full_name')}
             className={inputClass}
+            maxLength={40}
             required
           />
 
