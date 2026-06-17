@@ -70,6 +70,18 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     || currentTier?.subscription_fee
     || null;
 
+  // Plan-change lock: after an upgrade/downgrade the merchant can't change again
+  // until this date (≥ 1 billing month). Also surface a parked (downgrade) change.
+  const lockedUntilDate = currentSubscription?.tier_change_locked_until
+    ? new Date(currentSubscription.tier_change_locked_until)
+    : null;
+  const isPlanChangeLocked = !!(lockedUntilDate && lockedUntilDate > new Date());
+  const fmtDate = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const pendingPlanName = currentSubscription?.pending_plan_name || null;
+  const pendingEffectiveDate = currentSubscription?.pending_effective_date
+    ? new Date(currentSubscription.pending_effective_date)
+    : null;
+
   // ── Fetch data ──
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -206,9 +218,17 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     if (hasActive && tierToConfirm.id !== currentTierId) {
       try {
         const res = await merchantSubscriptionService.changeTier(tierToConfirm.tier_key);
-        if (!res.success) throw new Error(res.error || 'change failed');
-        setNoticeMsg(res.message || 'Your plan change takes effect on your next billing date.');
-        await fetchData();
+        if (res.success) {
+          // Instant upgrade or parked downgrade — message comes from the server.
+          setNoticeMsg(res.message || 'Your plan change is saved.');
+          await fetchData();
+        } else if ((res as any).error === 'locked') {
+          // Within the change-lock window — show the (non-error) lock message.
+          setNoticeMsg(res.message || 'You can change your plan again later.');
+          await fetchData();
+        } else {
+          throw new Error(res.error || 'change failed');
+        }
       } catch (err) {
         console.error('[MerchantSubscriptions] change_tier failed:', err);
         setError('Could not change your plan. Please try again.');
@@ -255,10 +275,25 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         </div>
       </div>
 
-      {/* Plan-change confirmation (takes effect next cycle) */}
+      {/* Plan-change confirmation (instant upgrade / parked downgrade / lock) */}
       {noticeMsg && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
           {noticeMsg}
+        </div>
+      )}
+
+      {/* Scheduled (parked) downgrade */}
+      {pendingPlanName && pendingEffectiveDate && (
+        <div className={`rounded-xl border px-4 py-3 text-xs font-medium ${isDark ? 'bg-blue-500/10 border-blue-500/20 text-blue-300' : 'bg-blue-50 border-blue-200 text-blue-700'}`}>
+          Your plan changes to <span className="font-bold">{pendingPlanName}</span> on {fmtDate(pendingEffectiveDate)} — you keep your current plan until then.
+        </div>
+      )}
+
+      {/* Change-lock notice */}
+      {isPlanChangeLocked && lockedUntilDate && (
+        <div className={`rounded-xl border px-4 py-3 text-xs font-medium flex items-center gap-2 ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+          <Clock className="w-4 h-4 shrink-0" />
+          <span>You changed your plan recently. You can change it again after <span className="font-bold">{fmtDate(lockedUntilDate)}</span>.</span>
         </div>
       )}
 
@@ -473,6 +508,13 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 {currentTierId === tier.id ? (
                   <span className="px-3 h-8 rounded-lg bg-emerald-500 text-white font-semibold text-[11px] flex items-center">
                     Current
+                  </span>
+                ) : isPlanChangeLocked ? (
+                  <span
+                    title={lockedUntilDate ? `You can change plans again after ${fmtDate(lockedUntilDate)}` : undefined}
+                    className={`px-3 h-8 rounded-lg font-semibold text-[11px] flex items-center gap-1 ${isDark ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-400'}`}
+                  >
+                    <Clock className="w-3 h-3" /> Locked
                   </span>
                 ) : (
                   <button

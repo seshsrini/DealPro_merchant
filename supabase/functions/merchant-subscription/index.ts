@@ -87,9 +87,13 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'change_tier') {
-      // Upgrade/downgrade: takes effect NEXT cycle, never mid-cycle. We park the
-      // change in pending_* and the billing run applies + charges it at the next
-      // billing date. The current amount keeps billing until then.
+      // UPGRADE  → instant benefit: switch plan_name now (higher limits active
+      //            immediately); the new (higher) rate is charged from the next
+      //            billing date by the billing run (no mid-cycle proration).
+      // DOWNGRADE → parked in pending_* and applied at the next billing date
+      //            (merchant keeps the plan they paid for until then).
+      // Either way we set a change-lock so they can't change again for at least
+      // one billing month (the later of the next billing date or +30 days).
       const { tier_key } = body;
       if (!tier_key) {
         return new Response(JSON.stringify({ error: 'tier_key is required' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
@@ -105,46 +109,99 @@ Deno.serve(async (req) => {
       if (!sub) {
         return new Response(JSON.stringify({ error: 'No active subscription to change. Subscribe first.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
       }
-      const { data: tier } = await supabaseAdmin
+
+      // Enforce the change-lock (best-effort; tolerate a missing column).
+      let lockedUntil: string | null = null;
+      try {
+        const { data: lockRow } = await supabaseAdmin
+          .from('merchant_subscriptions')
+          .select('tier_change_locked_until')
+          .eq('id', sub.id)
+          .maybeSingle();
+        lockedUntil = (lockRow as any)?.tier_change_locked_until ?? null;
+      } catch { /* column may not exist yet */ }
+      if (lockedUntil && new Date(lockedUntil) > new Date()) {
+        const until = new Date(lockedUntil);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'locked',
+          locked_until: lockedUntil,
+          message: `You changed your plan recently. You can change it again after ${until.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.`,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+      }
+
+      const { data: newTier } = await supabaseAdmin
         .from('subscription_tiers')
         .select('id, tier_key, tier_name, subscription_fee')
         .eq('tier_key', tier_key)
         .maybeSingle();
-      if (!tier) {
+      if (!newTier) {
         return new Response(JSON.stringify({ error: `Tier '${tier_key}' not found` }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 });
       }
-      if (tier.tier_key === sub.plan_name) {
+      if (newTier.tier_key === sub.plan_name) {
         return new Response(JSON.stringify({ success: true, message: 'Already on this plan.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
       }
-      const pendingAmount = Number(tier.subscription_fee || 0) + (sub.loyalty_redemption_enabled ? 10 : 0);
-      const { error: updErr } = await supabaseAdmin
-        .from('merchant_subscriptions')
-        .update({
-          pending_tier_id: tier.id,
-          pending_plan_name: tier.tier_key,
-          pending_amount: pendingAmount,
-          pending_effective_date: sub.current_period_end,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', sub.id);
+
+      // Compare against the current tier's fee to decide upgrade vs downgrade.
+      const { data: curTier } = await supabaseAdmin
+        .from('subscription_tiers')
+        .select('subscription_fee')
+        .eq('tier_key', sub.plan_name)
+        .maybeSingle();
+      const curFee = Number(curTier?.subscription_fee || 0);
+      const newFee = Number(newTier.subscription_fee || 0);
+      const isUpgrade = newFee > curFee;
+      const recurringAmount = newFee + (sub.loyalty_redemption_enabled ? 10 : 0);
+
+      // Lock for at least one billing month: the later of next billing or +30d.
+      const now = new Date();
+      const in30 = new Date(now.getTime() + 30 * 86400000);
+      const periodEnd = sub.current_period_end ? new Date(sub.current_period_end) : in30;
+      const lockUntil = (periodEnd > in30 ? periodEnd : in30).toISOString();
+
+      const patch: Record<string, unknown> = isUpgrade
+        ? { plan_name: newTier.tier_key, pending_tier_id: null, pending_plan_name: null, pending_amount: null, pending_effective_date: null }
+        : { pending_tier_id: newTier.id, pending_plan_name: newTier.tier_key, pending_amount: recurringAmount, pending_effective_date: sub.current_period_end };
+      patch.tier_change_locked_until = lockUntil;
+      patch.updated_at = now.toISOString();
+
+      let { error: updErr } = await supabaseAdmin.from('merchant_subscriptions').update(patch).eq('id', sub.id);
+      // Resilience: if the lock column isn't present yet, save without it.
+      if (updErr && /tier_change_locked_until/i.test(updErr.message || '')) {
+        delete patch.tier_change_locked_until;
+        ({ error: updErr } = await supabaseAdmin.from('merchant_subscriptions').update(patch).eq('id', sub.id));
+      }
       if (updErr) throw updErr;
-      return new Response(
-        JSON.stringify({ success: true, effective_date: sub.current_period_end, new_amount: pendingAmount, message: `Your plan changes to ${tier.tier_name} on your next billing date — you keep your current plan until then.` }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 },
-      );
+
+      return new Response(JSON.stringify({
+        success: true,
+        upgraded: isUpgrade,
+        locked_until: lockUntil,
+        effective_date: sub.current_period_end,
+        new_amount: recurringAmount,
+        message: isUpgrade
+          ? `Upgraded to ${newTier.tier_name} — your new benefits are active now. The new rate (₹${recurringAmount}) applies from your next billing date.`
+          : `You'll move to ${newTier.tier_name} on your next billing date — you keep your current plan until then.`,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
     if (action === 'fetch') {
-      // Fetch current active subscription with tier details
-      const { data, error } = await supabaseAdmin
+      // Fetch current active subscription with tier + plan-change-lock details.
+      const fetchActive = (cols: string) => supabaseAdmin
         .from('merchant_subscriptions')
-        .select('id, plan_name, status, current_period_start, current_period_end, cancel_at_period_end')
+        .select(cols)
         .eq('merchant_id', user.id)
         .eq('status', 'active')
         .gte('current_period_end', new Date().toISOString())
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+
+      let { data, error } = await fetchActive('id, plan_name, status, current_period_start, current_period_end, cancel_at_period_end, tier_change_locked_until, pending_plan_name, pending_effective_date');
+      // Resilience: retry without the newer columns if they aren't present yet.
+      if (error && /tier_change_locked_until|pending_/i.test(error.message || '')) {
+        ({ data, error } = await fetchActive('id, plan_name, status, current_period_start, current_period_end, cancel_at_period_end'));
+      }
 
       if (error) {
         console.error('[manage-subscription] Fetch error:', error);
