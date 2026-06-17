@@ -71,7 +71,47 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
   const [emailNotification, setEmailNotification] = useState(user.email_notification ?? false);
   const [textNotification, setTextNotification] = useState(user.text_notification ?? false);
 
+  // Email-capture prompt when enabling email notifications without an email on file.
+  const [showEmailPrompt, setShowEmailPrompt] = useState(false);
+  const [emailDraft, setEmailDraft] = useState('');
+  const [emailPromptError, setEmailPromptError] = useState<string | null>(null);
+  const [savingEmail, setSavingEmail] = useState(false);
+
   const isMerchant = user.role?.startsWith('merchant');
+
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e || '').trim());
+
+  // Enabling email notifications: if no valid email is on file, prompt for it
+  // first and store it; otherwise just enable.
+  const handleEmailNotifToggle = (next: boolean) => {
+    if (!next) { setEmailNotification(false); return; }
+    if (isValidEmail(email)) {
+      setEmailNotification(true);
+    } else {
+      setEmailDraft(email || '');
+      setEmailPromptError(null);
+      setShowEmailPrompt(true);
+    }
+  };
+
+  // Save the captured email to merchant_profiles.email and enable the toggle.
+  const confirmEmailForNotif = async () => {
+    const e = emailDraft.trim();
+    if (!isValidEmail(e)) { setEmailPromptError('Please enter a valid email address.'); return; }
+    setSavingEmail(true);
+    setEmailPromptError(null);
+    try {
+      await editProfileService.updateUserProfile(user.id, user.role, { email: e, email_notification: true });
+      setEmail(e);
+      setEmailNotification(true);
+      setUser({ ...user, email: e, email_notification: true });
+      setShowEmailPrompt(false);
+    } catch {
+      setEmailPromptError('Could not save your email. Please try again.');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -334,7 +374,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
 
           <div className={`p-4 rounded-xl border space-y-4 ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
             {toggleSwitch(pushNotification, setPushNotification, t('m_push_notif'))}
-            {toggleSwitch(emailNotification, setEmailNotification, t('m_email_notif'))}
+            {toggleSwitch(emailNotification, handleEmailNotifToggle, t('m_email_notif'))}
             {toggleSwitch(textNotification, setTextNotification, t('m_sms_notif'))}
           </div>
         </div>
@@ -390,6 +430,52 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
           )}
         </button>
       </form>
+
+      {/* Email-capture prompt — shown only when enabling email notifications
+          without a valid email already on file. Stores to merchant_profiles.email. */}
+      {showEmailPrompt && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6">
+          <div className={`w-full max-w-sm rounded-2xl p-6 space-y-4 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
+                <Mail className="w-5 h-5 text-blue-500" />
+              </div>
+              <div>
+                <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Add your email</h3>
+                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>We'll send your email notifications here.</p>
+              </div>
+            </div>
+            <input
+              type="email"
+              autoFocus
+              value={emailDraft}
+              onChange={(e) => { setEmailDraft(e.target.value); setEmailPromptError(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') confirmEmailForNotif(); }}
+              placeholder="you@example.com"
+              className={inputClass}
+            />
+            {emailPromptError && <p className="text-xs text-red-500">{emailPromptError}</p>}
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowEmailPrompt(false)}
+                disabled={savingEmail}
+                className={`flex-1 h-11 rounded-xl text-sm font-medium border active:scale-[0.98] transition-all ${isDark ? 'border-slate-700 text-white' : 'border-slate-200 text-slate-900'}`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmEmailForNotif}
+                disabled={savingEmail || !isValidEmail(emailDraft)}
+                className="flex-1 h-11 rounded-xl bg-slate-900 text-white text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-40"
+              >
+                {savingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
