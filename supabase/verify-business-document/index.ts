@@ -5,7 +5,9 @@
 // Body: { doc_type: 'gstin' | 'udyam' | 'fssai' | 'trade_license', number: string }
 // Auth: merchant's Supabase JWT (a merchant can only verify their own profile).
 //
-// Provider is chosen by KYC_PROVIDER = 'surepass' | 'deepvue' | 'sandbox' (default surepass).
+// Provider is chosen by KYC_PROVIDER = 'surepass' | 'deepvue' | 'sandbox' (default surepass),
+// and can be overridden per doc type via KYC_PROVIDER_GSTIN / _UDYAM / _FSSAI / _TRADE_LICENSE
+// (e.g. GST on Sandbox, Udyam on Deepvue).
 //   KYC_MOCK_MODE=true            → simulate success (DEV/testing), no provider call.
 //   Surepass:  SUREPASS_TOKEN (Bearer).
 //   Deepvue:   DEEPVUE_CLIENT_ID + DEEPVUE_CLIENT_SECRET.
@@ -224,7 +226,15 @@ Deno.serve(async (req) => {
     const expectedLegalName = typeof legal_name === 'string' ? legal_name.trim() : '';
 
     const mock = String(Deno.env.get('KYC_MOCK_MODE') || '').toLowerCase() === 'true';
-    const provider = (Deno.env.get('KYC_PROVIDER') || 'surepass').toLowerCase();
+    // Provider can be set PER document type so different docs can use different
+    // providers — e.g. GST on Sandbox, Udyam on Deepvue/Zoop. Per-doc env var
+    // (KYC_PROVIDER_GSTIN / _UDYAM / _FSSAI / _TRADE_LICENSE) wins, else the
+    // global KYC_PROVIDER, else surepass.
+    const provider = (
+      Deno.env.get(`KYC_PROVIDER_${docType.toUpperCase()}`) ||
+      Deno.env.get('KYC_PROVIDER') ||
+      'surepass'
+    ).toLowerCase();
 
     let out: VerifyOut;
     if (mock) out = mockVerify(docType, value);
