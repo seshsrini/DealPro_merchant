@@ -195,10 +195,17 @@ export const QRscan: React.FC<QRscanProps> = ({ isOpen, onClose, user, theme }) 
           setScanInput('');
         }, 2000);
       } else {
-        setScanResult(response.error === 'UNAUTHORIZED' ? 'unauthorized' : 'invalid');
-        setErrorMessage(response.message || 'Verification failed');
+        // Rejected scan (invalid / not found / different merchant / bad format).
+        // "Already redeemed" keeps its own message; everything else gets a clear,
+        // actionable "invalid code" prompt instead of a vague error.
+        const alreadyRedeemed = response.error === 'REDEEMED' || /redeem/i.test(response.message || '');
+        setScanResult('invalid');
+        setErrorMessage(alreadyRedeemed
+          ? 'This voucher has already been redeemed.'
+          : 'Invalid code. Please check and re-enter.');
       }
     } catch (e) {
+      // Genuine network / unexpected failure — keep the generic message.
       setScanResult('error');
       setErrorMessage('Something went wrong. Please try again.');
     } finally {

@@ -524,7 +524,19 @@ ALWAYS return the reason in English regardless of the input language.`,
     const { data, error } = await supabase.functions.invoke('verify-scan', { // Changed to 'verify-scan'
       body: { claimData: claim, merchantId: mId as string },
     });
-    if (error) throw new Error('Unable to process campaign. Please try again.');
+    if (error) {
+      // verify-scan returns non-2xx (400/403/409) WITH a JSON body for rejected
+      // scans (invalid voucher, different merchant, already redeemed). Surface
+      // that body instead of throwing, so the UI shows a specific message rather
+      // than a generic error. Only a true network/parse failure throws.
+      try {
+        const body = await (error as any).context?.json?.();
+        if (body && (typeof body.success === 'boolean' || body.message || body.error)) {
+          return body as { success: boolean, message?: string, error?: string };
+        }
+      } catch { /* not a JSON error body — fall through to throw */ }
+      throw new Error('Unable to process campaign. Please try again.');
+    }
     return data as { success: boolean, message?: string, error?: string };
   },
 
