@@ -160,7 +160,11 @@ Deno.serve(async (req) => {
       const lockUntil = (periodEnd > in30 ? periodEnd : in30).toISOString();
 
       const patch: Record<string, unknown> = isUpgrade
-        ? { plan_name: newTier.tier_key, pending_tier_id: null, pending_plan_name: null, pending_amount: null, pending_effective_date: null }
+        // Instant upgrade: switch the plan now AND set the go-forward recurring
+        // amount so the next billing run charges Razorpay the NEW (higher) rate.
+        // (No mid-cycle charge — current_period_end is still in the future, so the
+        // billing run only picks this up at the next cycle.)
+        ? { plan_name: newTier.tier_key, total_recurring_amount: recurringAmount, pending_tier_id: null, pending_plan_name: null, pending_amount: null, pending_effective_date: null }
         : { pending_tier_id: newTier.id, pending_plan_name: newTier.tier_key, pending_amount: recurringAmount, pending_effective_date: sub.current_period_end };
       patch.tier_change_locked_until = lockUntil;
       patch.updated_at = now.toISOString();
