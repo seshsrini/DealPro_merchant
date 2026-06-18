@@ -398,11 +398,35 @@ Deno.serve(async (req) => {
       campaignPayload.free_gifts = free_gifts;
     }
 
-    const { data, error } = await supabase
-      .from('campaigns')
-      .insert([campaignPayload])
-      .select()
-      .single();
+    // Globally-unique per-campaign code (format: 1 letter + 6 digits, e.g.
+    // A123456), stored on the campaign. Retry on the rare unique-index collision.
+    const genCampaignCode = (): string => {
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const digits = '0123456789';
+      const pick = (set: string) => {
+        const a = new Uint32Array(1);
+        crypto.getRandomValues(a);
+        return set[a[0] % set.length];
+      };
+      let c = pick(letters);
+      for (let i = 0; i < 6; i++) c += pick(digits);
+      return c;
+    };
+
+    let data: any = null;
+    let error: any = null;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      campaignPayload.discount_code = genCampaignCode();
+      ({ data, error } = await supabase
+        .from('campaigns')
+        .insert([campaignPayload])
+        .select()
+        .single());
+      if (!error) break;
+      // Only retry when the collision is on the campaign code; otherwise bail.
+      if (!/discount_code|duplicate key|unique/i.test(error.message || '')) break;
+      console.warn(`[create-campaign] discount_code collision (attempt ${attempt + 1}) — regenerating.`);
+    }
 
     if (error) {
       console.error('Failed to create campaign:', error.message);
