@@ -12,6 +12,51 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
+// ── Razorpay REST helpers ───────────────────────────────────────────────────
+// Plan changes and cancellations must be reflected in Razorpay (the source of
+// truth for the recurring schedule) or it keeps charging the old plan / keeps
+// charging after a "cancel". Basic-auth with the API key id + secret.
+const RZP_KEY_ID = Deno.env.get('RAZORPAY_KEY_ID');
+const RZP_KEY_SECRET = Deno.env.get('RAZORPAY_KEY_SECRET');
+
+async function razorpayFetch(path: string, init: RequestInit): Promise<any> {
+  if (!RZP_KEY_ID || !RZP_KEY_SECRET) {
+    throw new Error('Razorpay API keys are not configured on the server.');
+  }
+  const res = await fetch(`https://api.razorpay.com/v1${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Basic ' + btoa(`${RZP_KEY_ID}:${RZP_KEY_SECRET}`),
+      ...(init.headers || {}),
+    },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(json?.error?.description || `Razorpay request failed (${res.status})`);
+  }
+  return json;
+}
+
+// Swap the plan on an existing subscription. `when` = 'now' charges a prorated
+// amount immediately (upgrade); 'cycle_end' applies the change at the next
+// billing date (downgrade) with no mid-cycle charge.
+function updateRazorpaySubscriptionPlan(subId: string, planId: string, when: 'now' | 'cycle_end') {
+  return razorpayFetch(`/subscriptions/${subId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ plan_id: planId, schedule_change_at: when, customer_notify: 1 }),
+  });
+}
+
+// cancel_at_cycle_end: 1 keeps the subscription active until period end then
+// stops; 0 cancels immediately.
+function cancelRazorpaySubscription(subId: string, atCycleEnd: boolean) {
+  return razorpayFetch(`/subscriptions/${subId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ cancel_at_cycle_end: atCycleEnd ? 1 : 0 }),
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -100,7 +145,7 @@ Deno.serve(async (req) => {
       }
       const { data: sub } = await supabaseAdmin
         .from('merchant_subscriptions')
-        .select('id, plan_name, current_period_end, loyalty_redemption_enabled')
+        .select('id, plan_name, current_period_end, billing_type, razorpay_subscription_id')
         .eq('merchant_id', user.id)
         .eq('status', 'active')
         .order('created_at', { ascending: false })
@@ -109,6 +154,7 @@ Deno.serve(async (req) => {
       if (!sub) {
         return new Response(JSON.stringify({ error: 'No active subscription to change. Subscribe first.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
       }
+      const isRazorpaySub = sub.billing_type === 'razorpay' && !!sub.razorpay_subscription_id;
 
       // Enforce the change-lock (best-effort; tolerate a missing column).
       let lockedUntil: string | null = null;
@@ -132,7 +178,7 @@ Deno.serve(async (req) => {
 
       const { data: newTier } = await supabaseAdmin
         .from('subscription_tiers')
-        .select('id, tier_key, tier_name, subscription_fee')
+        .select('id, tier_key, tier_name, subscription_fee, billing_frequency, razorpay_plan_id')
         .eq('tier_key', tier_key)
         .maybeSingle();
       if (!newTier) {
@@ -145,7 +191,7 @@ Deno.serve(async (req) => {
       // Compare against the current tier's fee to decide upgrade vs downgrade.
       const { data: curTier } = await supabaseAdmin
         .from('subscription_tiers')
-        .select('subscription_fee')
+        .select('subscription_fee, billing_frequency')
         .eq('tier_key', sub.plan_name)
         .maybeSingle();
       const curFee = Number(curTier?.subscription_fee || 0);
@@ -160,11 +206,45 @@ Deno.serve(async (req) => {
       const periodEnd = sub.current_period_end ? new Date(sub.current_period_end) : in30;
       const lockUntil = (periodEnd > in30 ? periodEnd : in30).toISOString();
 
+      // ── Razorpay-managed subscription: drive the change through Razorpay ─────
+      if (isRazorpaySub) {
+        if (!newTier.razorpay_plan_id) {
+          return new Response(JSON.stringify({ error: "That plan isn't available for online subscription yet." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+        }
+
+        // Razorpay can't swap a plan across billing intervals on the same
+        // subscription. Tell the app to cancel + re-subscribe to the new plan
+        // (it opens web checkout; verify-subscription cancels the old sub once
+        // the new one is active). No lock and no DB mutation here.
+        if ((curTier?.billing_frequency || null) !== (newTier.billing_frequency || null)) {
+          return new Response(JSON.stringify({
+            success: true,
+            resubscribe: true,
+            tier_key: newTier.tier_key,
+            tier_name: newTier.tier_name,
+            message: `Switching to ${newTier.billing_frequency} billing needs a fresh subscription. Continue to set up ${newTier.tier_name}.`,
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+        }
+
+        // Same frequency → PATCH the plan. Upgrade applies now (prorated charge
+        // + instant benefit); downgrade applies at cycle end (no mid-cycle charge).
+        try {
+          await updateRazorpaySubscriptionPlan(
+            sub.razorpay_subscription_id as string,
+            newTier.razorpay_plan_id,
+            isUpgrade ? 'now' : 'cycle_end',
+          );
+        } catch (rzpErr: any) {
+          console.error('[merchant-subscription] Razorpay plan update failed:', rzpErr?.message);
+          return new Response(JSON.stringify({ error: rzpErr?.message || 'Could not update your plan with Razorpay. Please try again.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 });
+        }
+      }
+
       const patch: Record<string, unknown> = isUpgrade
-        // Instant upgrade: switch the plan now AND set the go-forward recurring
-        // amount so the next billing run charges Razorpay the NEW (higher) rate.
-        // (No mid-cycle charge — current_period_end is still in the future, so the
-        // billing run only picks this up at the next cycle.)
+        // Instant upgrade: switch the plan + go-forward amount now. For Razorpay
+        // subs the prorated charge was just raised; subscription.charged/updated
+        // webhooks reconcile current_period_end. For legacy subs the billing run
+        // applies the new rate at the next cycle.
         ? { plan_name: newTier.tier_key, total_recurring_amount: recurringAmount, pending_tier_id: null, pending_plan_name: null, pending_amount: null, pending_effective_date: null }
         : { pending_tier_id: newTier.id, pending_plan_name: newTier.tier_key, pending_amount: recurringAmount, pending_effective_date: sub.current_period_end };
       patch.tier_change_locked_until = lockUntil;
@@ -185,7 +265,7 @@ Deno.serve(async (req) => {
         effective_date: sub.current_period_end,
         new_amount: recurringAmount,
         message: isUpgrade
-          ? `Upgraded to ${newTier.tier_name} — your new benefits are active now. The new rate (₹${recurringAmount}) applies from your next billing date.`
+          ? `Upgraded to ${newTier.tier_name} — your new benefits are active now.${isRazorpaySub ? ` Razorpay has charged the prorated difference; the full ₹${recurringAmount} applies from your next billing date.` : ` The new rate (₹${recurringAmount}) applies from your next billing date.`}`
           : `You'll move to ${newTier.tier_name} on your next billing date — you keep your current plan until then.`,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
@@ -476,7 +556,7 @@ Deno.serve(async (req) => {
       // Find the active subscription
       const { data: activeSub, error: fetchErr } = await supabaseAdmin
         .from('merchant_subscriptions')
-        .select('id, current_period_end')
+        .select('id, current_period_end, billing_type, razorpay_subscription_id')
         .eq('merchant_id', user.id)
         .eq('status', 'active')
         .gte('current_period_end', new Date().toISOString())
@@ -494,6 +574,18 @@ Deno.serve(async (req) => {
           JSON.stringify({ error: 'No active subscription found' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
         );
+      }
+
+      // Cancel at Razorpay first (cancel_at_cycle_end so it stays active until
+      // period end). If this fails, stop — don't mark a DB row cancelled while
+      // Razorpay keeps charging. Legacy (non-Razorpay) subs skip straight to DB.
+      if (activeSub.billing_type === 'razorpay' && activeSub.razorpay_subscription_id) {
+        try {
+          await cancelRazorpaySubscription(activeSub.razorpay_subscription_id as string, true);
+        } catch (rzpErr: any) {
+          console.error('[merchant-subscription] Razorpay cancel failed:', rzpErr?.message);
+          return new Response(JSON.stringify({ error: rzpErr?.message || 'Could not cancel with Razorpay. Please try again.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 });
+        }
       }
 
       // Mark subscription as cancelled at period end (keeps it active until current_period_end)

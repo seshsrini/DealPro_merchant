@@ -216,13 +216,32 @@ Deno.serve(async (req: Request) => {
       // subscription.charged.
       patch.status = existingSub?.status === 'active' ? 'active' : 'pending_activation';
       break;
-    case 'subscription.charged':
+    case 'subscription.charged': {
       patch.status = 'active';
       patch.current_period_end = subEntity.current_end
         ? new Date(subEntity.current_end * 1000).toISOString()
         : null;
       if (payEntity?.id) patch.razorpay_payment_id = payEntity.id;
+      // Reconcile the plan from the subscription's CURRENT plan_id (authoritative).
+      // This applies a parked downgrade the moment Razorpay charges the new
+      // (lower) plan at cycle end, and confirms an upgrade. Clears any pending_*.
+      if (subEntity.plan_id) {
+        const { data: planTier } = await supabase
+          .from('subscription_tiers')
+          .select('tier_key, subscription_fee')
+          .eq('razorpay_plan_id', subEntity.plan_id)
+          .maybeSingle();
+        if (planTier?.tier_key) {
+          patch.plan_name = planTier.tier_key;
+          if (planTier.subscription_fee != null) patch.total_recurring_amount = planTier.subscription_fee;
+          patch.pending_tier_id = null;
+          patch.pending_plan_name = null;
+          patch.pending_amount = null;
+          patch.pending_effective_date = null;
+        }
+      }
       break;
+    }
     case 'subscription.completed':
       patch.status = 'completed';
       break;

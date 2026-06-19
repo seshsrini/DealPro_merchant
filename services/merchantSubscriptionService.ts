@@ -3,10 +3,13 @@ import { supabase } from "./supabaseClient";
 
 export const merchantSubscriptionService = {
   /**
-   * Change tier for an ALREADY-ACTIVE merchant. The change is parked server-side
-   * and takes effect at the next billing cycle (no new mandate / immediate charge).
+   * Change tier for an ALREADY-ACTIVE merchant. Drives the change through
+   * Razorpay: an UPGRADE applies immediately (prorated charge + instant benefit),
+   * a DOWNGRADE applies at the next billing date. Switching billing frequency
+   * (monthly↔yearly) returns { resubscribe: true, tier_key } — the caller opens
+   * web checkout for a fresh subscription (the old one is cancelled on activation).
    */
-  changeTier: async (tierKey: string): Promise<{ success: boolean; message?: string; effective_date?: string; new_amount?: number; error?: string }> => {
+  changeTier: async (tierKey: string): Promise<{ success: boolean; message?: string; effective_date?: string; new_amount?: number; error?: string; resubscribe?: boolean; tier_key?: string }> => {
     try {
       const { data, error } = await supabase.functions.invoke('merchant-subscription', {
         body: { action: 'change_tier', tier_key: tierKey },

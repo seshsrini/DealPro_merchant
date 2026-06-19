@@ -210,15 +210,23 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     setShowConfirmation(false);
     setNoticeMsg(null);
 
-    // Already-active merchant changing plan → park the change for the NEXT cycle
-    // (no new mandate, no immediate charge — the existing Autopay mandate covers
-    // it and the billing run applies the new amount next cycle). New/expired
-    // merchant → register a fresh mandate via the web checkout.
+    // Already-active merchant changing plan → drive it through Razorpay via the
+    // change_tier action (upgrade charges now + instant benefit; downgrade applies
+    // next cycle; frequency switch returns resubscribe → web checkout). New/expired
+    // merchant → register a fresh subscription via the web checkout.
     const hasActive = currentSubscription?.status === 'active';
     if (hasActive && tierToConfirm.id !== currentTierId) {
       try {
         const res = await merchantSubscriptionService.changeTier(tierToConfirm.tier_key);
-        if (res.success) {
+        if ((res as any).resubscribe) {
+          // Switching billing frequency (monthly↔yearly) — Razorpay can't swap
+          // the plan in place, so set up a fresh subscription. The web checkout's
+          // verify step cancels the old subscription once this one is active.
+          await razorpayCheckoutService.openCheckout({
+            tierKey: (res as any).tier_key || tierToConfirm.tier_key,
+            merchantId: user.id,
+          });
+        } else if (res.success) {
           // Instant upgrade or parked downgrade — message comes from the server.
           setNoticeMsg(res.message || 'Your plan change is saved.');
           await fetchData();
