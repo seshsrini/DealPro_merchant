@@ -2,7 +2,44 @@
 import { supabase, supabaseAnonKey, supabaseUrl } from "./supabaseClient";
 import { PennyDropStatus } from "../types";
 
+export interface MerchantPayment {
+  id: number;
+  transaction_id: string | null;   // Razorpay payment id (pay_…) — the confirmation code
+  order_id: string | null;
+  amount_base: number | null;
+  amount_total: number | null;
+  currency: string | null;
+  payment_method: string | null;
+  payment_status: string | null;   // captured | pending | failed
+  failure_reason: string | null;
+  created_at: string;
+}
+
+export interface MerchantPaymentSummary {
+  total_count: number;
+  captured_count: number;
+  total_paid: number;
+  currency: string;
+  last_payment_at: string | null;
+  window_months: number;
+}
+
 export const paymentService = {
+  /**
+   * Fetches the merchant's payment activity for the last 12 months from
+   * merchant_payments (via the get-merchant-payments edge function).
+   */
+  getMerchantPayments: async (): Promise<{ payments: MerchantPayment[]; summary: MerchantPaymentSummary | null; error?: string }> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('get-merchant-payments');
+      if (error) return { payments: [], summary: null, error: 'Unable to load payment activity.' };
+      return { payments: data?.payments || [], summary: data?.summary || null };
+    } catch (err: any) {
+      console.error('[paymentService] getMerchantPayments failed:', err?.message || err);
+      return { payments: [], summary: null, error: 'Unable to load payment activity.' };
+    }
+  },
+
   /**
    * Placeholder for future payment-related functions.
    * This function simulates sending UPI payment details to a backend for processing.
