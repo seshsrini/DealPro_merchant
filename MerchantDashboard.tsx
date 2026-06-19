@@ -413,7 +413,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
             return (
               <button
                 id="tour-new-deal"
-                onClick={() => setView('merchant_deals')}
+                onClick={() => { setDealIdToEdit(null); setView('campaign_wizard'); }}
                 disabled={atCampaignLimit}
                 className={`group relative rounded-2xl p-4 flex flex-col gap-3 text-left transition-all overflow-hidden ${
                   atCampaignLimit
