@@ -20,16 +20,16 @@ interface NavProps {
   onBellClick?: () => void;
 }
 
-const LANGUAGES: { id: Locale; label: string; short: string }[] = [
-  { id: 'en', label: 'English', short: 'EN' },
-  { id: 'kn', label: 'Kannada', short: 'KN' },
-  { id: 'hi', label: 'Hindi', short: 'HI' },
-  { id: 'ta', label: 'Tamil', short: 'TA' },
-  { id: 'te', label: 'Telugu', short: 'TE' },
-  { id: 'ml', label: 'Malayalam', short: 'ML' },
-  { id: 'bn', label: 'Bengali', short: 'BN' },
-  { id: 'mr', label: 'Marathi', short: 'MR' },
-  { id: 'gu', label: 'Gujarati', short: 'GU' }
+const LANGUAGES: { id: Locale; label: string; short: string; native: string }[] = [
+  { id: 'en', label: 'English', short: 'EN', native: 'English' },
+  { id: 'kn', label: 'Kannada', short: 'KN', native: 'ಕನ್ನಡ' },
+  { id: 'hi', label: 'Hindi', short: 'HI', native: 'हिन्दी' },
+  { id: 'ta', label: 'Tamil', short: 'TA', native: 'தமிழ்' },
+  { id: 'te', label: 'Telugu', short: 'TE', native: 'తెలుగు' },
+  { id: 'ml', label: 'Malayalam', short: 'ML', native: 'മലയാളം' },
+  { id: 'bn', label: 'Bengali', short: 'BN', native: 'বাংলা' },
+  { id: 'mr', label: 'Marathi', short: 'MR', native: 'मराठी' },
+  { id: 'gu', label: 'Gujarati', short: 'GU', native: 'ગુજરાતી' }
 ];
 
 export const Header: React.FC<NavProps> = ({ currentView, setView, onBack, showBack, theme, toggleTheme, isLoggedIn, userRole, unreadNotifications = 0, onBellClick }) => {
@@ -76,14 +76,14 @@ export const Header: React.FC<NavProps> = ({ currentView, setView, onBack, showB
           <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
             <Languages className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
           </div>
-          <select 
+          <select
             value={locale}
             onChange={(e) => setLocale(e.target.value as Locale)}
-            className={`appearance-none h-12 pl-9 pr-8 glass rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none border-white/10 cursor-pointer transition-all active:scale-95 hover:bg-white/10 ${isDark ? 'text-white' : 'text-slate-900'}`}
+            className={`appearance-none h-12 pl-9 pr-8 glass rounded-2xl text-[11px] font-bold tracking-tight outline-none border-white/10 cursor-pointer transition-all active:scale-95 hover:bg-white/10 ${isDark ? 'text-white' : 'text-slate-900'}`}
           >
             {LANGUAGES.map(lang => (
               <option key={lang.id} value={lang.id} className={isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}>
-                {lang.short}
+                {lang.native}
               </option>
             ))}
           </select>
