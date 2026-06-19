@@ -218,42 +218,6 @@ export const merchantSubscriptionService = {
   },
 
   /**
-   * Add loyalty redemption addon to an existing subscription
-   */
-  addLoyaltyAddon: async (
-    merchantId: string,
-    subscriptionId: number,
-    subscriptionFee: number
-  ): Promise<{ success: boolean; error?: string }> => {
-    console.log("[merchantSubscriptionService] Adding loyalty addon for merchant:", merchantId);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('merchant-subscription', {
-        body: {
-          action: 'add_loyalty_addon',
-          merchantId,
-          subscription_id: subscriptionId,
-          subscription_fee: subscriptionFee,
-        },
-      });
-
-      if (error) {
-        console.error("[merchantSubscriptionService] Error adding loyalty addon:", error);
-        return { success: false, error: 'Unable to enroll in loyalty program. Please try again.' };
-      }
-
-      if (data?.success) {
-        console.log("[merchantSubscriptionService] Loyalty addon added, total:", data.total_recurring_amount);
-        return { success: true };
-      }
-      return { success: false, error: data?.error || 'Enrollment failed' };
-    } catch (err: any) {
-      console.error("[merchantSubscriptionService] Loyalty addon exception:", err.message);
-      return { success: false, error: 'Unable to enroll in loyalty program. Please try again.' };
-    }
-  },
-
-  /**
    * Cancel the merchant's active subscription (at end of billing period)
    */
   cancelSubscription: async (merchantId: string, reason: string): Promise<{

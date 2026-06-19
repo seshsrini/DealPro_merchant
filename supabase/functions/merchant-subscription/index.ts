@@ -151,7 +151,8 @@ Deno.serve(async (req) => {
       const curFee = Number(curTier?.subscription_fee || 0);
       const newFee = Number(newTier.subscription_fee || 0);
       const isUpgrade = newFee > curFee;
-      const recurringAmount = newFee + (sub.loyalty_redemption_enabled ? 10 : 0);
+      // The tier fee is the full recurring amount — no paid loyalty add-on.
+      const recurringAmount = newFee;
 
       // Lock for at least one billing month: the later of next billing or +30d.
       const now = new Date();
@@ -521,67 +522,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (action === 'add_loyalty_addon') {
-      const { subscription_id, subscription_fee } = body;
-      const LOYALTY_ADDON_PRICE = 10;
-
-      if (!subscription_id) {
-        return new Response(
-          JSON.stringify({ error: 'Missing subscription_id' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-        );
-      }
-
-      console.log(`[manage-subscription] Adding loyalty addon for merchant ${user.id}, subscription: ${subscription_id}`);
-
-      // 1. Update merchant_subscriptions with loyalty fields
-      const totalRecurring = (subscription_fee || 0) + LOYALTY_ADDON_PRICE;
-
-      const { error: updateErr } = await supabaseAdmin
-        .from('merchant_subscriptions')
-        .update({
-          loyalty_redemption_enabled: true,
-          loyalty_addon_price: LOYALTY_ADDON_PRICE,
-          total_recurring_amount: totalRecurring,
-        })
-        .eq('id', subscription_id)
-        .eq('merchant_id', user.id);
-
-      if (updateErr) {
-        console.error('[manage-subscription] Loyalty update error:', updateErr.message);
-        throw updateErr;
-      }
-
-      // 2. Insert into merchant_addon_subscriptions
-      const { error: addonErr } = await supabaseAdmin
-        .from('merchant_addon_subscriptions')
-        .insert({
-          subscription_id: subscription_id,
-          addon_type: 'loyalty_redemption',
-          status: 'active',
-          price_at_enrollment: LOYALTY_ADDON_PRICE,
-        });
-
-      if (addonErr) {
-        console.error('[manage-subscription] Addon insert error:', addonErr.message);
-        throw addonErr;
-      }
-
-      console.log(`[manage-subscription] Loyalty addon enrolled for merchant ${user.id}, total: ₹${totalRecurring}/month`);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          loyalty_redemption_enabled: true,
-          loyalty_addon_price: LOYALTY_ADDON_PRICE,
-          total_recurring_amount: totalRecurring,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
-    }
-
     return new Response(
-      JSON.stringify({ error: 'Invalid action. Use "check", "fetch", "create", "create_test_subscription", "cancel", "campaign_usage", or "add_loyalty_addon"' }),
+      JSON.stringify({ error: 'Invalid action. Use "check", "fetch", "create", "create_test_subscription", "cancel", or "campaign_usage"' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
     );
 

@@ -19,7 +19,7 @@ import { StepTermsOfService } from './components/merchant-onboarding/StepTermsOf
 import { StepPrivacyPolicy } from './components/merchant-onboarding/StepPrivacyPolicy';
 import { StepReviewDetails } from './components/merchant-onboarding/StepReviewDetails';
 import { StepSubscription } from './components/merchant-onboarding/StepSubscription';
-import { StepLoyaltyAddon } from './components/merchant-onboarding/StepLoyaltyAddon';
+import { StepPayment } from './components/merchant-onboarding/StepPayment';
 import { StepCongrats } from './components/merchant-onboarding/StepCongrats';
 
 // --- Types ---
@@ -83,7 +83,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
 // --- Step Definitions ---
 const STEP_LABELS = [
   'Welcome', 'Name', 'Store', '', 'Address', 'Stores',
-  'Verification', 'Review', 'Terms', 'Privacy', 'Plan', 'Loyalty', 'Done',
+  'Verification', 'Review', 'Terms', 'Privacy', 'Plan', 'Payment', 'Done',
 ];
 const TOTAL_STEPS = STEP_LABELS.length;
 
@@ -449,14 +449,11 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   };
 
   // StepSubscription's "Continue" advances here without creating a
-  // subscription. The Razorpay payment now happens in StepLoyaltyAddon (next
-  // step), where the loyalty add-on can be bundled into the charge.
+  // subscription. The Razorpay payment now happens in StepPayment (next step).
   //
   // Exception: when a subscription was already created synchronously
   // (alreadyActive=true — dev test bypass / legacy trial path), skip the
-  // loyalty + payment step entirely so the merchant doesn't get charged
-  // twice. The user can manage the loyalty add-on later from the
-  // subscriptions screen.
+  // payment step entirely so the merchant doesn't get charged twice.
   const handleSubscriptionComplete = async (
     subscriptionFee?: number,
     subscriptionId?: number,
@@ -471,10 +468,10 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       goToStep(12); // Congrats
       return;
     }
-    goToStep(11); // Loyalty step (where Razorpay is taken).
+    goToStep(11); // Payment step (where Razorpay is taken).
   };
 
-  const handleLoyaltyComplete = () => {
+  const handlePaymentComplete = () => {
     localStorage.removeItem(DRAFT_KEY);
     goToStep(12); // Congrats
   };
@@ -616,11 +613,11 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         );
       case 11:
         return (
-          <StepLoyaltyAddon
+          <StepPayment
             user={user}
             subscriptionFee={lastSubscriptionFee}
             tierKey={lastTierKey}
-            onComplete={handleLoyaltyComplete}
+            onComplete={handlePaymentComplete}
             theme={theme}
           />
         );

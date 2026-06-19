@@ -6,7 +6,7 @@ import { Browser } from '@capacitor/browser';
 // Google Play does not allow third-party payment (Razorpay) for subscriptions
 // *inside* the app, so payment happens on the web instead:
 //
-//   1. The app opens vedicjaalam.com/subscribe?tier_key=…&merchant_id=…&loyalty=…
+//   1. The app opens vedicjaalam.com/subscribe?tier_key=…&merchant_id=…
 //      in the system browser (Capacitor Browser).
 //   2. That page (Next.js) creates the Razorpay subscription via its own API
 //      route, runs Razorpay Checkout in the browser, verifies the signature
@@ -60,7 +60,6 @@ export function isPaymentPending(): boolean {
 export interface OpenCheckoutInput {
   tierKey: string;
   merchantId: string;
-  withLoyalty?: boolean;
 }
 
 export interface OpenCheckoutResult {
@@ -73,7 +72,6 @@ export const razorpayCheckoutService = {
     const params = new URLSearchParams({
       tier_key: input.tierKey,
       merchant_id: input.merchantId,
-      loyalty: input.withLoyalty ? '1' : '0',
     });
     const url = `${SUBSCRIBE_URL}?${params.toString()}`;
     console.log('[razorpayCheckout] Opening Play-compliant web checkout:', url);

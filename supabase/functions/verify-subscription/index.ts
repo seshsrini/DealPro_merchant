@@ -2,7 +2,7 @@
 // -----------------------------------------------------------------------------
 // POST {
 //   razorpay_payment_id, razorpay_subscription_id, razorpay_signature,
-//   merchant_id, tier_key, loyalty?
+//   merchant_id, tier_key
 // }
 //
 // Verifies the HMAC-SHA256 signature Razorpay Checkout handed to the browser,
@@ -26,8 +26,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-
-const LOYALTY_ADDON_PRICE = 10;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -88,7 +86,6 @@ Deno.serve(async (req) => {
     razorpay_signature?: string;
     merchant_id?: string;
     tier_key?: string;
-    loyalty?: boolean;
   };
   try {
     body = await req.json();
@@ -101,7 +98,6 @@ Deno.serve(async (req) => {
     razorpay_signature,
     merchant_id,
     tier_key,
-    loyalty,
   } = body;
   if (
     !razorpay_payment_id ||
@@ -134,8 +130,8 @@ Deno.serve(async (req) => {
     .eq('tier_key', tier_key)
     .maybeSingle();
 
-  const baseFee = tier?.subscription_fee ?? 0;
-  const totalRecurringAmount = baseFee + (loyalty ? LOYALTY_ADDON_PRICE : 0);
+  // The tier fee is the full recurring amount — no paid loyalty add-on.
+  const totalRecurringAmount = tier?.subscription_fee ?? 0;
 
   // ---- Upsert pending_activation -------------------------------------------
   // merchant_subscriptions.plan_name is the tier_key (other edge functions
@@ -152,8 +148,9 @@ Deno.serve(async (req) => {
         billing_type: 'razorpay',
         current_period_start: null,
         current_period_end: null,
-        loyalty_redemption_enabled: !!loyalty,
-        loyalty_addon_price: loyalty ? LOYALTY_ADDON_PRICE : null,
+        // Loyalty (redemption partner) is now a free feature for every merchant.
+        loyalty_redemption_enabled: true,
+        loyalty_addon_price: null,
         razorpay_subscription_id,
         razorpay_payment_id,
       },

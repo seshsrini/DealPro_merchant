@@ -13,9 +13,9 @@ interface StepSubscriptionProps {
   user: User;
   setUser: (user: User) => void;
   // alreadyActive: true if a subscription was created synchronously here
-  // (test bypass / dev trial path). Tells the parent to skip the loyalty +
-  // payment step and jump straight to congrats. Default false → loyalty
-  // step handles Razorpay.
+  // (test bypass / dev trial path). Tells the parent to skip the payment
+  // step and jump straight to congrats. Default false → the payment step
+  // handles Razorpay.
   onComplete: (subscriptionFee?: number, subscriptionId?: number, tierKey?: string, alreadyActive?: boolean) => void;
   onBack: () => void;
   theme: 'light' | 'dark';
@@ -43,10 +43,9 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
   const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true';
   const [testBypassing, setTestBypassing] = useState(false);
 
-  // Advances to the loyalty step without creating a subscription or charging
-  // anything. The Razorpay payment is taken on StepLoyaltyAddon so the user
-  // can decide whether to bundle the loyalty add-on into the same charge.
-  const handleContinueToLoyalty = useCallback(() => {
+  // Advances to the payment step without creating a subscription or charging
+  // anything. The Razorpay payment is taken on StepPayment.
+  const handleContinueToPayment = useCallback(() => {
     if (!tierToConfirm || !user.id) return;
     setShowConfirm(false);
     setError(null);
@@ -413,11 +412,10 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
                 </div>
               )}
             </div>
-            {/* Primary action: advance to the loyalty step. Payment happens
-                there, after the merchant has decided about the loyalty add-on,
-                so the Razorpay total reflects the final amount. */}
+            {/* Primary action: advance to the payment step, where the Razorpay
+                charge for this tier is taken. */}
             <button
-              onClick={handleContinueToLoyalty}
+              onClick={handleContinueToPayment}
               className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
             >
               Continue
