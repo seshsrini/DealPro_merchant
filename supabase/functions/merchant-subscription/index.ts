@@ -282,10 +282,10 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      let { data, error } = await fetchActive('id, plan_name, status, current_period_start, current_period_end, cancel_at_period_end, tier_change_locked_until, pending_plan_name, pending_effective_date');
+      let { data, error } = await fetchActive('id, plan_name, status, current_period_start, current_period_end, cancel_at_period_end, billing_type, razorpay_subscription_id, is_test_subscription, tier_change_locked_until, pending_plan_name, pending_effective_date');
       // Resilience: retry without the newer columns if they aren't present yet.
       if (error && /tier_change_locked_until|pending_/i.test(error.message || '')) {
-        ({ data, error } = await fetchActive('id, plan_name, status, current_period_start, current_period_end, cancel_at_period_end'));
+        ({ data, error } = await fetchActive('id, plan_name, status, current_period_start, current_period_end, cancel_at_period_end, billing_type, razorpay_subscription_id, is_test_subscription'));
       }
 
       if (error) {

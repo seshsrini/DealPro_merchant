@@ -82,6 +82,15 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     ? new Date(currentSubscription.pending_effective_date)
     : null;
 
+  // Legacy billing migration (P3): an active subscriber NOT on a Razorpay-native
+  // subscription (old token mandate or Google Play trial). Nudge them to set up
+  // Razorpay Autopay so renewals are handled natively. Test subs + those already
+  // cancelling are excluded.
+  const isLegacyBilling = currentSubscription?.status === 'active'
+    && !currentSubscription?.razorpay_subscription_id
+    && !currentSubscription?.is_test_subscription
+    && !currentSubscription?.cancel_at_period_end;
+
   // ── Fetch data ──
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -255,6 +264,25 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     }
   };
 
+  // P3: move a legacy subscriber onto a native Razorpay Autopay subscription.
+  // Opens web checkout for their CURRENT tier; verify-subscription writes the
+  // native row (razorpay_subscription_id set, no token), after which the custom
+  // billing run skips them — so the dormant old mandate is never charged again.
+  const handleMigrateToAutopay = async () => {
+    const tierKey = currentTier?.tier_key || currentSubscription?.plan_name;
+    if (!tierKey || !user.id) {
+      setError('Could not determine your plan. Please pick a plan below.');
+      return;
+    }
+    setError(null);
+    try {
+      await razorpayCheckoutService.openCheckout({ tierKey, merchantId: user.id });
+    } catch (err) {
+      console.error('[MerchantSubscriptions] Autopay migration checkout failed:', err);
+      setError('Could not open the payment page. Please try again.');
+    }
+  };
+
   const handleManageSubscription = () => {
     if (isNative) {
       // Use Capacitor Browser to open Google Play subscriptions
@@ -302,6 +330,32 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         <div className={`rounded-xl border px-4 py-3 text-xs font-medium flex items-center gap-2 ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
           <Clock className="w-4 h-4 shrink-0" />
           <span>You changed your plan recently. You can change it again after <span className="font-bold">{fmtDate(lockedUntilDate)}</span>.</span>
+        </div>
+      )}
+
+      {/* Legacy → Autopay migration nudge (P3) */}
+      {isLegacyBilling && !loading && (
+        <div className={`rounded-2xl border p-4 ${isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200'}`}>
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+              <CreditCard className="w-5 h-5 text-amber-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-bold ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                Switch to automatic renewal
+              </p>
+              <p className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-amber-300/80' : 'text-amber-700'}`}>
+                Set up Razorpay Autopay so your {currentTier?.tier_name || 'plan'} renews on its own — no manual payments, no interruptions to your deals.
+              </p>
+              <button
+                onClick={handleMigrateToAutopay}
+                className="mt-3 h-10 px-4 rounded-xl bg-amber-500 text-white text-xs font-bold flex items-center gap-2 active:scale-[0.98] transition-all shadow-sm shadow-amber-500/30"
+              >
+                <CreditCard className="w-4 h-4" />
+                Set up Autopay
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
