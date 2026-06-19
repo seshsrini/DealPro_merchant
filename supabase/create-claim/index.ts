@@ -212,6 +212,19 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Race: another request created the (consumer, campaign) claim between our
+      // existence check and this insert. The new unique index catches it — treat
+      // as "already claimed" rather than a server error.
+      if (error.message && error.message.includes('campaign_interactions_consumer_campaign_unique')) {
+        return new Response(JSON.stringify({
+          error: 'ALREADY_CLAIMED',
+          message: 'You already have an active or redeemed claim for this campaign.'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 409, // Conflict
+        });
+      }
+
       throw error;
     }
 
