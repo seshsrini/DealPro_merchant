@@ -8,7 +8,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { subscriptionService } from './services/subscriptionService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
-import { razorpayCheckoutService } from './services/razorpayCheckoutService';
+import { razorpayCheckoutService, isPaymentPending, clearPaymentPending } from './services/razorpayCheckoutService';
 import { supabase } from './services/supabaseClient';
 import { useTranslation } from './contexts/LanguageContext';
 import {
@@ -156,6 +156,42 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       supabase.removeChannel(channel);
     };
   }, [user.id, setUser]);
+
+  // ── Refresh on return from the web checkout ──
+  // The Autopay/plan payment completes in an external browser; coming back fires
+  // an app resume (native) / postMessage (web) / CustomEvent (legacy). Realtime
+  // alone is unreliable (table may not be in the publication), so re-fetch here.
+  // If a payment was pending and we're now on a native (Autopay) subscription,
+  // confirm it and tell the merchant how billing works going forward.
+  useEffect(() => {
+    if (!user.id) return;
+    const refreshAfterPayment = async () => {
+      const wasPending = isPaymentPending();
+      const { tier_id, subscription } = await merchantSubscriptionService.fetchCurrentSubscription(user.id);
+      setCurrentTierId(tier_id);
+      setCurrentSubscription(subscription);
+      if (wasPending && subscription?.razorpay_subscription_id) {
+        clearPaymentPending();
+        const next = subscription.current_period_end
+          ? new Date(subscription.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+          : null;
+        setNoticeMsg(
+          `Autopay is set up ✓ Your ${subscription.plan_name || 'plan'} will renew automatically${next ? ` on ${next}` : ' each billing cycle'} via Razorpay. You can cancel anytime from this screen.`
+        );
+      }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible' && isPaymentPending()) refreshAfterPayment(); };
+    const onPaid = () => refreshAfterPayment();
+    const onMessage = (e: MessageEvent) => { if ((e?.data as any)?.type === 'dealpro:paid') refreshAfterPayment(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('dealpro:paid', onPaid as EventListener);
+    window.addEventListener('message', onMessage);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('dealpro:paid', onPaid as EventListener);
+      window.removeEventListener('message', onMessage);
+    };
+  }, [user.id]);
 
   const handleShowConfirmation = (tier: SubscriptionTier) => {
     setTierToConfirm(tier);
