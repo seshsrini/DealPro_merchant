@@ -224,14 +224,14 @@ export const merchantSubscriptionService = {
    * Dry-run cancel check — runs the cancel guards (active deals / plan-change
    * lock) WITHOUT cancelling, so the UI can show the reason on click.
    */
-  checkCancelEligibility: async (merchantId: string): Promise<{ allowed: boolean; message?: string }> => {
+  checkCancelEligibility: async (merchantId: string): Promise<{ allowed: boolean; error?: string; activeDeals?: number; lockedUntil?: string; message?: string }> => {
     try {
       const { data, error } = await supabase.functions.invoke('merchant-subscription', {
         body: { action: 'cancel', merchantId, check_only: true },
       });
       if (error) return { allowed: false, message: 'Unable to check right now. Please try again.' };
       if (data?.can_cancel) return { allowed: true };
-      return { allowed: false, message: data?.message || 'You can’t cancel your subscription right now.' };
+      return { allowed: false, error: data?.error, activeDeals: data?.active_deals, lockedUntil: data?.locked_until, message: data?.message };
     } catch {
       return { allowed: false, message: 'Unable to check right now. Please try again.' };
     }
@@ -245,6 +245,8 @@ export const merchantSubscriptionService = {
     current_period_end?: string;
     error?: string;
     message?: string;
+    activeDeals?: number;
+    lockedUntil?: string;
   }> => {
     console.log("[merchantSubscriptionService] Cancelling subscription, reason:", reason);
     try {
@@ -261,8 +263,9 @@ export const merchantSubscriptionService = {
         console.log("[merchantSubscriptionService] Subscription cancelled:", data);
         return { success: true, current_period_end: data.current_period_end };
       }
-      // Guard responses (active_deals / locked) carry a human-readable message.
-      return { success: false, error: data?.error || 'Cancellation failed', message: data?.message };
+      // Guard responses (active_deals / locked) carry a code + params so the UI
+      // can localize the message.
+      return { success: false, error: data?.error || 'Cancellation failed', message: data?.message, activeDeals: data?.active_deals, lockedUntil: data?.locked_until };
     } catch (err: any) {
       console.error("[merchantSubscriptionService] Cancel exception:", err.message);
       return { success: false, error: 'Unable to process subscription. Please try again.' };

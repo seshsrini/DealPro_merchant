@@ -37,8 +37,26 @@ interface MerchantSubscriptionsProps {
 const GOOGLE_PLAY_SUBS_URL = 'https://play.google.com/store/account/subscriptions';
 
 export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ user, setView, setUser, theme = 'dark' }) => {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const isDark = theme === 'dark';
+
+  // Build a localized "can't cancel" message from the guard code + params. The
+  // EF returns a grammatical English `message`; for other languages we fill the
+  // translated template's {count}/{date} placeholders.
+  const cancelBlockMessage = (info: { error?: string; activeDeals?: number; lockedUntil?: string; message?: string }): string => {
+    if (info.error === 'active_deals') {
+      if (locale === 'en' && info.message) return info.message;
+      return t('m_cancel_blocked_deals').replace('{count}', String(info.activeDeals ?? 1));
+    }
+    if (info.error === 'locked') {
+      if (locale === 'en' && info.message) return info.message;
+      const date = info.lockedUntil
+        ? new Date(info.lockedUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        : '';
+      return t('m_cancel_blocked_locked').replace('{date}', date);
+    }
+    return info.message || t('m_cancel_blocked_generic');
+  };
   const isNative = Capacitor.isNativePlatform();
   const [tiers, setTiers] = useState<SubscriptionTier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -215,7 +233,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       setShowCancelModal(true);
     } else {
       setNoticeTone('error');
-      setNoticeMsg(res.message || 'You can’t cancel your subscription right now.');
+      setNoticeMsg(cancelBlockMessage(res));
     }
   };
 
@@ -726,12 +744,12 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                     if (result.success) {
                       setShowCancelModal(false);
                       setCurrentSubscription((prev: any) => prev ? { ...prev, cancel_at_period_end: true } : prev);
-                    } else if (result.message) {
+                    } else if (result.message || result.error === 'active_deals' || result.error === 'locked') {
                       // Blocked by a guard (live deals running / recent plan-change
-                      // lock) — surface the exact reason in red.
+                      // lock) — surface the localized reason in red.
                       setShowCancelModal(false);
                       setNoticeTone('error');
-                      setNoticeMsg(result.message);
+                      setNoticeMsg(cancelBlockMessage(result));
                     } else {
                       setError('Unable to cancel subscription. Please try again.');
                       setShowCancelModal(false);
