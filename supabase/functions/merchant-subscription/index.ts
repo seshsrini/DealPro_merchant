@@ -594,7 +594,7 @@ Deno.serve(async (req) => {
           success: false,
           error: 'active_deals',
           active_deals: n,
-          message: `You have ${n} active deal${n === 1 ? '' : 's'} running. Please end ${n === 1 ? 'it' : 'them'} (or wait for ${n === 1 ? 'it' : 'them'} to expire) before cancelling your subscription.`,
+          message: `You have ${n} active deal${n === 1 ? '' : 's'} running. Please wait for ${n === 1 ? 'it' : 'them'} to complete before cancelling your subscription.`,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
       }
 

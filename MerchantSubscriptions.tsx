@@ -54,6 +54,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const [cancelling, setCancelling] = useState(false);
   const [checkingCancel, setCheckingCancel] = useState(false);
   const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<'success' | 'error'>('success');
 
   // ── Derived subscription info ──
   const isTrialing = currentSubscription?.status === 'active' &&
@@ -176,6 +177,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         const next = subscription.current_period_end
           ? new Date(subscription.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
           : null;
+        setNoticeTone('success');
         setNoticeMsg(
           `Autopay is set up ✓ Your ${subscription.plan_name || 'plan'} will renew automatically${next ? ` on ${next}` : ' each billing cycle'} via Razorpay. You can cancel anytime from this screen.`
         );
@@ -212,6 +214,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       setCancelReason('');
       setShowCancelModal(true);
     } else {
+      setNoticeTone('error');
       setNoticeMsg(res.message || 'You can’t cancel your subscription right now.');
     }
   };
@@ -290,10 +293,12 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           });
         } else if (res.success) {
           // Instant upgrade or parked downgrade — message comes from the server.
+          setNoticeTone('success');
           setNoticeMsg(res.message || 'Your plan change is saved.');
           await fetchData();
         } else if ((res as any).error === 'locked') {
-          // Within the change-lock window — show the (non-error) lock message.
+          // Within the change-lock window — a block, so show it in red.
+          setNoticeTone('error');
           setNoticeMsg(res.message || 'You can change your plan again later.');
           await fetchData();
         } else {
@@ -366,7 +371,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
 
       {/* Plan-change confirmation (instant upgrade / parked downgrade / lock) */}
       {noticeMsg && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+        <div className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+          noticeTone === 'error'
+            ? 'border-red-200 bg-red-50 text-red-700'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        }`}>
           {noticeMsg}
         </div>
       )}
@@ -719,8 +728,9 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                       setCurrentSubscription((prev: any) => prev ? { ...prev, cancel_at_period_end: true } : prev);
                     } else if (result.message) {
                       // Blocked by a guard (live deals running / recent plan-change
-                      // lock) — surface the exact reason in the notice banner.
+                      // lock) — surface the exact reason in red.
                       setShowCancelModal(false);
+                      setNoticeTone('error');
                       setNoticeMsg(result.message);
                     } else {
                       setError('Unable to cancel subscription. Please try again.');
