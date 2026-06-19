@@ -194,11 +194,10 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         clearPaymentPending();
         const next = subscription.current_period_end
           ? new Date(subscription.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-          : null;
+          : '';
+        const planName = subscription.tier_name || subscription.plan_name || 'plan';
         setNoticeTone('success');
-        setNoticeMsg(
-          `Autopay is set up ✓ Your ${subscription.plan_name || 'plan'} will renew automatically${next ? ` on ${next}` : ' each billing cycle'} via Razorpay. You can cancel anytime from this screen.`
-        );
+        setNoticeMsg(t('m_autopay_set').replace('{plan}', planName).replace('{date}', next));
       }
     };
     const onVisible = () => { if (document.visibilityState === 'visible' && isPaymentPending()) refreshAfterPayment(); };
@@ -310,14 +309,30 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
             merchantId: user.id,
           });
         } else if (res.success) {
-          // Instant upgrade or parked downgrade — message comes from the server.
+          // Instant upgrade or parked downgrade. English uses the server's
+          // grammatical message; other locales fill the translated template.
           setNoticeTone('success');
-          setNoticeMsg(res.message || 'Your plan change is saved.');
+          if (locale === 'en' && res.message) {
+            setNoticeMsg(res.message);
+          } else if ((res as any).upgraded) {
+            setNoticeMsg(t('m_change_upgraded')
+              .replace('{plan}', tierToConfirm.tier_name)
+              .replace('{amount}', String((res as any).new_amount ?? tierToConfirm.subscription_fee)));
+          } else {
+            setNoticeMsg(t('m_change_downgraded').replace('{plan}', tierToConfirm.tier_name));
+          }
           await fetchData();
         } else if ((res as any).error === 'locked') {
           // Within the change-lock window — a block, so show it in red.
           setNoticeTone('error');
-          setNoticeMsg(res.message || 'You can change your plan again later.');
+          if (locale === 'en' && res.message) {
+            setNoticeMsg(res.message);
+          } else {
+            const d = (res as any).locked_until
+              ? new Date((res as any).locked_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+              : '';
+            setNoticeMsg(t('m_change_locked').replace('{date}', d));
+          }
           await fetchData();
         } else {
           throw new Error(res.error || 'change failed');
