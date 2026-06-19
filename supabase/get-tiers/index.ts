@@ -47,6 +47,7 @@ Deno.serve(async (req) => {
       .from('subscription_tiers')
       .select('*')
       .eq('is_active', true)
+      .order('sort_order', { ascending: true })
       .order('subscription_fee', { ascending: true });
 
     if (tiersError) {
