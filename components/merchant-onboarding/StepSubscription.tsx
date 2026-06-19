@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CreditCard, Loader2, CheckCircle2, Gauge, Tags, Gift, AlertTriangle, FlaskConical } from 'lucide-react';
+import { CreditCard, Loader2, CheckCircle2, Gauge, Tags, ShieldCheck, AlertTriangle, FlaskConical } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { SubscriptionTier, User } from '../../types';
 import { subscriptionService } from '../../services/subscriptionService';
@@ -287,13 +287,13 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
         </div>
       ) : (
         <div style={floatIn(50, visible)} className={`p-3.5 rounded-xl mb-4 flex items-start gap-2.5 ${isDark ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-200'}`}>
-          <Gift className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+          <ShieldCheck className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
           <div>
             <p className={`text-xs font-semibold mb-0.5 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
-              First 120 days free!
+              Start today
             </p>
             <p className={`text-[11px] leading-relaxed ${isDark ? 'text-emerald-400/80' : 'text-emerald-600'}`}>
-              Enjoy all features at no cost. You'll only be charged after your trial ends.
+              You&apos;ll be charged the plan amount today and automatically each cycle. Cancel or change anytime.
             </p>
           </div>
         </div>
@@ -393,7 +393,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
             </p>
             {!trialExpired && (
               <p className={`text-xs mb-3 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                Your first 120 days are free. Billing starts after the trial.
+                You&apos;ll be charged {tierToConfirm.currency}{tierToConfirm.subscription_fee} today, then automatically each {tierToConfirm.billing_frequency} until you cancel.
               </p>
             )}
             <div className={`space-y-2 mb-6 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
@@ -431,7 +431,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
                   isDark ? 'text-slate-400' : 'text-slate-500'
                 }`}
               >
-                [Dev] Start 120-day trial without payment
+                [Dev] Activate test subscription without payment
               </button>
             )}
 
