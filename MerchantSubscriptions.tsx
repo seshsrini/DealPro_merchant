@@ -699,6 +699,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                     if (result.success) {
                       setShowCancelModal(false);
                       setCurrentSubscription((prev: any) => prev ? { ...prev, cancel_at_period_end: true } : prev);
+                    } else if (result.message) {
+                      // Blocked by a guard (live deals running / recent plan-change
+                      // lock) — surface the exact reason in the notice banner.
+                      setShowCancelModal(false);
+                      setNoticeMsg(result.message);
                     } else {
                       setError('Unable to cancel subscription. Please try again.');
                       setShowCancelModal(false);

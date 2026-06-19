@@ -227,6 +227,7 @@ export const merchantSubscriptionService = {
     success: boolean;
     current_period_end?: string;
     error?: string;
+    message?: string;
   }> => {
     console.log("[merchantSubscriptionService] Cancelling subscription, reason:", reason);
     try {
@@ -243,7 +244,8 @@ export const merchantSubscriptionService = {
         console.log("[merchantSubscriptionService] Subscription cancelled:", data);
         return { success: true, current_period_end: data.current_period_end };
       }
-      return { success: false, error: data?.error || 'Cancellation failed' };
+      // Guard responses (active_deals / locked) carry a human-readable message.
+      return { success: false, error: data?.error || 'Cancellation failed', message: data?.message };
     } catch (err: any) {
       console.error("[merchantSubscriptionService] Cancel exception:", err.message);
       return { success: false, error: 'Unable to process subscription. Please try again.' };

@@ -556,7 +556,7 @@ Deno.serve(async (req) => {
       // Find the active subscription
       const { data: activeSub, error: fetchErr } = await supabaseAdmin
         .from('merchant_subscriptions')
-        .select('id, current_period_end, billing_type, razorpay_subscription_id')
+        .select('id, current_period_end, billing_type, razorpay_subscription_id, tier_change_locked_until')
         .eq('merchant_id', user.id)
         .eq('status', 'active')
         .gte('current_period_end', new Date().toISOString())
@@ -574,6 +574,37 @@ Deno.serve(async (req) => {
           JSON.stringify({ error: 'No active subscription found' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
         );
+      }
+
+      // ── Guard 1: block while live deals are running ──────────────────────
+      // A merchant can't cancel while consumers can still see/claim their deals.
+      const nowIso = new Date().toISOString();
+      const { count: activeDeals } = await supabaseAdmin
+        .from('campaigns')
+        .select('*', { count: 'exact', head: true })
+        .eq('merchant_id', user.id)
+        .eq('status', 'active')
+        .or(`end_date.gte.${nowIso},end_date.is.null`);
+      if ((activeDeals || 0) > 0) {
+        const n = activeDeals || 0;
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'active_deals',
+          active_deals: n,
+          message: `You have ${n} active deal${n === 1 ? '' : 's'} running. Please end ${n === 1 ? 'it' : 'them'} (or wait for ${n === 1 ? 'it' : 'them'} to expire) before cancelling your subscription.`,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+      }
+
+      // ── Guard 2: block within the one-cycle lock after a plan change ──────
+      const lockedUntil = (activeSub as any).tier_change_locked_until as string | null;
+      if (lockedUntil && new Date(lockedUntil) > new Date()) {
+        const until = new Date(lockedUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'locked',
+          locked_until: lockedUntil,
+          message: `You changed your plan recently. Please wait one billing cycle — you can cancel on or after ${until}.`,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
       }
 
       // Cancel at Razorpay first (cancel_at_cycle_end so it stays active until
