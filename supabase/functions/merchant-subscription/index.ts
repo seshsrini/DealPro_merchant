@@ -553,10 +553,12 @@ Deno.serve(async (req) => {
     if (action === 'cancel') {
       const { reason } = body;
 
-      // Find the active subscription
+      // Find the active subscription. NOTE: keep tier_change_locked_until OUT of
+      // this select — it's a separate migration that may not be applied; selecting
+      // a missing column would throw. We read the lock resiliently below.
       const { data: activeSub, error: fetchErr } = await supabaseAdmin
         .from('merchant_subscriptions')
-        .select('id, current_period_end, billing_type, razorpay_subscription_id, tier_change_locked_until')
+        .select('id, current_period_end, billing_type, razorpay_subscription_id')
         .eq('merchant_id', user.id)
         .eq('status', 'active')
         .gte('current_period_end', new Date().toISOString())
@@ -597,7 +599,16 @@ Deno.serve(async (req) => {
       }
 
       // ── Guard 2: block within the one-cycle lock after a plan change ──────
-      const lockedUntil = (activeSub as any).tier_change_locked_until as string | null;
+      // Read the lock resiliently — tolerate the column not existing yet.
+      let lockedUntil: string | null = null;
+      try {
+        const { data: lockRow } = await supabaseAdmin
+          .from('merchant_subscriptions')
+          .select('tier_change_locked_until')
+          .eq('id', activeSub.id)
+          .maybeSingle();
+        lockedUntil = (lockRow as any)?.tier_change_locked_until ?? null;
+      } catch { /* column may not exist yet */ }
       if (lockedUntil && new Date(lockedUntil) > new Date()) {
         const until = new Date(lockedUntil).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
         return new Response(JSON.stringify({
