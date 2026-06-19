@@ -577,14 +577,15 @@ Deno.serve(async (req) => {
       }
 
       // ── Guard 1: block while live deals are running ──────────────────────
-      // A merchant can't cancel while consumers can still see/claim their deals.
+      // A deal (regular OR DOTD) counts as running while its end_date is in the
+      // future. A merchant can't cancel while consumers can still see/claim them.
       const nowIso = new Date().toISOString();
       const { count: activeDeals } = await supabaseAdmin
         .from('campaigns')
         .select('*', { count: 'exact', head: true })
         .eq('merchant_id', user.id)
         .eq('status', 'active')
-        .or(`end_date.gte.${nowIso},end_date.is.null`);
+        .gte('end_date', nowIso);
       if ((activeDeals || 0) > 0) {
         const n = activeDeals || 0;
         return new Response(JSON.stringify({
@@ -605,6 +606,15 @@ Deno.serve(async (req) => {
           locked_until: lockedUntil,
           message: `You changed your plan recently. Please wait one billing cycle — you can cancel on or after ${until}.`,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+      }
+
+      // Dry-run: the cancel link calls this (check_only) to surface any guard
+      // message on click without actually cancelling. Reaching here = no block.
+      if (body.check_only) {
+        return new Response(
+          JSON.stringify({ success: true, can_cancel: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
       }
 
       // Cancel at Razorpay first (cancel_at_cycle_end so it stays active until

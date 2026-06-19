@@ -221,6 +221,23 @@ export const merchantSubscriptionService = {
   },
 
   /**
+   * Dry-run cancel check — runs the cancel guards (active deals / plan-change
+   * lock) WITHOUT cancelling, so the UI can show the reason on click.
+   */
+  checkCancelEligibility: async (merchantId: string): Promise<{ allowed: boolean; message?: string }> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('merchant-subscription', {
+        body: { action: 'cancel', merchantId, check_only: true },
+      });
+      if (error) return { allowed: false, message: 'Unable to check right now. Please try again.' };
+      if (data?.can_cancel) return { allowed: true };
+      return { allowed: false, message: data?.message || 'You can’t cancel your subscription right now.' };
+    } catch {
+      return { allowed: false, message: 'Unable to check right now. Please try again.' };
+    }
+  },
+
+  /**
    * Cancel the merchant's active subscription (at end of billing period)
    */
   cancelSubscription: async (merchantId: string, reason: string): Promise<{

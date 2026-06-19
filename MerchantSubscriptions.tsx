@@ -52,6 +52,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [checkingCancel, setCheckingCancel] = useState(false);
   const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
 
   // ── Derived subscription info ──
@@ -197,6 +198,22 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     setTierToConfirm(tier);
     setShowConfirmation(true);
     setError(null);
+  };
+
+  // Cancel link → check the guards (active deals / plan-change lock) first.
+  // Blocked → show the reason; otherwise open the cancel reason modal.
+  const handleCancelClick = async () => {
+    setNoticeMsg(null);
+    setError(null);
+    setCheckingCancel(true);
+    const res = await merchantSubscriptionService.checkCancelEligibility(user.id);
+    setCheckingCancel(false);
+    if (res.allowed) {
+      setCancelReason('');
+      setShowCancelModal(true);
+    } else {
+      setNoticeMsg(res.message || 'You can’t cancel your subscription right now.');
+    }
   };
 
   const handleCancelConfirmation = () => {
@@ -509,10 +526,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
             {/* Cancel link */}
             {!currentSubscription.cancel_at_period_end ? (
               <button
-                onClick={() => { setCancelReason(''); setShowCancelModal(true); }}
-                className={`w-full text-center text-xs underline underline-offset-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}
+                onClick={handleCancelClick}
+                disabled={checkingCancel}
+                className={`w-full text-center text-xs underline underline-offset-2 disabled:opacity-50 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}
               >
-                Cancel my subscription
+                {checkingCancel ? 'Checking…' : 'Cancel my subscription'}
               </button>
             ) : (
               <p className={`text-center text-xs ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
