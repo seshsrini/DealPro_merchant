@@ -241,48 +241,6 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     setTierToConfirm(null);
   };
 
-  const handleConfirmSelection = async () => {
-    if (!tierToConfirm || !user.id) {
-      setError('User not logged in');
-      return;
-    }
-
-    const tier = tierToConfirm;
-    setShowConfirmation(false);
-    setSelecting(true);
-    setSelectedTierId(tier.id);
-    setError(null);
-
-    try {
-      const result = await merchantSubscriptionService.createSubscription(
-        user.id, tier.id, tier.tier_key, tier.tier_name
-      );
-
-      if (result.success) {
-        setCurrentTierId(tier.id);
-        setCurrentSubscription(null);
-        setSelecting(false);
-        setSelectedTierId(null);
-        setUser({
-          ...user,
-          hasActiveSubscription: true,
-          subscription_status: 'active',
-          current_tier_id: tier.id,
-        });
-        // Re-fetch to get full subscription details
-        fetchData();
-      } else {
-        setError(result.error || 'Failed to activate subscription. Please try again.');
-        setSelecting(false);
-        setSelectedTierId(null);
-      }
-    } catch (err: any) {
-      setError('An unexpected error occurred. Please try again.');
-      setSelecting(false);
-      setSelectedTierId(null);
-    }
-  };
-
   // Opens Razorpay Checkout in-app via services/razorpayCheckoutService. That
   // service calls Supabase Edge Functions `create-subscription` and
   // `verify-subscription`, then dispatches a 'dealpro:paid' CustomEvent which
