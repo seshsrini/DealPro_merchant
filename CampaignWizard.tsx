@@ -350,18 +350,29 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     console.log('[CampaignWizard] Resumed server draft from', d.updated_at);
   }, [resumePromptDraft]);
 
-  // Resume-prompt decline: discard the server draft and start fresh.
+  // Delete BOTH campaign draft kinds the wizard owns ('regular' and
+  // 'buy_get_free_regular'). The resume prompt appears if EITHER exists, so any
+  // clear MUST remove both — otherwise a leftover of the other kind keeps
+  // re-prompting. Returns combined orphaned image URLs. Best-effort.
+  const deleteAllCampaignDrafts = useCallback(async (): Promise<string[]> => {
+    const orphans: string[] = [];
+    for (const k of ['regular', 'buy_get_free_regular'] as CampaignDraftKind[]) {
+      try {
+        const { orphaned_image_urls } = await campaignDraftService.delete(k);
+        if (orphaned_image_urls?.length) orphans.push(...orphaned_image_urls);
+      } catch { /* best-effort */ }
+    }
+    return orphans;
+  }, []);
+
+  // Resume-prompt decline: discard ANY server draft and start fresh.
   const handleDiscardServerDraft = useCallback(async () => {
-    if (!resumePromptDraft) return;
-    const kind: CampaignDraftKind = resumePromptDraft.is_buy_get_free ? 'buy_get_free_regular' : 'regular';
-    try {
-      const { orphaned_image_urls } = await campaignDraftService.delete(kind);
-      if (orphaned_image_urls.length > 0) {
-        await addCampaignService.destroyDraftImages(orphaned_image_urls);
-      }
-    } catch { /* best-effort */ }
+    const orphans = await deleteAllCampaignDrafts();
+    if (orphans.length > 0) {
+      try { await addCampaignService.destroyDraftImages(orphans); } catch { /* best-effort */ }
+    }
     setResumePromptDraft(null);
-  }, [resumePromptDraft]);
+  }, [deleteAllCampaignDrafts]);
 
   // Save draft — writes to BOTH localStorage (instant fallback) and the server-side
   // campaign_drafts table (debounced 2 s). Server draft survives device switches and
@@ -450,10 +461,9 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     // they're still served by Cloudinary's CDN at the same URL.
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
-    try {
-      const kind: CampaignDraftKind = isBuyGetFreeMode ? 'buy_get_free_regular' : 'regular';
-      await campaignDraftService.delete(kind); // ignore returned orphaned_image_urls — they're now in the published deal
-    } catch { /* best-effort */ }
+    // Clear BOTH kinds so a leftover of the other kind can't re-prompt later.
+    // Ignore orphaned URLs — they're now referenced by the published deal.
+    await deleteAllCampaignDrafts();
     await refreshDeals();
 
     // For new campaigns, ask if they want to save as template
@@ -522,16 +532,13 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
   const handleDiscard = async () => {
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
-    // On Start Over, delete the server draft AND destroy any uploaded Cloudinary
-    // draft assets — those images won't survive into a published deal so they're
-    // true orphans. Both calls are best-effort; the cleanup cron is the safety net.
-    try {
-      const kind: CampaignDraftKind = isBuyGetFreeMode ? 'buy_get_free_regular' : 'regular';
-      const { orphaned_image_urls } = await campaignDraftService.delete(kind);
-      if (orphaned_image_urls.length > 0) {
-        await addCampaignService.destroyDraftImages(orphaned_image_urls);
-      }
-    } catch { /* best-effort */ }
+    // On Start Over, delete BOTH server draft kinds AND destroy any uploaded
+    // Cloudinary draft assets — those images won't survive into a published deal
+    // so they're true orphans. Best-effort; the cleanup cron is the safety net.
+    const orphans = await deleteAllCampaignDrafts();
+    if (orphans.length > 0) {
+      try { await addCampaignService.destroyDraftImages(orphans); } catch { /* best-effort */ }
+    }
     dispatch({ type: 'RESET' });
     setIsBuyGetFreeMode(false);
     setCurrentStep(0);
