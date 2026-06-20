@@ -24,7 +24,7 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [referralCount, setReferralCount] = useState(0);
-  const [threshold, setThreshold] = useState(20);
+  const threshold = 5; // 5 qualified referrals = 1 free month (matches the engine)
   const [totalAllTime, setTotalAllTime] = useState(0);
   const [rewardsEarned, setRewardsEarned] = useState(0);
   const [referralCode, setReferralCode] = useState(
@@ -65,8 +65,9 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
 
-      // Fetch this month's qualified referrals, all-time count, threshold, and rewards in parallel
-      const [monthRes, allTimeRes, configRes, rewardsRes] = await Promise.all([
+      // Fetch this month's qualified referrals, all-time count, and rewards.
+      // Threshold is fixed at 5 (matches the refund engine) — no app_configs read.
+      const [monthRes, allTimeRes, rewardsRes] = await Promise.all([
         supabase
           .from('merchant_referrals')
           .select('id', { count: 'exact', head: true })
@@ -80,11 +81,6 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
           .eq('referrer_id', user.id)
           .eq('status', 'qualified'),
         supabase
-          .from('app_configs')
-          .select('config_value')
-          .eq('config_key', 'referral_reward_threshold')
-          .single(),
-        supabase
           .from('merchant_rewards_log')
           .select('id', { count: 'exact', head: true })
           .eq('merchant_id', user.id),
@@ -93,10 +89,6 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
       setReferralCount(monthRes.count || 0);
       setTotalAllTime(allTimeRes.count || 0);
       setRewardsEarned(rewardsRes.count || 0);
-
-      if (configRes.data?.config_value?.count) {
-        setThreshold(configRes.data.config_value.count);
-      }
     } catch (err) {
       console.error('[ReferralTracker] Fetch error:', err);
     } finally {
@@ -106,8 +98,12 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const remaining = Math.max(0, threshold - referralCount);
-  const progressPct = Math.min(100, (referralCount / threshold) * 100);
+  // Cumulative model with carryover: progress is toward the NEXT free month, and
+  // available credits = floor(all-time referrals / threshold) − months granted.
+  const cycleProgress = threshold > 0 ? totalAllTime % threshold : 0;
+  const remaining = threshold - cycleProgress; // referrals to the next free month
+  const availableCredits = Math.max(0, Math.floor(totalAllTime / Math.max(1, threshold)) - rewardsEarned);
+  const progressPct = Math.min(100, (cycleProgress / threshold) * 100);
 
   const handleCopy = async () => {
     try {
@@ -127,8 +123,6 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
     }
   };
 
-  const currentMonth = new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' });
-
   return (
     <div className={`px-6 pt-6 pb-32 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
       {/* Header */}
@@ -138,7 +132,7 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
         </button>
         <div>
           <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Referral Progress</h2>
-          <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{currentMonth}</p>
+          <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Refer merchants · earn free months</p>
         </div>
       </div>
 
@@ -179,10 +173,10 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
             <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Trophy className="w-4 h-4 text-white" />
-                <span className="text-white text-xs font-bold tracking-wide uppercase">Monthly Goal</span>
+                <span className="text-white text-xs font-bold tracking-wide uppercase">Next Free Month</span>
               </div>
               <span className="text-white/90 text-xs font-semibold">
-                {referralCount} / {threshold} referrals
+                {cycleProgress} / {threshold} referrals
               </span>
             </div>
 
@@ -202,27 +196,27 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
               </div>
 
               {/* Message */}
-              {remaining > 0 ? (
-                <div className={`rounded-xl p-3 flex items-start gap-3 ${isDark ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50 border border-amber-200'}`}>
-                  <Gift className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className={`text-sm font-semibold ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
-                      {remaining} more referral{remaining !== 1 ? 's' : ''} to go!
-                    </p>
-                    <p className={`text-xs mt-0.5 ${isDark ? 'text-amber-300/70' : 'text-amber-700'}`}>
-                      Reach {threshold} referrals this month to earn a free month of DealPro
-                    </p>
-                  </div>
-                </div>
-              ) : (
+              {availableCredits > 0 ? (
                 <div className={`rounded-xl p-3 flex items-start gap-3 ${isDark ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-200'}`}>
                   <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className={`text-sm font-semibold ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
-                      Goal reached! Free month earned!
+                      {availableCredits} free month{availableCredits !== 1 ? 's' : ''} ready 🎁
                     </p>
                     <p className={`text-xs mt-0.5 ${isDark ? 'text-emerald-300/70' : 'text-emerald-700'}`}>
-                      Your subscription has been extended by 30 days. Keep referring!
+                      We&apos;ll refund {availableCredits !== 1 ? 'them' : 'it'} to your payment method on your next bill. Referrals carry over — keep going!
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className={`rounded-xl p-3 flex items-start gap-3 ${isDark ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50 border border-amber-200'}`}>
+                  <Gift className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                      {remaining} more referral{remaining !== 1 ? 's' : ''} for a free month
+                    </p>
+                    <p className={`text-xs mt-0.5 ${isDark ? 'text-amber-300/70' : 'text-amber-700'}`}>
+                      Every {threshold} qualified referrals = 1 free month. Unused referrals carry over.
                     </p>
                   </div>
                 </div>
@@ -256,8 +250,8 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
               {[
                 { step: '1', text: 'Share your referral code with other merchants' },
                 { step: '2', text: 'They enter your code during their DealPro signup' },
-                { step: '3', text: `Get ${threshold} qualified referrals in a calendar month` },
-                { step: '4', text: 'Earn a free month — your billing is extended by 30 days!' },
+                { step: '3', text: `Every ${threshold} qualified referrals = 1 free month — unused referrals carry over` },
+                { step: '4', text: 'We refund that month’s charge to your payment method' },
               ].map((item) => (
                 <div key={item.step} className="flex items-start gap-3">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold ${isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
