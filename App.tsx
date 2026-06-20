@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AppView, User, Deal } from './types'; // Import User type
-import { biometricService, hydrateSessionFromDurableStore } from './services/biometricService';
+import { biometricService, hydrateSessionFromDurableStore, logBootDiagnostics } from './services/biometricService';
 import { AuthStack } from './AuthStack';
 import { MemberJoin } from './memberJoin';
 import { MerchantStack } from './MerchantStack';
@@ -372,6 +372,9 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (view === 'splash') {
       const timer = setTimeout(async () => {
+        // Boot diagnostic — RAW state before any recovery (adb logcat | grep BootDiag).
+        await logBootDiagnostics();
+
         // Recover the saved session from durable native storage if the WebView
         // evicted localStorage. MUST run before getSavedUser() so an evicted
         // merchant is restored silently instead of being dropped into the OTP

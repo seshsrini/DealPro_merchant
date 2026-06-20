@@ -89,6 +89,35 @@ export const biometricService = {
  * call when localStorage already has the session (no-op) or when the plugin is
  * unavailable (no-op).
  */
+/**
+ * One-line boot diagnostic. Logs whether each session store survived the app
+ * kill, so a recurrence of "re-OTP on reopen" is instantly traceable from tester
+ * logs (adb logcat | grep BootDiag). Reads the RAW state — call it BEFORE
+ * hydrateSessionFromDurableStore() so an eviction is visible.
+ */
+const SUPABASE_AUTH_KEY = 'dealpro-merchant-auth';
+export async function logBootDiagnostics(): Promise<void> {
+  try {
+    const lsSession = localStorage.getItem(USER_KEY);
+    const durable = await durableGet(USER_KEY);
+    const lsSupabase = !!localStorage.getItem(SUPABASE_AUTH_KEY);
+    let saved: any = null;
+    try { saved = lsSession ? JSON.parse(lsSession) : null; } catch { /* corrupt */ }
+    let liveSupabase = 'null';
+    try {
+      const { data } = await supabase.auth.getSession();
+      liveSupabase = data?.session?.user?.id ? String(data.session.user.id).slice(0, 8) : 'null';
+    } catch { /* ignore */ }
+    console.log(
+      `[BootDiag] savedSession=${!!lsSession} durableMirror=${!!durable} supabaseLS=${lsSupabase} ` +
+      `liveSupabaseSession=${liveSupabase} userId=${saved?.id ? String(saved.id).slice(0, 8) : 'none'} ` +
+      `hasTokens=${!!(saved?.access_token && saved?.refresh_token)} isLoggedIn=${!!saved?.isLoggedIn}`
+    );
+  } catch (e: any) {
+    console.warn('[BootDiag] failed:', e?.message || e);
+  }
+}
+
 export async function hydrateSessionFromDurableStore(): Promise<void> {
   try {
     if (localStorage.getItem(USER_KEY)) return; // localStorage intact — nothing to recover
