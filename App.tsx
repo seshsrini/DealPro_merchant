@@ -36,6 +36,7 @@ const AppContent: React.FC = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [loading, setLoading] = useState(false);
   const [hasBiometricSession, setHasBiometricSession] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [subscriptionActivating, setSubscriptionActivating] = useState(false);
   const [subscriptionActivationStuck, setSubscriptionActivationStuck] = useState(false);
   const [dealIdToEdit, setDealIdToEdit] = useState<string | null>(null);
@@ -573,6 +574,19 @@ const AppContent: React.FC = () => {
     }
   };
 
+  // Hardware back button (Android) — mirror the consumer app: dashboard asks to
+  // exit, pre-auth roots exit the app, everything else does in-app back.
+  useEffect(() => {
+    const listener = CapApp.addListener('backButton', () => {
+      if (showExitConfirm) { setShowExitConfirm(false); return; }
+      if (user.isLoggedIn && view === 'merchant_dashboard') { setShowExitConfirm(true); return; }
+      if (!user.isLoggedIn && (view === 'welcome' || view === 'login' || view === 'splash')) { CapApp.exitApp(); return; }
+      handleBackNavigation();
+    });
+    return () => { listener.then(l => l.remove()); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, user.isLoggedIn, showExitConfirm]);
+
 
   return (
     <div className={`max-w-md mx-auto h-screen overflow-hidden relative flex flex-col transition-colors duration-500 ${
@@ -885,6 +899,36 @@ const AppContent: React.FC = () => {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Exit App Confirmation (Android hardware back) */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-6">
+          <div className={`w-full max-w-sm rounded-xl shadow-lg ${theme === 'dark' ? 'bg-slate-900 border border-slate-800' : 'bg-white border border-slate-200'}`}>
+            <div className="p-6">
+              <h3 className={`text-lg font-semibold text-center mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                Exit DealPro?
+              </h3>
+              <p className={`text-sm text-center mb-6 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                Are you sure you want to exit the app?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowExitConfirm(false)}
+                  className={`flex-1 h-12 rounded-xl text-sm font-medium transition-all active:scale-[0.98] ${theme === 'dark' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-900'}`}
+                >
+                  No, Stay
+                </button>
+                <button
+                  onClick={() => CapApp.exitApp()}
+                  className="flex-1 h-12 rounded-xl bg-slate-900 text-white text-sm font-medium transition-all active:scale-[0.98]"
+                >
+                  Yes, Exit
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
