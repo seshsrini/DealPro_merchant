@@ -794,10 +794,10 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 <BadgeDollarSign className="w-7 h-7 text-blue-500" />
               </div>
               <h3 className={`text-lg font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Confirm Subscription
+                {currentSubscription?.status === 'active' && tierToConfirm.id !== currentTierId ? 'Confirm Plan Change' : 'Confirm Subscription'}
               </h3>
               <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                You're about to subscribe to:
+                {currentSubscription?.status === 'active' && tierToConfirm.id !== currentTierId ? "You're about to switch to:" : "You're about to subscribe to:"}
               </p>
             </div>
 
@@ -839,6 +839,10 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               </div>
             </div>
 
+            {/* Single action — always the Razorpay path: change_tier (in-place
+                upgrade/downgrade) for an active subscriber, or web checkout for a
+                new subscription. No legacy 'create' bypass that could let an
+                upgrade through when the Razorpay step fails. */}
             <div className="flex gap-3">
               <button
                 onClick={handleCancelConfirmation}
@@ -849,22 +853,17 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 Cancel
               </button>
               <button
-                onClick={handleConfirmSelection}
+                onClick={handlePayWithRazorpay}
                 className="flex-1 h-12 rounded-xl bg-slate-900 text-white text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{t('m_confirm')}</span>
+                <span>
+                  {currentSubscription?.status === 'active' && tierToConfirm.id !== currentTierId
+                    ? 'Pay with Autopay'
+                    : 'Pay with Razorpay'}
+                </span>
               </button>
             </div>
-
-            {/* Razorpay path — opens VedicJaalam /subscribe in an external browser. */}
-            <button
-              onClick={handlePayWithRazorpay}
-              className="w-full h-11 rounded-xl bg-amber-500 text-white text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-            >
-              <CreditCard className="w-4 h-4" />
-              Pay with Razorpay (test)
-            </button>
           </div>
         </div>
       )}
