@@ -297,11 +297,10 @@ const AppContent: React.FC = () => {
             }
           }
 
-          // Silent re-auth failed too — must redirect to login as last resort
-          console.warn('[App] All session recovery failed — redirecting to login.');
-          biometricService.clearSession();
-          setUser({ id: '', username: '', isLoggedIn: false, role: 'consumer', full_name: '', access_token: null, refresh_token: null, onboarding_complete: false, hasActiveSubscription: false } as User);
-          setView('login');
+          // A SAVED merchant must NEVER be dropped to OTP (product rule). Keep the
+          // session and stay put; the functions.invoke 401-retry and resume-time
+          // re-auth repair tokens when the network / login service recovers.
+          console.warn('[App] Session recovery failed for now — keeping saved session (no OTP drop).');
         }
       });
     } else if (wasLoggedInRef.current) {
@@ -433,32 +432,17 @@ const AppContent: React.FC = () => {
                     throw new Error('No session returned');
                   }
                 } catch (reAuthErr: any) {
-                  // Goal: a signed-up merchant never sees OTP again on this device.
-                  // A transient network failure (offline cold open, flaky mobile
-                  // data) must NOT wipe the saved session — that would strand them
-                  // back in the OTP flow forever. Keep the session and proceed
-                  // optimistically; the functions.invoke 401-retry and resume-time
-                  // recoverSessionOrSilentReauth will repair tokens once the network
-                  // returns. Only a definitive rejection logs them out.
-                  const m = (reAuthErr?.message || String(reAuthErr)).toLowerCase();
-                  const transient = /failed to fetch|failed to send|network|timeout|timed out|offline/.test(m);
-                  if (transient) {
-                    console.warn('[App] Silent re-auth hit a transient network error — keeping saved session, proceeding to dashboard:', reAuthErr);
-                    // fall through to the subscription/routing check below using savedUser
-                  } else {
-                    console.warn('[App] Silent re-auth failed definitively — redirecting to login:', reAuthErr);
-                    await biometricService.clearSession();
-                    setUser({ id: '', username: '', isLoggedIn: false, role: 'consumer', full_name: '', access_token: null, refresh_token: null, onboarding_complete: false, hasActiveSubscription: false } as User);
-                    setView('login');
-                    return;
-                  }
+                  // Product rule: a signed-up merchant NEVER sees OTP again on this
+                  // device. Whether the silent re-auth failure is transient (offline
+                  // cold open) or definitive, keep the saved session and proceed to
+                  // the dashboard; the functions.invoke 401-retry and resume-time
+                  // re-auth repair tokens once the network / login service returns.
+                  console.warn('[App] Silent re-auth failed — keeping saved session, proceeding:', reAuthErr);
                 }
               } else {
-                console.warn('[App] No phone for re-auth — redirecting to login');
-                await biometricService.clearSession();
-                setUser({ id: '', username: '', isLoggedIn: false, role: 'consumer', full_name: '', access_token: null, refresh_token: null, onboarding_complete: false, hasActiveSubscription: false } as User);
-                setView('login');
-                return;
+                // No phone to silently re-auth with — still don't drop a saved
+                // merchant to OTP. Keep the session and proceed to the dashboard.
+                console.warn('[App] No phone for silent re-auth — keeping saved session, proceeding.');
               }
             } else {
               console.log('[App] Supabase session established for splash restore');

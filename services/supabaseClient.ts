@@ -291,48 +291,63 @@ supabase.functions.invoke = async (functionName: string, options?: any) => {
  * @param session The Supabase Session object containing access_token and refresh_token.
  * @returns true if session is valid, false if refresh failed (user must re-login).
  */
+// Coalesce concurrent restore calls. The splash restore and the access_token
+// effect both fire updateSupabaseSession with the same saved tokens when the
+// session is set — two parallel refreshSession() calls race on refresh-token
+// ROTATION (the second uses the already-rotated token and fails), which used to
+// strand the merchant back in the OTP flow. Sharing one in-flight promise fixes it.
+let _restoreInFlight: Promise<boolean> | null = null;
+
 export const updateSupabaseSession = async (session: Session | null): Promise<boolean> => {
   if (session) {
-    // Check if the Supabase client already has an active session (e.g., from verifyOtp during login).
-    // If so, skip setSession to avoid token conflicts — just ensure the header is set.
-    const { data: existing } = await supabase.auth.getSession();
-    if (existing?.session?.access_token && existing.session.user?.id) {
-      (supabase as any).headers['Authorization'] = `Bearer ${existing.session.access_token}`;
-      console.log(`[SupabaseClient] Active session found for user: ${existing.session.user.id}. Header synced.`);
-      return true;
-    }
-
-    // No active session — restoring from localStorage. Seed the tokens and refresh.
-    try {
-      const { error } = await supabase.auth.setSession({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-      });
-
-      if (error) {
-        console.warn('[SupabaseClient] setSession warning:', error.message);
+    if (_restoreInFlight) return _restoreInFlight;
+    _restoreInFlight = (async () => {
+      // Check if the Supabase client already has an active session (e.g., from verifyOtp during login).
+      // If so, skip setSession to avoid token conflicts — just ensure the header is set.
+      const { data: existing } = await supabase.auth.getSession();
+      if (existing?.session?.access_token && existing.session.user?.id) {
+        (supabase as any).headers['Authorization'] = `Bearer ${existing.session.access_token}`;
+        console.log(`[SupabaseClient] Active session found for user: ${existing.session.user.id}. Header synced.`);
+        return true;
       }
-    } catch (err: any) {
-      console.warn('[SupabaseClient] setSession failed:', err.message);
-    }
 
-    // Immediately refresh to get a valid access_token.
-    // The saved access_token from localStorage may be hours/days old (expired).
-    // refreshSession uses the refresh_token to obtain fresh tokens.
-    // Returns false if refresh fails (refresh token fully expired → user must re-login).
-    try {
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError || !refreshData.session) {
-        console.warn('[SupabaseClient] refreshSession failed — refresh token likely expired:', refreshError?.message);
-        return false; // Caller should redirect to login
+      // No active session — restoring from localStorage. Seed the tokens and refresh.
+      try {
+        const { error } = await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        });
+
+        if (error) {
+          console.warn('[SupabaseClient] setSession warning:', error.message);
+        }
+      } catch (err: any) {
+        console.warn('[SupabaseClient] setSession failed:', err.message);
       }
-      const freshToken = refreshData.session.access_token;
-      (supabase as any).headers['Authorization'] = `Bearer ${freshToken}`;
-      console.log(`[SupabaseClient] Session restored & refreshed for user: ${refreshData.session.user?.id}.`);
-      return true;
-    } catch (err: any) {
-      console.warn('[SupabaseClient] refreshSession threw:', err.message);
-      return false;
+
+      // Immediately refresh to get a valid access_token.
+      // The saved access_token from localStorage may be hours/days old (expired).
+      // refreshSession uses the refresh_token to obtain fresh tokens.
+      // Returns false if refresh fails (refresh token fully expired → user must re-login).
+      try {
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError || !refreshData.session) {
+          console.warn('[SupabaseClient] refreshSession failed — refresh token likely expired:', refreshError?.message);
+          return false; // Caller should redirect to login
+        }
+        const freshToken = refreshData.session.access_token;
+        (supabase as any).headers['Authorization'] = `Bearer ${freshToken}`;
+        console.log(`[SupabaseClient] Session restored & refreshed for user: ${refreshData.session.user?.id}.`);
+        return true;
+      } catch (err: any) {
+        console.warn('[SupabaseClient] refreshSession threw:', err.message);
+        return false;
+      }
+    })();
+    try {
+      return await _restoreInFlight;
+    } finally {
+      _restoreInFlight = null;
     }
   } else {
     // Clear session and remove Authorization header
