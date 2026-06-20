@@ -28,6 +28,17 @@ export const StepStartDate: React.FC<StepStartDateProps> = ({ value, onChange, o
     return () => clearTimeout(t);
   }, []);
 
+  // Seed a valid default so the step is never stuck with an empty value — or with
+  // a restored-draft date that's now in the PAST (which the date input rejects
+  // because it's below `min`, leaving the field blank and Continue disabled).
+  // The merchant can still change it; we only fill when it's missing/expired.
+  useEffect(() => {
+    if (!value || value < getTomorrow()) {
+      onChange(getTomorrow());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && isValid) onNext();
   };

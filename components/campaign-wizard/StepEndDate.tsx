@@ -47,6 +47,20 @@ export const StepEndDate: React.FC<StepEndDateProps> = ({ value, startDate, onCh
     return () => clearTimeout(t);
   }, []);
 
+  // Seed a valid default (start + 7 days, capped at the 15-day max) when the end
+  // date is missing or falls outside the allowed window — e.g. a restored draft
+  // whose end date no longer fits the (possibly re-defaulted) start date. Keeps
+  // the step from getting stuck; the merchant can still change it.
+  useEffect(() => {
+    if (!startDate) return;
+    const invalidEnd = !value || value <= startDate || (!!maxEndDate && value > maxEndDate);
+    if (invalidEnd) {
+      const def = addDaysISO(startDate, 7);
+      onChange(maxEndDate && def > maxEndDate ? maxEndDate : def);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && isValid) onNext();
   };
