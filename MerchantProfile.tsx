@@ -28,6 +28,7 @@ import { useTranslation } from './contexts/LanguageContext';
 import { usePermissions } from './contexts/PermissionsContext';
 import { userService } from './services/userService';
 import { MreferralService } from './services/MreferralService';
+import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { supabase } from './services/supabaseClient';
 import { resetFeatureTour } from './components/FeatureTour';
 import { resetCampaignTour } from './components/CampaignTour';
@@ -49,6 +50,14 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
   const [merchantReferralCode, setMerchantReferralCode] = useState(
     user.merchant_referral_code || user.my_referral_code || ''
   );
+  const [referralCredits, setReferralCredits] = useState<{ qualified_referrals: number; available_months: number; referrals_to_next: number } | null>(null);
+
+  // Referral free-month credits (5 referrals = 1 free month, carryover).
+  useEffect(() => {
+    let active = true;
+    merchantSubscriptionService.getReferralCredits().then((c) => { if (active && c) setReferralCredits(c); });
+    return () => { active = false; };
+  }, [user.id]);
 
   // Fetch from DB if not on user object
   useEffect(() => {
@@ -143,11 +152,26 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             <div>
               <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_referral_progress')}</p>
               <p className={`text-[10px] mt-0.5 font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                {t('m_referral_track')}
+                {referralCredits
+                  ? (referralCredits.available_months > 0
+                      ? t('m_ref_ready')
+                          .replace('{qualified}', String(referralCredits.qualified_referrals))
+                          .replace('{count}', String(referralCredits.available_months))
+                      : t('m_ref_progress_line')
+                          .replace('{qualified}', String(referralCredits.qualified_referrals))
+                          .replace('{toNext}', String(referralCredits.referrals_to_next)))
+                  : t('m_referral_track')}
               </p>
             </div>
           </div>
-          <ChevronRight size={18} className={isDark ? 'text-slate-500' : 'text-slate-400'} />
+          <div className="flex items-center gap-2">
+            {!!referralCredits && referralCredits.available_months > 0 && (
+              <span className="bg-emerald-500 text-white text-[11px] font-bold px-2 py-1 rounded-full leading-none">
+                {referralCredits.available_months}
+              </span>
+            )}
+            <ChevronRight size={18} className={isDark ? 'text-slate-500' : 'text-slate-400'} />
+          </div>
         </div>
       </button>
 
