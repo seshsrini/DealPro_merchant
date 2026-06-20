@@ -218,15 +218,22 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   };
 
   // Validation
+  // A document business type must be VERIFIED against the registry (not just
+  // format-valid + unique), and the verified value must match the CURRENT input
+  // (so a merchant can't verify one number and then edit it). This blocks
+  // proceeding when verification failed / was never run.
   const isValid = (() => {
     if (!businessType) return false;
     if (businessType === 'none') return true;
+    const vr = verifyResult[businessType];
+    const verified = !!vr && vr.ok === true;
     if (businessType === 'gstin') {
-      return isGstValid(gstinValue) && gstinTaken === false && isPanValid(panValue) && panTaken === false;
+      return isGstValid(gstinValue) && gstinTaken === false && isPanValid(panValue) && panTaken === false
+        && verified && vr!.value === gstinValue;
     }
-    if (businessType === 'udyam') return isUdyamValid(udyamValue) && udyamTaken === false;
-    if (businessType === 'fssai') return isFssaiValid(fssaiValue) && fssaiTaken === false;
-    if (businessType === 'trade_license') return isTradeLicenseValid(tradeLicenseValue) && tradeLicenseTaken === false;
+    if (businessType === 'udyam') return isUdyamValid(udyamValue) && udyamTaken === false && verified && vr!.value === udyamValue;
+    if (businessType === 'fssai') return isFssaiValid(fssaiValue) && fssaiTaken === false && verified && vr!.value === fssaiValue;
+    if (businessType === 'trade_license') return isTradeLicenseValid(tradeLicenseValue) && tradeLicenseTaken === false && verified && vr!.value === tradeLicenseValue;
     return false;
   })();
 
