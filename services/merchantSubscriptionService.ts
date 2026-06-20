@@ -221,6 +221,27 @@ export const merchantSubscriptionService = {
   },
 
   /**
+   * Referral free-month credits (5 referrals = 1 free month, carryover).
+   */
+  getReferralCredits: async (): Promise<{
+    qualified_referrals: number;
+    per_free_month: number;
+    available_months: number;
+    referrals_to_next: number;
+    last_reward_at: string | null;
+  } | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('merchant-subscription', {
+        body: { action: 'referral_credits' },
+      });
+      if (error || !data) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
    * Dry-run cancel check — runs the cancel guards (active deals / plan-change
    * lock) WITHOUT cancelling, so the UI can show the reason on click.
    */

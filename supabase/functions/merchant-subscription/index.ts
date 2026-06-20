@@ -666,8 +666,34 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (action === 'referral_credits') {
+      // Referral free-month credits: 5 qualified referrals = 1 free month, with
+      // carryover. available = floor(referrals/5) − months already granted.
+      const FREE_MONTH_REFERRALS = 5;
+      const [{ count: qualified }, { count: used }, { data: lastReward }] = await Promise.all([
+        supabaseAdmin.from('merchant_referrals').select('*', { count: 'exact', head: true }).eq('referrer_id', user.id).eq('status', 'qualified'),
+        supabaseAdmin.from('merchant_rewards_log').select('*', { count: 'exact', head: true }).eq('merchant_id', user.id).eq('reward_type', 'free_month'),
+        supabaseAdmin.from('merchant_rewards_log').select('reward_month, created_at').eq('merchant_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      const q = qualified || 0;
+      const earned = Math.floor(q / FREE_MONTH_REFERRALS);
+      const available = Math.max(0, earned - (used || 0));
+      return new Response(
+        JSON.stringify({
+          qualified_referrals: q,
+          per_free_month: FREE_MONTH_REFERRALS,
+          earned_months: earned,
+          used_months: used || 0,
+          available_months: available,
+          referrals_to_next: FREE_MONTH_REFERRALS - (q % FREE_MONTH_REFERRALS),
+          last_reward_at: lastReward?.created_at || null,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Invalid action. Use "check", "fetch", "create", "create_test_subscription", "cancel", or "campaign_usage"' }),
+      JSON.stringify({ error: 'Invalid action. Use "check", "fetch", "create", "create_test_subscription", "cancel", "campaign_usage", or "referral_credits"' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
     );
 

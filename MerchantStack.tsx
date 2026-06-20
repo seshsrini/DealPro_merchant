@@ -5,7 +5,7 @@ import { MerchantMyCampaigns } from './MerchantMyCampaigns.tsx';
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { AppView, Deal, User } from './types';
-import { MerchantProfile } from './merchantProfile';
+import { MerchantProfile } from './MerchantProfile';
 import { EditProfile } from './EditProfile';
 import { MerchantDashboard } from './MerchantDashboard';
 import { addCampaignService } from './services/addCampaignService';
