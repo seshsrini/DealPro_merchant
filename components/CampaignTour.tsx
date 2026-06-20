@@ -9,15 +9,6 @@ interface CampaignTourProps {
 
 const TOUR_STEPS: DriveStep[] = [
   {
-    element: '#ctour-usage',
-    popover: {
-      title: 'Campaign Usage',
-      description: 'See how many campaigns and Deal of the Day slots you\'ve used this month. When you hit the limit, upgrade your plan.',
-      side: 'bottom',
-      align: 'center',
-    },
-  },
-  {
     element: '#ctour-new-deal',
     popover: {
       title: 'Create a New Deal',

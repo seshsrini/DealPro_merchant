@@ -9,24 +9,6 @@ interface FeatureTourProps {
 
 const TOUR_STEPS: DriveStep[] = [
   {
-    element: '#tour-store-info',
-    popover: {
-      title: 'Your Store',
-      description: 'This is your store dashboard — your command centre for managing deals, tracking performance, and growing your business.',
-      side: 'bottom',
-      align: 'center',
-    },
-  },
-  {
-    element: '#tour-campaign-usage',
-    popover: {
-      title: 'Campaign Usage',
-      description: 'Track how many campaigns and Deal of the Day slots you\'ve used this month. Upgrade your plan anytime to get more.',
-      side: 'bottom',
-      align: 'center',
-    },
-  },
-  {
     element: '#tour-new-deal',
     popover: {
       title: 'Create a New Deal',
@@ -42,60 +24,6 @@ const TOUR_STEPS: DriveStep[] = [
       description: 'When a customer shows their coupon QR code, tap here to scan and verify it instantly. Quick and secure redemption!',
       side: 'top',
       align: 'end',
-    },
-  },
-  {
-    element: '#tour-festival-banner',
-    popover: {
-      title: 'Festival Deals',
-      description: 'Stay ahead of upcoming festivals! Create special seasonal deals to boost your sales during peak shopping periods.',
-      side: 'top',
-      align: 'center',
-    },
-  },
-  {
-    element: '#tour-nav-campaigns',
-    popover: {
-      title: 'My Campaigns',
-      description: 'View, edit, and manage all your deal campaigns. Track their status — under review, active, or expired.',
-      side: 'top',
-      align: 'center',
-    },
-  },
-  {
-    element: '#tour-nav-catalogue',
-    popover: {
-      title: 'My Catalogue',
-      description: 'Build your product catalogue to showcase your best offerings. Customers can browse your catalogue from the consumer app.',
-      side: 'top',
-      align: 'center',
-    },
-  },
-  {
-    element: '#tour-nav-dotd',
-    popover: {
-      title: 'Deal of the Day',
-      description: 'Feature your best deal as the "Deal of the Day" for maximum visibility. This gets prime placement on the consumer app!',
-      side: 'top',
-      align: 'center',
-    },
-  },
-  {
-    element: '#tour-nav-intel',
-    popover: {
-      title: 'Intel & Analytics',
-      description: 'See how your deals are performing — views, claims, redemptions, and revenue insights. Make data-driven decisions.',
-      side: 'top',
-      align: 'center',
-    },
-  },
-  {
-    element: '#tour-nav-hub',
-    popover: {
-      title: 'Your Hub',
-      description: 'Manage your profile, subscription plan, store locations, and app settings from here. You\'re all set — let\'s create your first deal!',
-      side: 'top',
-      align: 'center',
     },
   },
 ];
