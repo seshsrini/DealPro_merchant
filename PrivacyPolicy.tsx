@@ -171,7 +171,7 @@ export const PrivacyPolicy: React.FC<PrivacyPolicyProps> = ({ setView, theme }) 
 
                 <div className="ml-10 text-sm leading-relaxed space-y-3">
                   <p>You can access, correct, or delete your data at any time via the Profile section.</p>
-                  <p><span className="font-semibold">Merchant Control:</span> Merchants may withdraw consent for specific product images by marking them "Inactive" or deleting the product row, which triggers a 30-day deletion cycle from our media cache (Cloudinary).</p>
+                  <p><span className="font-semibold">Merchant Control:</span> Merchants may withdraw consent for specific product images by marking them "Inactive" or deleting the product row, which triggers a 30-day deletion cycle from our media storage (Cloudinary).</p>
                 </div>
               </section>
 
