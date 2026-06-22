@@ -1,5 +1,4 @@
 import { supabase } from './supabaseClient';
-import { clearSignupComplete } from './signupCompleteCache';
 import { Preferences } from '@capacitor/preferences';
 
 const USER_KEY = 'dealpro_merchant_session';
@@ -59,18 +58,6 @@ export const biometricService = {
   },
 
   async clearSession(): Promise<void> {
-    // Read the merchant id from the saved session BEFORE we wipe it, so we can
-    // also clear the signup-complete cache entry for that specific merchant.
-    // If a different merchant later signs in on this device, they get a clean
-    // fall-through to the 5-field profile check in AuthStack rather than
-    // inheriting the previous owner's "signup done" flag.
-    try {
-      const saved = localStorage.getItem(USER_KEY);
-      if (saved) {
-        const prev = JSON.parse(saved);
-        if (prev?.id) clearSignupComplete(prev.id);
-      }
-    } catch { /* best-effort — falls through to standard cleanup */ }
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem('dealpro_merchant_biometric_asked');
     // Wipe the durable mirror too — an explicit logout must NOT be silently

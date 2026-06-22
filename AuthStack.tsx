@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { AppView } from './types';
 import { userService } from './services/userService';
 import { biometricService } from './services/biometricService';
-import { isSignupKnownComplete } from './services/signupCompleteCache';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { fcmService } from './services/fcmService';
 import { useTranslation } from './contexts/LanguageContext';
@@ -174,14 +173,17 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     // The onboarding wizard has resume-from-step logic in MerchantOnboarding.tsx,
     // so it's safe to route a partially-complete profile back into the wizard —
     // they pick up from the first missing field.
-    // Cache short-circuit: if this device has previously seen this merchant
-    // finish the signup wizard, trust that flag instead of re-evaluating the
-    // 5-field check on every cold open. The cache is set in
-    // MerchantOnboarding.handleFinalSubmit() only after the atomic write
-    // succeeds, so true here guarantees the DB has those fields populated.
-    // See services/signupCompleteCache.ts for the safety argument.
-    const cachedSignupComplete = isSignupKnownComplete(userProfile.id);
-    const isExistingMerchant = cachedSignupComplete || !!(
+    //
+    // IMPORTANT: routing is decided PURELY from the DB profile (the login
+    // response), never from a device-local flag. We previously OR'd in a
+    // localStorage "signup complete" cache here as an optimization — but that
+    // flag is keyed by the (stable) merchant UUID and persists across DB
+    // resets, so on any device where the flag was set but the DB row is empty
+    // (wiped test data, different DB), the merchant got routed straight past
+    // onboarding to the dashboard. The wizard then never ran and every
+    // mandatory field (full_name, store_name, business_type, terms, privacy,
+    // GST/Udyam) stayed null forever. The DB is the only source of truth.
+    const isExistingMerchant = !!(
       userProfile.full_name &&
       userProfile.store_name &&
       userProfile.business_type &&
@@ -192,7 +194,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
 
     // Check if this user is a staff member (not the owner) — they skip onboarding entirely
     const isStaffMember = userProfile.staff_role && userProfile.staff_role !== 'owner';
-    console.log('[AuthStack] Post-login — isExistingMerchant:', isExistingMerchant, 'profileOk:', profileOk, 'cachedSignupComplete:', cachedSignupComplete, 'isStaffMember:', isStaffMember, 'staff_role:', userProfile.staff_role,
+    console.log('[AuthStack] Post-login — isExistingMerchant:', isExistingMerchant, 'profileOk:', profileOk, 'isStaffMember:', isStaffMember, 'staff_role:', userProfile.staff_role,
       'fields:', { full_name: !!userProfile.full_name, store_name: !!userProfile.store_name, category: !!userProfile.category, business_type: !!userProfile.business_type, terms: !!userProfile.terms_accepted, privacy: !!userProfile.privacy_accepted });
 
     const updatedUser = {

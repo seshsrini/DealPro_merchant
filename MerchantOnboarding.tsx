@@ -5,7 +5,6 @@ import { merchantSubscriptionService } from './services/merchantSubscriptionServ
 import { encryptionService, auditLogger } from './services/encryptionService';
 import { biometricService } from './services/biometricService';
 import { signupDraftService } from './services/draftService';
-import { markSignupComplete } from './services/signupCompleteCache';
 import { Loader2 } from 'lucide-react';
 
 // Step components
@@ -395,12 +394,6 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       // Clear draft (localStorage + server-side signup_drafts)
       localStorage.removeItem(DRAFT_KEY);
       try { await signupDraftService.delete(); } catch { /* best-effort */ }
-
-      // Record completion on this device so AuthStack.handlePostLoginNavigation
-      // can short-circuit the 5-field profile check on the next cold open.
-      // Safe because completeMerchantProfile() above atomically populated all
-      // five required fields — see services/signupCompleteCache.ts header.
-      markSignupComplete(user.id);
 
       // Update user state with ALL profile-completeness fields
       const updatedUser = {
