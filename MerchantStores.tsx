@@ -97,9 +97,11 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
   const [deletingStoreId, setDeletingStoreId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Fetch stores on mount
+  // Fetch stores on mount. Force a FRESH fetch (bypass the 1-hour cache) so a
+  // store just added during onboarding always shows here — the cache could
+  // otherwise display a stale count (e.g. 1 of 4). This also refreshes the cache.
   useEffect(() => {
-    merchantService.getMerchantStores(user.id)
+    merchantService.getMerchantStores(user.id, true)
       .then(data => {
         setStores(data);
         const activeCount = data.filter(s => s.active_status !== 'disabled').length;
