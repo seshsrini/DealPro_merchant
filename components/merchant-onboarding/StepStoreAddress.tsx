@@ -299,7 +299,9 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
           <label className={labelClass}>Street Address *</label>
           <input
             value={store.street}
-            onChange={(e) => onChange('street', e.target.value)}
+            // Max 80 chars (free-form address — special characters allowed).
+            onChange={(e) => onChange('street', e.target.value.slice(0, 80))}
+            maxLength={80}
             placeholder="Street address, building, floor"
             className={inputClass}
           />
@@ -348,10 +350,13 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
           <label className={labelClass}>Locality / Area</label>
           <input
             value={localitySearch}
+            // Max 40 chars; letters/numbers/spaces only (no special characters).
             onChange={(e) => {
-              setLocalitySearch(e.target.value);
-              onChange('locality', e.target.value);
+              const v = e.target.value.replace(/[^\p{L}\p{N} ]/gu, '').slice(0, 40);
+              setLocalitySearch(v);
+              onChange('locality', v);
             }}
+            maxLength={40}
             placeholder="Auto-filled from pincode or type manually"
             className={inputClass}
           />

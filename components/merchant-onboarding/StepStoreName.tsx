@@ -79,8 +79,10 @@ export const StepStoreName: React.FC<StepStoreNameProps> = ({ value, onChange, o
             ref={inputRef}
             type="text"
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            // Max 60 chars; letters/numbers/spaces only (no special characters).
+            onChange={(e) => onChange(e.target.value.replace(/[^\p{L}\p{N} ]/gu, '').slice(0, 60))}
             onKeyDown={handleKeyDown}
+            maxLength={60}
             placeholder="Enter legal business name"
             className={`w-full h-14 px-4 pr-11 rounded-xl text-base font-medium outline-none transition-all border ${
               taken === true

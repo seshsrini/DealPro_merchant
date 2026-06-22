@@ -45,8 +45,10 @@ export const StepFullName: React.FC<StepFullNameProps> = ({ value, onChange, onN
           ref={inputRef}
           type="text"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          // Max 50 chars; letters/numbers/spaces only (no special characters).
+          onChange={(e) => onChange(e.target.value.replace(/[^\p{L}\p{N} ]/gu, '').slice(0, 50))}
           onKeyDown={handleKeyDown}
+          maxLength={50}
           placeholder="Enter your full name"
           className={`w-full h-14 px-4 rounded-xl text-base font-medium outline-none transition-all border ${
             isDark
