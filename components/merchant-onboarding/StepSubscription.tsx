@@ -353,10 +353,10 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
 
               <div className={`flex items-center gap-4 text-xs mb-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 <span className="flex items-center gap-1">
-                  <Gauge className="w-3.5 h-3.5" /> {tier.max_campaigns_per_month} deals/mo
+                  <Gauge className="w-3.5 h-3.5" /> {(tier.max_campaigns_per_month ?? 0) >= 999 ? 'Unlimited deals' : `${tier.max_campaigns_per_month} deals/mo`}
                 </span>
                 <span className="flex items-center gap-1">
-                  <Tags className="w-3.5 h-3.5" /> {tier.max_dotd_per_month} DOTD/mo
+                  <Tags className="w-3.5 h-3.5" /> {(tier.max_dotd_per_month ?? 0) >= 999 ? 'Unlimited DOTD' : `${tier.max_dotd_per_month} DOTD/mo`}
                 </span>
               </div>
 
@@ -399,11 +399,11 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
             <div className={`space-y-2 mb-6 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                {tierToConfirm.max_campaigns_per_month} deals per month
+                {(tierToConfirm.max_campaigns_per_month ?? 0) >= 999 ? 'Unlimited deals' : `${tierToConfirm.max_campaigns_per_month} deals per month`}
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                {tierToConfirm.max_dotd_per_month} deal-of-day per month
+                {(tierToConfirm.max_dotd_per_month ?? 0) >= 999 ? 'Unlimited Deal-of-Day' : `${tierToConfirm.max_dotd_per_month} deal-of-day per month`}
               </div>
               {tierToConfirm.is_multi_store && (
                 <div className="flex items-center gap-2">

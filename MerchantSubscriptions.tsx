@@ -497,11 +497,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               <div className={`flex items-center gap-4 px-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 <span className="flex items-center gap-1.5 text-xs">
                   <Gauge className="w-3.5 h-3.5 text-blue-400" />
-                  {currentTier.max_campaigns_per_month} deals/mo
+                  {(currentTier.max_campaigns_per_month ?? 0) >= 999 ? 'Unlimited deals' : `${currentTier.max_campaigns_per_month} deals/mo`}
                 </span>
                 <span className="flex items-center gap-1.5 text-xs">
                   <Tags className="w-3.5 h-3.5 text-amber-400" />
-                  {currentTier.max_dotd_per_month} DOTD/mo
+                  {(currentTier.max_dotd_per_month ?? 0) >= 999 ? 'Unlimited DOTD' : `${currentTier.max_dotd_per_month} DOTD/mo`}
                 </span>
                 {currentTier.is_multi_store && (
                   <span className="flex items-center gap-1.5 text-xs">
@@ -589,14 +589,23 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
             <div className="col-span-3"></div>
           </div>
 
-          {/* Table Rows */}
-          {tiers.map((tier, index) => (
-            <div
-              key={tier.id}
-              className={`grid grid-cols-12 gap-3 px-4 py-4 items-center transition-colors ${
-                index !== tiers.length - 1 ? (isDark ? 'border-b border-slate-800/50' : 'border-b border-slate-100') : ''
-              }`}
-            >
+          {/* Table Rows — monthly plans first, then a Yearly section */}
+          {(() => {
+            const monthly = tiers.filter((tt) => tt.billing_frequency !== 'yearly');
+            const yearly = tiers.filter((tt) => tt.billing_frequency === 'yearly');
+            const ordered = [...monthly, ...yearly];
+            return ordered.map((tier, index) => (
+              <React.Fragment key={tier.id}>
+                {yearly.length > 0 && index === monthly.length && (
+                  <div className={`px-4 py-2 text-[10px] font-bold uppercase tracking-wider ${isDark ? 'bg-slate-800/40 text-slate-400 border-t border-slate-800' : 'bg-slate-50 text-slate-500 border-t border-slate-200'}`}>
+                    Yearly Plans
+                  </div>
+                )}
+                <div
+                  className={`grid grid-cols-12 gap-3 px-4 py-4 items-center transition-colors ${
+                    index !== ordered.length - 1 ? (isDark ? 'border-b border-slate-800/50' : 'border-b border-slate-100') : ''
+                  }`}
+                >
               <div className="col-span-3">
                 <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{tier.tier_name}</p>
                 <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{tier.billing_frequency}</p>
@@ -609,15 +618,23 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               <div className="col-span-2">
                 <div className="flex items-center gap-1.5">
                   <Gauge className="w-4 h-4 text-blue-400" />
-                  <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{tier.max_campaigns_per_month}</span>
-                  <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
+                  <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    {(tier.max_campaigns_per_month ?? 0) >= 999 ? 'Unlimited' : tier.max_campaigns_per_month}
+                  </span>
+                  {(tier.max_campaigns_per_month ?? 0) < 999 && (
+                    <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
+                  )}
                 </div>
               </div>
               <div className="col-span-2">
                 <div className="flex items-center gap-1.5">
                   <Tags className="w-4 h-4 text-amber-400" />
-                  <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{tier.max_dotd_per_month}</span>
-                  <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
+                  <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    {(tier.max_dotd_per_month ?? 0) >= 999 ? 'Unlimited' : tier.max_dotd_per_month}
+                  </span>
+                  {(tier.max_dotd_per_month ?? 0) < 999 && (
+                    <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
+                  )}
                 </div>
               </div>
               <div className="col-span-3 flex justify-end">
@@ -646,8 +663,10 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                   </button>
                 )}
               </div>
-            </div>
-          ))}
+                </div>
+              </React.Fragment>
+            ));
+          })()}
         </div>
       )}
 
@@ -781,11 +800,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 <ul className={`space-y-1.5 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    {tierToConfirm.max_campaigns_per_month} deals per month
+                    {(tierToConfirm.max_campaigns_per_month ?? 0) >= 999 ? 'Unlimited deals' : `${tierToConfirm.max_campaigns_per_month} deals per month`}
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    {tierToConfirm.max_dotd_per_month} deal-of-day per month
+                    {(tierToConfirm.max_dotd_per_month ?? 0) >= 999 ? 'Unlimited Deal-of-Day' : `${tierToConfirm.max_dotd_per_month} deal-of-day per month`}
                   </li>
                   {tierToConfirm.is_multi_store && (
                     <li className="flex items-center gap-2">
