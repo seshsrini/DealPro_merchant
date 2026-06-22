@@ -627,7 +627,10 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
 
                       {/* Actions */}
                       <div className="flex items-center gap-2 mt-2">
-                        {getTimeRemaining(deal.created_at) > 0 ? (
+                        {/* Edit button only while the edit window is open. Once it
+                            closes we render nothing (no placeholder box) so Renew +
+                            ROI keep their space instead of overflowing the card. */}
+                        {getTimeRemaining(deal.created_at) > 0 && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleEditClick(deal); }}
                             className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium active:scale-95 transition-all ${
@@ -636,12 +639,6 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                           >
                             <Edit2 className="w-3 h-3" /> {t('m_edit')}
                           </button>
-                        ) : (
-                          <div className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium opacity-40 ${
-                            isDark ? 'bg-slate-800 text-slate-500 border border-slate-700' : 'bg-slate-100 text-slate-400 border border-slate-200'
-                          }`}>
-                            <Edit2 className="w-3 h-3" /> {t('m_edit_window_closed')}
-                          </div>
                         )}
                         {(deal.status || '').toLowerCase() === 'expired' && (
                           <button
