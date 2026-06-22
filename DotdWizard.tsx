@@ -277,17 +277,29 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
     setResumePromptDraft(null);
   }, [resumePromptDraft]);
 
+  // Both DOTD draft kinds (normal + buy-get-free) can coexist on the server.
+  // The resume prompt shows whichever is newest, but any teardown MUST remove
+  // BOTH — otherwise a leftover of the other kind keeps re-prompting forever
+  // (this is exactly the "unfinished Deal of the Day" popup that wouldn't go
+  // away). Returns combined orphaned image URLs. Best-effort.
+  const deleteAllDotdDrafts = useCallback(async (): Promise<string[]> => {
+    const orphans: string[] = [];
+    for (const k of ['dotd', 'buy_get_free_dotd'] as CampaignDraftKind[]) {
+      try {
+        const { orphaned_image_urls } = await campaignDraftService.delete(k);
+        if (orphaned_image_urls?.length) orphans.push(...orphaned_image_urls);
+      } catch { /* best-effort */ }
+    }
+    return orphans;
+  }, []);
+
   const handleDiscardServerDraft = useCallback(async () => {
-    if (!resumePromptDraft) return;
-    const kind: CampaignDraftKind = resumePromptDraft.is_buy_get_free ? 'buy_get_free_dotd' : 'dotd';
-    try {
-      const { orphaned_image_urls } = await campaignDraftService.delete(kind);
-      if (orphaned_image_urls.length > 0) {
-        await addCampaignService.destroyDraftImages(orphaned_image_urls);
-      }
-    } catch { /* best-effort */ }
+    const orphans = await deleteAllDotdDrafts();
+    if (orphans.length > 0) {
+      try { await addCampaignService.destroyDraftImages(orphans); } catch { /* best-effort */ }
+    }
     setResumePromptDraft(null);
-  }, [resumePromptDraft]);
+  }, [deleteAllDotdDrafts]);
 
   // Save draft — both localStorage (instant) and server (debounced 2 s).
   const saveDraft = useCallback(() => {
@@ -361,11 +373,9 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
     // Server draft cleanup — fire and forget; published deal references the URLs.
+    // Clear BOTH kinds so an old draft of the other kind can't re-prompt later.
     (async () => {
-      try {
-        const kind: CampaignDraftKind = isBuyGetFreeMode ? 'buy_get_free_dotd' : 'dotd';
-        await campaignDraftService.delete(kind);
-      } catch { /* best-effort */ }
+      try { await deleteAllDotdDrafts(); } catch { /* best-effort */ }
     })();
     // Ask if they want to save as template
     setTemplateName(state.dealHeading || '');
@@ -433,12 +443,12 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   const handleDiscard = async () => {
     localStorage.removeItem(DRAFT_KEY);
     localStorage.removeItem(DRAFT_KEY + '_step');
-    // On Start Over, delete the server draft AND destroy uploaded Cloudinary draft assets.
+    // On Start Over, delete BOTH server draft kinds AND destroy uploaded
+    // Cloudinary draft assets.
     try {
-      const kind: CampaignDraftKind = isBuyGetFreeMode ? 'buy_get_free_dotd' : 'dotd';
-      const { orphaned_image_urls } = await campaignDraftService.delete(kind);
-      if (orphaned_image_urls.length > 0) {
-        await addCampaignService.destroyDraftImages(orphaned_image_urls);
+      const orphans = await deleteAllDotdDrafts();
+      if (orphans.length > 0) {
+        await addCampaignService.destroyDraftImages(orphans);
       }
     } catch { /* best-effort */ }
     dispatch({ type: 'RESET' });
