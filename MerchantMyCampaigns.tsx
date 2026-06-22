@@ -625,8 +625,9 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                         </div>
                       )}
 
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 mt-2">
+                      {/* Actions — wrap to the next row instead of overflowing the
+                          card edge when Edit + Renew + ROI don't all fit on one line. */}
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
                         {/* Edit button only while the edit window is open. Once it
                             closes we render nothing (no placeholder box) so Renew +
                             ROI keep their space instead of overflowing the card. */}
