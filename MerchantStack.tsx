@@ -66,6 +66,31 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
   const effectiveMerchantId = (user as any).staff_merchant_id || user.id;
   const isStaff = !!(user as any).staff_role && (user as any).staff_role !== 'owner';
   const [storeGate, setStoreGate] = useState<'open' | 'blocked'>('open');
+
+  // Profile gate (backstop): a merchant must NEVER reach the dashboard / deal
+  // creation with mandatory onboarding fields missing. Routing in AuthStack is
+  // supposed to send incomplete profiles into the wizard, but if anything ever
+  // lands an incomplete profile here (stale session, a future routing bug),
+  // bounce them back into the resume-aware onboarding wizard instead of letting
+  // them operate on a half-built account. Staff inherit the owner's profile, so
+  // they're exempt.
+  const profileComplete = isStaff || !!(
+    user.full_name &&
+    user.store_name &&
+    user.business_type &&
+    user.terms_accepted &&
+    user.privacy_accepted
+  );
+  useEffect(() => {
+    if (user.role !== 'merchant' || isStaff) return;
+    if (!profileComplete) {
+      console.warn('[MerchantStack] Incomplete merchant profile — bouncing to onboarding', {
+        full_name: !!user.full_name, store_name: !!user.store_name,
+        business_type: !!user.business_type, terms: !!user.terms_accepted, privacy: !!user.privacy_accepted,
+      });
+      setView('merchant_onboarding');
+    }
+  }, [user.id, profileComplete]);
   useEffect(() => {
     if (!user.id) return;
     // Staff members skip store gate — they use the owner's stores
@@ -76,6 +101,12 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
   }, [user.id]);
 
   if (user.role !== 'merchant') {
+    return null;
+  }
+
+  // Incomplete profile → the effect above is routing to onboarding; render
+  // nothing meanwhile so a half-built dashboard never flashes.
+  if (!profileComplete) {
     return null;
   }
 
