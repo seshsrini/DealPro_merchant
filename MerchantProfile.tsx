@@ -139,14 +139,14 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             <h2 className={`text-lg font-bold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{user.store_name || user.username}</h2>
             <div className="flex items-center gap-1.5 mt-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-              <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('profile_verified_merchant')}</span>
+              <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('profile_verified_merchant')}</span>
             </div>
           </div>
           <button
             onClick={() => setView('edit_profile')}
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-100 hover:bg-slate-200'}`}
           >
-            <PenLine className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-600'}`} />
+            <PenLine className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
           </button>
         </div>
       </div>
@@ -163,7 +163,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             </div>
             <div>
               <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_referral_progress')}</p>
-              <p className={`text-[10px] mt-0.5 font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <p className={`text-[10px] mt-0.5 font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                 {referralCredits
                   ? (referralCredits.available_months > 0
                       ? t('m_ref_ready')
@@ -182,7 +182,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
                 {referralCredits.available_months}
               </span>
             )}
-            <ChevronRight size={18} className={isDark ? 'text-slate-500' : 'text-slate-400'} />
+            <ChevronRight size={18} className={isDark ? 'text-slate-300' : 'text-slate-900'} />
           </div>
         </div>
       </button>
@@ -200,7 +200,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             </div>
             <div>
               <p className={`text-sm font-semibold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_my_stores')}</p>
-              <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_manage_locations')}</p>
+              <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_manage_locations')}</p>
             </div>
           </button>
         )}
@@ -215,7 +215,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
           </div>
           <div>
             <p className={`text-sm font-semibold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_my_team')}</p>
-            <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_manage_staff')}</p>
+            <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_manage_staff')}</p>
           </div>
         </button>
 
@@ -229,7 +229,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
           </div>
           <div>
             <p className={`text-sm font-semibold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_refer_consumers')}</p>
-            <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_print_qr')}</p>
+            <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_print_qr')}</p>
           </div>
         </button>
 
@@ -244,7 +244,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             </div>
             <div>
               <p className={`text-sm font-semibold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('profile_subscriptions')}</p>
-              <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_manage_plan')}</p>
+              <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_manage_plan')}</p>
             </div>
           </button>
         )}
@@ -260,7 +260,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             </div>
             <div>
               <p className={`text-sm font-semibold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('profile_payments')}</p>
-              <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_billing_invoices')}</p>
+              <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_billing_invoices')}</p>
             </div>
           </button>
         )}
@@ -274,7 +274,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             <Settings className={`w-4.5 h-4.5 ${isDark ? 'text-indigo-400' : 'text-indigo-500'}`} />
             <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('profile_edit_store')}</span>
           </div>
-          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
         </button>
 
         {/* Replay Feature Tour */}
@@ -283,7 +283,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             <PlayCircle className={`w-4.5 h-4.5 ${isDark ? 'text-cyan-400' : 'text-cyan-500'}`} />
             <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_replay_feature_tour')}</span>
           </div>
-          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
         </button>
 
         {/* Replay Campaign Tour */}
@@ -292,7 +292,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             <PlayCircle className={`w-4.5 h-4.5 ${isDark ? 'text-violet-400' : 'text-violet-500'}`} />
             <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_replay_campaign_tour')}</span>
           </div>
-          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
         </button>
 
         {/* Help & Support */}
@@ -301,7 +301,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
             <MessageSquareText className={`w-4.5 h-4.5 ${isDark ? 'text-emerald-400' : 'text-emerald-500'}`} />
             <span className={`font-medium text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('profile_support_hub')}</span>
           </div>
-          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
         </button>
       </div>
 
@@ -313,7 +313,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
           </div>
           <div className="flex-1">
             <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('profile_invite_partner')}</p>
-            <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_invite_whatsapp')}</p>
+            <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_invite_whatsapp')}</p>
           </div>
         </div>
 
@@ -357,26 +357,26 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
           className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all active:scale-[0.98] ${isDark ? 'bg-slate-800/50 hover:bg-slate-800 text-slate-300' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'}`}
         >
           <div className="flex items-center gap-3">
-            <Shield className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+            <Shield className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
             <span className="text-sm font-medium">{t('m_privacy_policy')}</span>
           </div>
-          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
         </button>
         <button
           onClick={() => setView('terms_of_service')}
           className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all active:scale-[0.98] ${isDark ? 'bg-slate-800/50 hover:bg-slate-800 text-slate-300' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'}`}
         >
           <div className="flex items-center gap-3">
-            <FileText className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+            <FileText className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
             <span className="text-sm font-medium">{t('m_terms_of_service')}</span>
           </div>
-          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
         </button>
       </div>
 
       {/* Footer */}
       <div className="mt-8 text-center">
-        <p className={`text-[10px] font-medium ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{t('m_copyright')}</p>
+        <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_copyright')}</p>
       </div>
     </div>
   );

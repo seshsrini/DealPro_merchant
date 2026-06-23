@@ -212,7 +212,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
           </div>
           <div>
             <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_my_team')}</h1>
-            <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_manage_staff')}</p>
+            <p className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_manage_staff')}</p>
           </div>
         </div>
         {isOwner && (
@@ -236,7 +236,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className={`w-7 h-7 animate-spin ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          <Loader2 className={`w-7 h-7 animate-spin ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
         </div>
       )}
 
@@ -245,7 +245,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
         <div className="space-y-5">
           {/* Active members */}
           <div>
-            <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
               {t('m_active_members')} ({activeStaff.length})
             </p>
             <div className="space-y-2">
@@ -268,7 +268,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
                         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>
                           {cfg.label}
                         </span>
-                        {member.phone && <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{member.phone}</span>}
+                        {member.phone && <span className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{member.phone}</span>}
                       </div>
                     </div>
                     {isOwner && !isMemberOwner && !isMe && (
@@ -277,7 +277,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
                           onClick={() => setActiveMenuId(activeMenuId === member.id ? null : member.id)}
                           className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
                         >
-                          <MoreVertical className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                          <MoreVertical className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
                         </button>
                         {activeMenuId === member.id && (
                           <div className={`absolute right-0 top-9 w-44 rounded-xl shadow-lg border z-50 overflow-hidden ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
@@ -308,7 +308,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
           {/* Pending Invites */}
           {invites.length > 0 && (
             <div>
-              <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              <p className={`text-xs font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                 {t('m_pending_invites')} ({invites.length})
               </p>
               <div className="space-y-2">
@@ -323,7 +323,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
                         <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${isDark ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
                           {inv.invite_code}
                         </span>
-                        <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{inv.role}</span>
+                        <span className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{inv.role}</span>
                       </div>
                     </div>
                     <div className="flex gap-1.5">
@@ -387,8 +387,8 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
           {isOwner && activeStaff.length <= 1 && invites.length === 0 && (
             <div className="text-center py-10">
               <Users className={`w-10 h-10 mx-auto mb-3 ${isDark ? 'text-slate-700' : 'text-slate-300'}`} />
-              <p className={`text-sm font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_no_team')}</p>
-              <p className={`text-xs ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{t('m_invite_hint')}</p>
+              <p className={`text-sm font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_no_team')}</p>
+              <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_invite_hint')}</p>
             </div>
           )}
         </div>
@@ -402,13 +402,13 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
             className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isDark ? 'bg-slate-800/80' : 'bg-white shadow-sm'}`}
           >
             <div className="flex items-center gap-3">
-              <Settings className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+              <Settings className={`w-5 h-5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
               <div className="text-left">
                 <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_role_permissions')}</p>
-                <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_customize_access')}</p>
+                <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_customize_access')}</p>
               </div>
             </div>
-            <ChevronDown className={`w-4 h-4 transition-transform ${showPermissions ? 'rotate-180' : ''} ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+            <ChevronDown className={`w-4 h-4 transition-transform ${showPermissions ? 'rotate-180' : ''} ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
           </button>
 
           {showPermissions && (
@@ -421,7 +421,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
                 <>
                   {/* Role selector dropdown */}
                   <div className={`px-4 py-3 border-b ${isDark ? 'border-slate-700/50' : 'border-slate-200'}`}>
-                    <label className={`text-[10px] font-semibold uppercase tracking-wider block mb-1.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                    <label className={`text-[10px] font-semibold uppercase tracking-wider block mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                       Select Role
                     </label>
                     <select
@@ -483,7 +483,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
             <div className="flex items-center justify-between mb-5">
               <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_invite_staff')}</h3>
               <button onClick={() => { setShowInviteForm(false); setInviteSuccess(null); }}>
-                <X className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                <X className={`w-5 h-5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
               </button>
             </div>
 
@@ -502,7 +502,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
                     }
                   </button>
                 </div>
-                <p className={`text-xs mb-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_share_code_hint')}</p>
+                <p className={`text-xs mb-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_share_code_hint')}</p>
                 <button
                   onClick={() => handleShareWhatsApp(inviteSuccess, inviteName || 'Team member')}
                   className="w-full h-11 rounded-xl bg-emerald-600 text-white text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
@@ -549,7 +549,7 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
                   </div>
 
                   {/* Role description */}
-                  <p className={`text-[10px] px-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  <p className={`text-[10px] px-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                     {inviteRole === 'staff' ? t('m_staff_desc') : t('m_manager_desc')}
                   </p>
                 </div>

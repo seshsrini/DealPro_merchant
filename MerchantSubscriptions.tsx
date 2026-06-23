@@ -360,7 +360,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
             My Subscription
           </h2>
-          <p className={`text-sm font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{t('m_manage_plan')}</p>
+          <p className={`text-sm font-medium mt-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_manage_plan')}</p>
         </div>
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
           <CreditCard className="w-5 h-5 text-blue-500" />
@@ -454,7 +454,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   {currentTier?.tier_name || currentSubscription.plan_name} Plan
                 </p>
-                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   {currentTier?.billing_frequency || 'monthly'}
                 </p>
               </div>
@@ -463,7 +463,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                   <p className="text-xl font-bold text-emerald-500">
                     ₹{recurringAmount}
                   </p>
-                  <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/month after trial</p>
+                  <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>/month after trial</p>
                 </div>
               )}
             </div>
@@ -475,7 +475,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 <div className={`rounded-xl p-3 ${isDark ? 'bg-slate-900/60' : 'bg-slate-50'}`}>
                   <div className="flex items-center gap-1.5 mb-1">
                     <Clock className={`w-3.5 h-3.5 ${daysRemaining <= 7 ? 'text-amber-500' : 'text-emerald-500'}`} />
-                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_days_remaining')}</p>
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_days_remaining')}</p>
                   </div>
                   <p className={`text-2xl font-black ${
                     daysRemaining <= 3 ? 'text-red-500' : daysRemaining <= 7 ? 'text-amber-500' : isDark ? 'text-white' : 'text-slate-900'
@@ -490,7 +490,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 <div className={`rounded-xl p-3 ${isDark ? 'bg-slate-900/60' : 'bg-slate-50'}`}>
                   <div className="flex items-center gap-1.5 mb-1">
                     <CalendarDays className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_next_billing')}</p>
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_next_billing')}</p>
                   </div>
                   <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {trialEndDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -501,7 +501,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
 
             {/* Features row */}
             {currentTier && (
-              <div className={`flex items-center gap-4 px-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <div className={`flex items-center gap-4 px-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                 <span className="flex items-center gap-1.5 text-xs">
                   <Gauge className="w-3.5 h-3.5 text-blue-400" />
                   {(currentTier.max_campaigns_per_month ?? 0) >= 999 ? 'Unlimited deals' : `${currentTier.max_campaigns_per_month} deals/mo`}
@@ -535,7 +535,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               <button
                 onClick={handleCancelClick}
                 disabled={checkingCancel}
-                className={`w-full text-center text-xs underline underline-offset-2 disabled:opacity-50 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}
+                className={`w-full text-center text-xs underline underline-offset-2 disabled:opacity-50 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}
               >
                 {checkingCancel ? 'Checking…' : 'Cancel my subscription'}
               </button>
@@ -563,35 +563,35 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Loading plans...</p>
+          <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Loading plans...</p>
         </div>
       ) : error && tiers.length === 0 ? (
         <div className={`text-center py-16 rounded-xl border ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
           <X className={`w-12 h-12 mx-auto mb-4 ${isDark ? 'text-red-400' : 'text-red-500'}`} />
           <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_error_loading')}</p>
-          <p className={`text-sm px-10 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{error}</p>
+          <p className={`text-sm px-10 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{error}</p>
         </div>
       ) : tiers.length === 0 ? (
         <div className={`text-center py-16 rounded-xl border ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-          <Info className={`w-12 h-12 mx-auto mb-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+          <Info className={`w-12 h-12 mx-auto mb-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
           <p className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_no_plans')}</p>
-          <p className={`text-sm px-10 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Please check back later.</p>
+          <p className={`text-sm px-10 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Please check back later.</p>
         </div>
       ) : (
         <div className={`rounded-xl border overflow-visible ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           {/* Table Header */}
           <div className={`grid grid-cols-12 gap-3 px-4 py-3 border-b ${isDark ? 'bg-slate-800/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
             <div className="col-span-3">
-              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_plan')}</p>
+              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_plan')}</p>
             </div>
             <div className="col-span-2">
-              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_price')}</p>
+              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_price')}</p>
             </div>
             <div className="col-span-2">
-              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_deals')}</p>
+              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_deals')}</p>
             </div>
             <div className="col-span-2">
-              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_dotd_short')}</p>
+              <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_dotd_short')}</p>
             </div>
             <div className="col-span-3"></div>
           </div>
@@ -615,7 +615,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 >
               <div className="col-span-3">
                 <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{tier.tier_name}</p>
-                <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{tier.billing_frequency}</p>
+                <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{tier.billing_frequency}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-sm font-semibold text-emerald-500">
@@ -641,7 +641,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                         {(tier.max_campaigns_per_month ?? 0) >= 999 ? 'Unlimited' : tier.max_campaigns_per_month}
                       </span>
                       {(tier.max_campaigns_per_month ?? 0) < 999 && (
-                        <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
+                        <span className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>/mo</span>
                       )}
                     </div>
                   </div>
@@ -652,7 +652,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                         {(tier.max_dotd_per_month ?? 0) >= 999 ? 'Unlimited' : tier.max_dotd_per_month}
                       </span>
                       {(tier.max_dotd_per_month ?? 0) < 999 && (
-                        <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
+                        <span className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>/mo</span>
                       )}
                     </div>
                   </div>
@@ -718,7 +718,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
             </div>
 
             <div>
-              <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                 Reason for cancellation
               </label>
               <select
@@ -794,30 +794,30 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               <h3 className={`text-lg font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 {currentSubscription?.status === 'active' && tierToConfirm.id !== currentTierId ? 'Confirm Plan Change' : 'Confirm Subscription'}
               </h3>
-              <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                 {currentSubscription?.status === 'active' && tierToConfirm.id !== currentTierId ? "You're about to switch to:" : "You're about to subscribe to:"}
               </p>
             </div>
 
             <div className={`rounded-xl border p-5 space-y-4 ${isDark ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
               <div>
-                <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_plan')}</p>
+                <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_plan')}</p>
                 <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{tierToConfirm.tier_name}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_price')}</p>
+                  <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_price')}</p>
                   <p className="text-lg font-semibold text-emerald-500">
                     {tierToConfirm.currency} {tierToConfirm.subscription_fee}
                   </p>
                 </div>
                 <div>
-                  <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_billing')}</p>
+                  <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_billing')}</p>
                   <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{tierToConfirm.billing_frequency}</p>
                 </div>
               </div>
               <div>
-                <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_features')}</p>
+                <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_features')}</p>
                 <ul className={`space-y-1.5 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />

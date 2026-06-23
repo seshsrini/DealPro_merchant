@@ -414,7 +414,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
       : 'bg-slate-100 text-slate-500 border border-slate-200'
   }`;
 
-  const labelClass = `block text-xs font-medium mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`;
+  const labelClass = `block text-xs font-medium mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`;
 
   const activeStores = stores.filter(s => s.active_status !== 'disabled');
   const disabledStores = stores.filter(s => s.active_status === 'disabled');
@@ -437,7 +437,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
               <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 {forceAddMode ? t('m_add_store') : t('m_my_stores')}
               </h2>
-              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                 {forceAddMode ? t('m_required_continue') : `${activeStores.length} active${disabledStores.length > 0 ? `, ${disabledStores.length} deleted` : ''}`}
               </p>
             </div>
@@ -477,7 +477,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
       {/* Loading */}
       {loadingStores && (
         <div className="flex justify-center py-16">
-          <Loader2 className={`w-6 h-6 animate-spin ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+          <Loader2 className={`w-6 h-6 animate-spin ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
         </div>
       )}
 
@@ -485,10 +485,10 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
       {!loadingStores && activeStores.length === 0 && (
         <div className="flex flex-col items-center px-6 py-20 text-center">
           <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-4 ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
-            <Store className={`w-8 h-8 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+            <Store className={`w-8 h-8 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
           </div>
           <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>No stores yet</h3>
-          <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Add your first store location.</p>
+          <p className={`text-sm mb-6 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Add your first store location.</p>
           <button
             onClick={openAddStore}
             className="flex items-center gap-2 h-11 px-6 rounded-xl bg-slate-900 text-white text-sm font-medium active:scale-[0.98] transition-all"
@@ -514,7 +514,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                     <h3 className={`text-sm font-semibold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {store.store_name}
                     </h3>
-                    <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                       {store.city}, {store.state}
                     </p>
                   </div>
@@ -561,7 +561,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                           </p>
                         </div>
                       )}
-                      <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                      <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                         Store is preserved in records and can be reviewed by support.
                       </p>
                     </div>
@@ -594,8 +594,8 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                     </span>
                   )}
                   <div className="flex items-start gap-2">
-                    <MapPin className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                    <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                    <MapPin className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
+                    <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                       {store.address}{store.landmark ? `, nr ${store.landmark}` : ''}
                     </span>
                   </div>
@@ -606,21 +606,21 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                   )}
                   {store.store_hrs && (
                     <div className="flex items-center gap-2">
-                      <Clock className={`w-3.5 h-3.5 shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                      <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{store.store_hrs}</span>
+                      <Clock className={`w-3.5 h-3.5 shrink-0 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
+                      <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{store.store_hrs}</span>
                     </div>
                   )}
                   {store.store_phone && (
                     <div className="flex items-center gap-2">
-                      <Phone className={`w-3.5 h-3.5 shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                      <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                      <Phone className={`w-3.5 h-3.5 shrink-0 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
+                      <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                         {store.store_phone}{store.store_phone_alt ? ` / ${store.store_phone_alt}` : ''}
                       </span>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
-                    <Truck className={`w-3.5 h-3.5 shrink-0 ${store.delivers ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-slate-600' : 'text-slate-400')}`} />
-                    <span className={`text-xs ${store.delivers ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-slate-500' : 'text-slate-400')}`}>
+                    <Truck className={`w-3.5 h-3.5 shrink-0 ${store.delivers ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-slate-300' : 'text-slate-900')}`} />
+                    <span className={`text-xs ${store.delivers ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-slate-300' : 'text-slate-900')}`}>
                       {store.delivers
                         ? `Delivers${store.delivery_radius_km ? (store.delivery_radius_km >= 10 ? ' anywhere within city' : ` within ${store.delivery_radius_km} km`) : ''}`
                         : 'In-store only'}
@@ -638,7 +638,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
         <div className="px-6 mt-6">
           <div className="flex items-center gap-2 mb-3">
             <div className={`flex-1 h-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
-            <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+            <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
               Deleted Stores
             </span>
             <div className={`flex-1 h-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
@@ -650,14 +650,14 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                 className={`p-3 rounded-xl border ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className={`text-xs font-medium line-through ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  <h3 className={`text-xs font-medium line-through ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                     {store.store_name}
                   </h3>
                   <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${isDark ? 'bg-slate-800 text-slate-600' : 'bg-slate-200 text-slate-400'}`}>
                     Deleted
                   </span>
                 </div>
-                <p className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   {store.city}, {store.state}{store.pincode ? ` · ${store.pincode}` : ''}
                 </p>
               </div>
@@ -719,7 +719,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                   <select
                     value={form.store_category}
                     onChange={e => setForm(f => ({ ...f, store_category: e.target.value }))}
-                    className={`${inputClass} ${!form.store_category ? (isDark ? 'text-slate-500' : 'text-slate-400') : ''}`}
+                    className={`${inputClass} ${!form.store_category ? (isDark ? 'text-slate-300' : 'text-slate-900') : ''}`}
                   >
                     <option value="">Select category</option>
                     {storeCategories.map(cat => (
@@ -828,7 +828,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                           <p className={`text-xs font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
                             Customers will see "Delivery available" on your deals
                           </p>
-                          <p className={`text-[10px] mt-0.5 leading-snug ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                          <p className={`text-[10px] mt-0.5 leading-snug ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                             Delivered by you or your delivery partner; DealPro is not liable.
                           </p>
                         </div>
@@ -926,7 +926,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                     {!form.is24hrs && (
                       <div className="flex gap-3">
                         <div className="flex-1">
-                          <label className={`text-[10px] font-medium mb-1 block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Opens at</label>
+                          <label className={`text-[10px] font-medium mb-1 block ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Opens at</label>
                           <select
                             value={form.shift1}
                             onChange={e => setForm(f => ({ ...f, shift1: e.target.value }))}
@@ -936,7 +936,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                           </select>
                         </div>
                         <div className="flex-1">
-                          <label className={`text-[10px] font-medium mb-1 block ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Closes at</label>
+                          <label className={`text-[10px] font-medium mb-1 block ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Closes at</label>
                           <select
                             value={form.shift2}
                             onChange={e => setForm(f => ({ ...f, shift2: e.target.value }))}

@@ -173,7 +173,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
   const sectionHeader = (icon: React.ReactNode, label: string) => (
     <div className="flex items-center gap-2 px-1">
       {icon}
-      <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</span>
+      <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{label}</span>
     </div>
   );
 
@@ -211,7 +211,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
             <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
               {t('m_edit_profile')}
             </h2>
-            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_manage_account_details')}</p>
+            <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_manage_account_details')}</p>
           </div>
         </div>
         <button
@@ -242,7 +242,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         {/* Personal Information */}
         <div className="space-y-3">
           {sectionHeader(
-            <UserIcon className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+            <UserIcon className={`w-3.5 h-3.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />,
             t('m_personal_info')
           )}
 
@@ -256,7 +256,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
           />
 
           <div className="relative">
-            <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+            <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
             <input
               type="email"
               value={email}
@@ -267,7 +267,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
           </div>
 
           <div className="relative">
-            <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+            <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
             <input
               value={`${countryCode ? countryCode + ' ' : ''}${phone}`}
               className={`${readOnlyClass} pl-11`}
@@ -280,7 +280,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         {isMerchant && (
           <div className="space-y-3">
             {sectionHeader(
-              <Store className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+              <Store className={`w-3.5 h-3.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />,
               t('m_store_info')
             )}
 
@@ -296,52 +296,52 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         {isMerchant && businessType && (
           <div className="space-y-3">
             {sectionHeader(
-              <Briefcase className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+              <Briefcase className={`w-3.5 h-3.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />,
               t('m_business_verification')
             )}
 
             <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
               <div className="flex items-center justify-between">
-                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_business_type')}</span>
+                <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_business_type')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{businessType}</span>
               </div>
 
               {gstin && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_gstin')}</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_gstin')}</span>
                   <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(gstin)}</span>
                 </div>
               )}
 
               {pan && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_pan')}</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_pan')}</span>
                   <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(pan)}</span>
                 </div>
               )}
 
               {udyamNo && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_udyam')}</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_udyam')}</span>
                   <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(udyamNo)}</span>
                 </div>
               )}
 
               {fssaiNo && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_fssai')}</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_fssai')}</span>
                   <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(fssaiNo)}</span>
                 </div>
               )}
 
               {tradeLicenseNo && (
                 <div className="flex items-center justify-between">
-                  <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_trade_license')}</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_trade_license')}</span>
                   <span className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{maskField(tradeLicenseNo)}</span>
                 </div>
               )}
 
-              <p className={`text-[10px] text-center pt-1 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+              <p className={`text-[10px] text-center pt-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                 {t('m_contact_support_biz')}
               </p>
             </div>
@@ -351,7 +351,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         {/* Preferences */}
         <div className="space-y-3">
           {sectionHeader(
-            <Globe className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+            <Globe className={`w-3.5 h-3.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />,
             t('m_language')
           )}
           <select
@@ -368,7 +368,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         {/* Notification Preferences */}
         <div className="space-y-3">
           {sectionHeader(
-            <Bell className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+            <Bell className={`w-3.5 h-3.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />,
             t('m_notifications')
           )}
 
@@ -382,33 +382,33 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
         {/* Account Info (Read-only) */}
         <div className="space-y-3">
           {sectionHeader(
-            <ShieldAlert className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />,
+            <ShieldAlert className={`w-3.5 h-3.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />,
             t('m_account')
           )}
           <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
             <div className="flex items-center justify-between">
-              <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_role')}</span>
+              <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_role')}</span>
               <span className={`text-sm font-medium capitalize ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{user.role}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_referral_code')}</span>
+              <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_referral_code')}</span>
               <span className={`text-sm font-mono font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{user.my_referral_code || '—'}</span>
             </div>
             {user.terms_accepted && (
               <div className="flex items-center justify-between">
-                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_terms_accepted')}</span>
+                <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_terms_accepted')}</span>
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               </div>
             )}
             {user.privacy_accepted && (
               <div className="flex items-center justify-between">
-                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_privacy_accepted')}</span>
+                <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_privacy_accepted')}</span>
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               </div>
             )}
             {user.created_at && (
               <div className="flex items-center justify-between">
-                <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_member_since')}</span>
+                <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_member_since')}</span>
                 <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                   {new Date(user.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
                 </span>
@@ -442,7 +442,7 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
               </div>
               <div>
                 <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Add your email</h3>
-                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>We'll send your email notifications here.</p>
+                <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>We'll send your email notifications here.</p>
               </div>
             </div>
             <input
