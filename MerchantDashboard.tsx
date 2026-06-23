@@ -281,7 +281,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
         <div className="flex items-start justify-between relative">
           <div className="flex-1">
-            <p className={`text-xs font-medium tracking-wide uppercase ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            <p className={`text-xs font-medium tracking-wide uppercase ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
               {greeting}
             </p>
             <h1 className={`text-2xl font-bold mt-0.5 leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
@@ -302,7 +302,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 )}
               </div>
               {user.store_name && (
-                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   {user.store_name}
                 </span>
               )}
@@ -339,10 +339,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     </div>
                   </div>
                   <div>
-                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_campaigns')}</p>
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_campaigns')}</p>
                     <p className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {campaignUsage.campaigns_used}
-                      <span className={`text-sm font-normal ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>
+                      <span className={`text-sm font-bold ${isDark ? 'text-amber-400' : 'text-amber-500'}`}>
                         /{campaignUsage.campaigns_limit}
                       </span>
                     </p>
@@ -373,10 +373,10 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     </div>
                   </div>
                   <div>
-                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('m_deal_of_day')}</p>
+                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_deal_of_day')}</p>
                     <p className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {campaignUsage.dotd_used}
-                      <span className={`text-sm font-normal ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>
+                      <span className={`text-sm font-bold ${isDark ? 'text-amber-400' : 'text-amber-500'}`}>
                         /{campaignUsage.dotd_limit}
                       </span>
                     </p>
@@ -470,7 +470,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
               </h2>
               <button
                 onClick={() => setView('merchant_deals')}
-                className={`flex items-center gap-1 text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
+                className={`flex items-center gap-1 text-[10px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-900'}`}
               >
                 {t('m_view_all')}
                 <ChevronRight className="w-3 h-3" />
@@ -524,7 +524,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     </p>
                     {/* Views, Claims & Redeemed */}
                     <div className={`flex items-center gap-3 mt-1.5 pt-1.5 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
-                      <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`} title="Views">
+                      <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`} title="Views">
                         <MousePointer2 className="w-3 h-3" />
                         {clickCounts[deal.campaign_id] || 0}
                       </span>
@@ -562,7 +562,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${bg}`}>
                 <Icon className={`w-4 h-4 ${color}`} />
               </div>
-              <span className={`text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</span>
+              <span className={`text-[10px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{label}</span>
             </button>
           ))}
         </div>
@@ -611,7 +611,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                           {daysAway === 0 ? t('m_today') : `${daysAway}d away`}
                         </span>
                       </div>
-                      <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                         {event.dealHint}
                       </p>
                     </div>
@@ -643,7 +643,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
             <h3 className={`text-sm font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
               {t('m_no_active_deals')}
             </h3>
-            <p className={`text-xs mb-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            <p className={`text-xs mb-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
               {t('m_create_first_deal')}
             </p>
             <button
@@ -773,7 +773,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
             {/* Content — consumer-style */}
             <div className="px-4 py-6">
               {/* Store name */}
-              <p className={`text-xs font-normal mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              <p className={`text-xs font-normal mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                 {deal.shopName}
               </p>
 
@@ -807,7 +807,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                           : `Delivery available within ${(deal as any).delivery_radius_km} km`
                         : 'Delivery available — contact store'}
                     </p>
-                    <p className={`text-[11px] mt-0.5 leading-snug ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <p className={`text-[11px] mt-0.5 leading-snug ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                       Delivered by the merchant or their partner; DealPro is not liable.
                     </p>
                   </div>
@@ -823,7 +823,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     </svg>
                   ))}
                 </div>
-                <span className={`text-sm font-normal ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                <span className={`text-sm font-normal ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   {(deal as any).averageRating > 0 ? `${((deal as any).averageRating).toFixed(1)} (${(deal as any).ratingCount || 0} reviews)` : 'No reviews yet'}
                 </span>
               </div>
@@ -834,7 +834,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   {deal.offerValue || (deal as any).offer_value}
                 </p>
                 {deal.end_date && (
-                  <p className={`text-sm font-normal ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  <p className={`text-sm font-normal ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                     Valid till {formatDateUTC(deal.end_date)}
                   </p>
                 )}
@@ -894,28 +894,28 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 <div className={`px-4 py-4 space-y-3 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
                   {deal.shopName && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Store Name</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Store Name</p>
                       <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{deal.shopName}</p>
                     </div>
                   )}
                   {deal.address && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Address</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Address</p>
                       <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{deal.address}</p>
                     </div>
                   )}
                   {deal.landmark && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Landmark</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Landmark</p>
                       <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{deal.landmark}</p>
                     </div>
                   )}
                   {(deal as any).storePhone && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Phone</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Phone</p>
                       <a href={`tel:${(deal as any).storePhone}`} className="text-sm text-blue-500 font-medium">{(deal as any).storePhone}</a>
                       {(deal as any).storePhoneAlt && (
-                        <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                           {' / '}
                           <a href={`tel:${(deal as any).storePhoneAlt}`} className="text-blue-500 font-medium">{(deal as any).storePhoneAlt}</a>
                         </span>
@@ -924,13 +924,13 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   )}
                   {(deal as any).storeHrs && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Store Hours</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Store Hours</p>
                       <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{(deal as any).storeHrs}</p>
                     </div>
                   )}
                   {deal.start_date && deal.end_date && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Campaign Period</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Campaign Period</p>
                       <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{formatDateUTC(deal.start_date)} — {formatDateUTC(deal.end_date)}</p>
                     </div>
                   )}
@@ -939,19 +939,19 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
               {/* Campaign Performance */}
               <div className={`rounded-xl border p-4 mb-4 ${isDark ? 'border-slate-700 bg-slate-800/50' : 'border-slate-200 bg-slate-50'}`}>
-                <p className={`text-[10px] font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Campaign Performance</p>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Campaign Performance</p>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="text-center">
                     <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{clickCounts[deal.campaign_id] || 0}</p>
-                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_clicks')}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_clicks')}</p>
                   </div>
                   <div className="text-center">
                     <p className={`text-lg font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{claimClickCounts[deal.campaign_id] || 0}</p>
-                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Claims</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Claims</p>
                   </div>
                   <div className="text-center">
                     <p className={`text-lg font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{redeemCounts[deal.campaign_id] || 0}</p>
-                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_redeemed')}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_redeemed')}</p>
                   </div>
                 </div>
               </div>
@@ -995,7 +995,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Pick a poster design
                 </h3>
-                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   A4 portrait, high-resolution. Print and stick in your store.
                 </p>
               </div>
@@ -1030,14 +1030,14 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   <div className={`text-sm font-bold mt-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {tpl.label}
                   </div>
-                  <div className={`text-[11px] leading-snug mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <div className={`text-[11px] leading-snug mt-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                     {tpl.description}
                   </div>
                 </button>
               ))}
             </div>
 
-            <div className={`px-5 pb-6 pt-1 text-[11px] leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            <div className={`px-5 pb-6 pt-1 text-[11px] leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
               Tip: you'll get a preview to proof-read before the print dialog opens.
             </div>
           </div>
@@ -1060,7 +1060,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Proof-read your poster
                 </h3>
-                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   Check the wording fits cleanly before you print.
                 </p>
               </div>
