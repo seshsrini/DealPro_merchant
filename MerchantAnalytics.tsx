@@ -1,11 +1,13 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User } from './types';
 import { Loader2, TrendingUp, BarChart3, Calendar, AlertCircle, TicketCheck, MousePointer2, Percent, HeartHandshake, CheckCircle2, BarChart, Package, Eye, Heart, Star, Zap, TrendingDown, Award, Brain, Target, Clock, ChevronRight, Users, Repeat, Crown } from 'lucide-react';
 import { supabase } from './services/supabaseClient';
 import { mDashboardService } from './services/mDashboardService';
 import { aiInsightsService, AIInsight } from './services/aiInsightsService';
 import { performanceScoreService, PerformanceScore, ScoreFactor } from './services/performanceScoreService';
+import { resilient } from './services/resilientData';
+import { useResumeRefetch } from './services/useResumeRefetch';
 
 interface MerchantAnalyticsProps {
   user: User;
@@ -104,54 +106,62 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
 
   const isAnyAnalyticsLoading = loadingTotalDeals || loadingTotalClicks || loadingTotalRedemptions || loadingInvitesSent || loadingInvitesAccepted;
 
+  // App-resume re-fetch: bump a nonce on foreground so every loader below
+  // re-runs. Combined with the resilient() caches, a background→resume blip no
+  // longer blanks the Intel cards.
+  const [resumeNonce, setResumeNonce] = useState(0);
+  useResumeRefetch(useCallback(() => setResumeNonce((n) => n + 1), []));
+
   useEffect(() => {
     fetchAnalytics();
-  }, [selectedPeriod]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPeriod, resumeNonce]);
 
   useEffect(() => {
     const fetchLifetimeAnalytics = async () => {
       if (!user?.id) return;
       const merchantId = user.id;
-
+      // Each total is resilient (retry + last-good cache) and never wipes to 0
+      // on failure — at worst it keeps the last good number.
       const fetches = [
         (async () => {
           setLoadingTotalDeals(true);
           try {
-            const { count } = await mDashboardService.getTotalLifetimeDeals(merchantId);
+            const { count } = await resilient(() => mDashboardService.getTotalLifetimeDeals(merchantId), { cacheKey: `an_ltdeals_${merchantId}` });
             setTotalLifetimeDeals(count || 0);
-          } catch { setTotalLifetimeDeals(0); }
+          } catch { /* keep last-good */ }
           finally { setLoadingTotalDeals(false); }
         })(),
         (async () => {
           setLoadingTotalClicks(true);
           try {
-            const { count } = await mDashboardService.getTotalLifetimeClicks(merchantId);
+            const { count } = await resilient(() => mDashboardService.getTotalLifetimeClicks(merchantId), { cacheKey: `an_ltclicks_${merchantId}` });
             setTotalLifetimeClicks(count || 0);
-          } catch { setTotalLifetimeClicks(0); }
+          } catch { /* keep last-good */ }
           finally { setLoadingTotalClicks(false); }
         })(),
         (async () => {
           setLoadingTotalRedemptions(true);
           try {
-            const { count } = await mDashboardService.getTotalLifetimeRedemptions(merchantId);
+            const { count } = await resilient(() => mDashboardService.getTotalLifetimeRedemptions(merchantId), { cacheKey: `an_ltredeem_${merchantId}` });
             setTotalLifetimeRedemptions(count || 0);
-          } catch { setTotalLifetimeRedemptions(0); }
+          } catch { /* keep last-good */ }
           finally { setLoadingTotalRedemptions(false); }
         })(),
         (async () => {
           setLoadingInvitesSent(true);
           try {
-            const { count } = await mDashboardService.getTotalInvitesSent(merchantId);
+            const { count } = await resilient(() => mDashboardService.getTotalInvitesSent(merchantId), { cacheKey: `an_invsent_${merchantId}` });
             setTotalInvitesSent(count || 0);
-          } catch { setTotalInvitesSent(0); }
+          } catch { /* keep last-good */ }
           finally { setLoadingInvitesSent(false); }
         })(),
         (async () => {
           setLoadingInvitesAccepted(true);
           try {
-            const { count } = await mDashboardService.getTotalInvitesAccepted(merchantId);
+            const { count } = await resilient(() => mDashboardService.getTotalInvitesAccepted(merchantId), { cacheKey: `an_invacc_${merchantId}` });
             setTotalInvitesAccepted(count || 0);
-          } catch { setTotalInvitesAccepted(0); }
+          } catch { /* keep last-good */ }
           finally { setLoadingInvitesAccepted(false); }
         })(),
       ];
@@ -160,17 +170,17 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
     };
 
     fetchLifetimeAnalytics();
-  }, [user?.id]);
+  }, [user?.id, resumeNonce]);
 
   // Fetch repeat customer metrics
   useEffect(() => {
     if (!user?.id) return;
     setLoadingRepeat(true);
-    mDashboardService.getRepeatCustomers(user.id)
+    resilient(() => mDashboardService.getRepeatCustomers(user.id), { cacheKey: `an_repeat_${user.id}` })
       .then(data => setRepeatData(data))
-      .catch(() => setRepeatData(null))
+      .catch(() => { /* keep last-good repeatData */ })
       .finally(() => setLoadingRepeat(false));
-  }, [user?.id]);
+  }, [user?.id, resumeNonce]);
 
   useEffect(() => {
     const fetchCatalogueStats = async () => {
@@ -179,10 +189,11 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
       setLoadingTopProducts(true);
 
       try {
-        const { data, error } = await supabase.functions.invoke('get-product-analytics', {
-          body: { merchantId: user.id },
-        });
-        if (error) throw error;
+        const data = await resilient(async () => {
+          const { data, error } = await supabase.functions.invoke('get-product-analytics', { body: { merchantId: user.id } });
+          if (error) throw error;
+          return data;
+        }, { cacheKey: `an_catalogue_${user.id}` });
 
         const { topProducts: topPerformers, productInsights, totalProducts, totalViews, totalLikes } = data;
         setTopProducts(topPerformers || []);
@@ -196,8 +207,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
           totalLikes: totalLikes || 0,
         });
       } catch {
-        setCatalogueStats({ activeProducts: 0, totalViews: 0, totalLikes: 0 });
-        setTopProducts([]);
+        /* keep last-good catalogue stats + top products */
       } finally {
         setLoadingCatalogue(false);
         setLoadingTopProducts(false);
@@ -205,41 +215,41 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
     };
 
     fetchCatalogueStats();
-  }, [user?.id]);
+  }, [user?.id, resumeNonce]);
 
   useEffect(() => {
     const fetchPerformanceScore = async () => {
       if (!user?.id) return;
       setLoadingPerformanceScore(true);
       try {
-        const score = await performanceScoreService.getScore(user.id);
+        const score = await resilient(() => performanceScoreService.getScore(user.id), { cacheKey: `an_perfscore_${user.id}` });
         setPerformanceScore(score);
       } catch {
-        setPerformanceScore(null);
+        /* keep last-good score */
       } finally {
         setLoadingPerformanceScore(false);
       }
     };
 
     fetchPerformanceScore();
-  }, [user?.id]);
+  }, [user?.id, resumeNonce]);
 
   useEffect(() => {
     const fetchAIInsights = async () => {
       if (!user?.id) return;
       setLoadingAiInsights(true);
       try {
-        const insights = await aiInsightsService.getAIInsights(user.id);
+        const insights = await resilient(() => aiInsightsService.getAIInsights(user.id), { cacheKey: `an_aiinsights_${user.id}` });
         setAiInsights(insights);
       } catch {
-        setAiInsights([]);
+        /* keep last-good insights */
       } finally {
         setLoadingAiInsights(false);
       }
     };
 
     fetchAIInsights();
-  }, [user?.id]);
+  }, [user?.id, resumeNonce]);
 
   const fetchAnalytics = async () => {
     // ---- Reliability rework ---------------------------------------------
