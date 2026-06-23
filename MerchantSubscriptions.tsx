@@ -622,28 +622,42 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                   {tier.currency} {tier.subscription_fee}
                 </p>
               </div>
-              <div className="col-span-2">
-                <div className="flex items-center gap-1.5">
-                  <Gauge className="w-4 h-4 text-blue-400" />
-                  <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    {(tier.max_campaigns_per_month ?? 0) >= 999 ? 'Unlimited' : tier.max_campaigns_per_month}
-                  </span>
-                  {(tier.max_campaigns_per_month ?? 0) < 999 && (
-                    <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
-                  )}
+              {(tier.max_campaigns_per_month ?? 0) >= 999 && (tier.max_dotd_per_month ?? 0) >= 999 ? (
+                // Both deals and DOTD are unlimited — show ONE "Unlimited" spanning
+                // both columns instead of "UnlimitedUnlimited".
+                <div className="col-span-4">
+                  <div className="flex items-center gap-1.5">
+                    <Gauge className="w-4 h-4 text-blue-400" />
+                    <Tags className="w-4 h-4 text-amber-400" />
+                    <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>Unlimited</span>
+                  </div>
                 </div>
-              </div>
-              <div className="col-span-2">
-                <div className="flex items-center gap-1.5">
-                  <Tags className="w-4 h-4 text-amber-400" />
-                  <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    {(tier.max_dotd_per_month ?? 0) >= 999 ? 'Unlimited' : tier.max_dotd_per_month}
-                  </span>
-                  {(tier.max_dotd_per_month ?? 0) < 999 && (
-                    <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
-                  )}
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="col-span-2">
+                    <div className="flex items-center gap-1.5">
+                      <Gauge className="w-4 h-4 text-blue-400" />
+                      <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                        {(tier.max_campaigns_per_month ?? 0) >= 999 ? 'Unlimited' : tier.max_campaigns_per_month}
+                      </span>
+                      {(tier.max_campaigns_per_month ?? 0) < 999 && (
+                        <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="flex items-center gap-1.5">
+                      <Tags className="w-4 h-4 text-amber-400" />
+                      <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                        {(tier.max_dotd_per_month ?? 0) >= 999 ? 'Unlimited' : tier.max_dotd_per_month}
+                      </span>
+                      {(tier.max_dotd_per_month ?? 0) < 999 && (
+                        <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/mo</span>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="col-span-3 flex justify-end">
                 {currentTierId === tier.id ? (
                   <span className="px-3 h-8 rounded-lg bg-emerald-500 text-white font-semibold text-[11px] flex items-center">
