@@ -161,16 +161,23 @@ Deno.serve(async (req) => {
       p_merchant_id: merchant_id,
       p_store_id: store_id,
     });
+    // Surface the REAL reason — a missing/renamed function, a permissions issue,
+    // or a cast error all show up here. Masking this as "store not found" makes
+    // an unconfigured RPC indistinguishable from a genuinely bad store.
     if (gateErr) {
-      // A malformed store_id (bad uuid) lands here too — treat as store-not-found.
       console.error('[create-campaign-fast] gate RPC error:', gateErr.message);
-      return json({ error: 'Selected store not found. Please go back and re-select your store.' }, 400);
+      return json({ error: `gate_rpc_error: ${gateErr.message}` }, 500);
     }
     const gate = Array.isArray(gateRows) ? gateRows[0] : gateRows;
-    if (!gate?.is_merchant) return json({ error: 'Unauthorized: Only merchants can create campaigns.' }, 403);
-    if (!gate?.has_access) return json({ error: 'An active subscription is required to create deals.' }, 403);
-    if (!gate?.store_ok) {
-      return json({ error: 'Selected store not found. Please go back and re-select your store.' }, 400);
+    if (!gate) return json({ error: 'gate_rpc_no_rows' }, 500);
+    if (!gate.is_merchant) return json({ error: 'Unauthorized: Only merchants can create campaigns.' }, 403);
+    if (!gate.has_access) return json({ error: 'An active subscription is required to create deals.' }, 403);
+    if (!gate.store_ok) {
+      // Include the gate booleans so a store-check bug is distinguishable from a
+      // real missing store during load testing.
+      return json({
+        error: `store_not_found (gate is_merchant=${gate.is_merchant} has_access=${gate.has_access} store_ok=${gate.store_ok})`,
+      }, 400);
     }
     // ─── End gate ───
 
