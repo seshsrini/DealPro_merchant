@@ -1,10 +1,12 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from './contexts/LanguageContext';
 import { AppView, Deal } from './types';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { merchantService } from './services/merchantService';
 import { mDashboardService } from './services/mDashboardService';
+import { resilient } from './services/resilientData';
+import { useResumeRefetch } from './services/useResumeRefetch';
 import { perfTimer } from './services/perfLogger';
 import { NotificationBadge } from './components/NotificationBadge';
 import { getUpcomingFestivals, getDaysUntilDate, FestivalEvent } from './components/festivalCalendar';
@@ -169,58 +171,77 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     return () => clearTimeout(t);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchCampaignUsage = async () => {
-      const timer = perfTimer('load_merchant_dashboard', 'merchant_dashboard');
-      // One retry on transient failure (auth refresh blip, 5xx) so we don't
-      // leave the dashboard stuck at the default 0/0 — which used to grey
-      // the New Deal / DOTD buttons indefinitely.
-      const tryOnce = async () => {
-        timer.mark('campaign_usage_call');
-        return merchantSubscriptionService.getCampaignUsage(user.id);
-      };
-      try {
-        let usage;
-        try {
-          usage = await tryOnce();
-        } catch (firstErr) {
-          if (cancelled) return;
-          console.warn('[MerchantDashboard] usage fetch failed, retrying:', firstErr);
-          await new Promise((r) => setTimeout(r, 800));
-          usage = await tryOnce();
-        }
-        if (!cancelled) setCampaignUsage(usage);
-        timer.end('campaign_usage_done');
-      } catch (err) {
-        console.error('[MerchantDashboard] Error fetching campaign usage:', err);
-        timer.end('error');
-      }
-    };
+  const [merchantStores, setMerchantStores] = useState<any[]>([]);
 
-    if (user?.id) fetchCampaignUsage();
-    return () => { cancelled = true; };
-  }, [user?.id, deals]);
+  // ── Resilient dashboard loaders ──
+  // Every loader retries transient failures and falls back to its last-good
+  // localStorage cache (resilient + cacheKey). So a background→resume blip (the
+  // token-expiry window) can no longer blank the counts/stores/stats — at worst
+  // they keep showing the last-good values until the next successful fetch.
 
-  // Fetch per-deal clicks & redemptions for active deals
-  useEffect(() => {
+  // Deals remaining/created — drives the New Deal / DOTD gates.
+  const loadCampaignUsage = useCallback(async () => {
+    if (!user?.id) return;
+    const timer = perfTimer('load_merchant_dashboard', 'merchant_dashboard');
+    try {
+      const usage = await resilient(
+        () => merchantSubscriptionService.getCampaignUsage(user.id),
+        { cacheKey: `dash_usage_${user.id}` },
+      );
+      setCampaignUsage(usage);
+      timer.end('campaign_usage_done');
+    } catch (err) {
+      console.warn('[MerchantDashboard] usage load failed (kept last-good):', err);
+      timer.end('error');
+    }
+  }, [user?.id]);
+
+  useEffect(() => { loadCampaignUsage(); }, [loadCampaignUsage, deals]);
+
+  // Per-deal clicks & redemptions for active deals.
+  const loadCampaignStats = useCallback(async () => {
     if (!activeDeals.length || !user?.id) return;
-    const timer = perfTimer('load_campaign_stats', 'merchant_dashboard');
     const ids = activeDeals.map(d => d.campaign_id);
-    timer.mark('clicks_redemptions_call');
-    Promise.all([
-      mDashboardService.getCampaignSpecificClicks(ids),
-      mDashboardService.getCampaignSpecificRedemptions(user.id, ids),
-    ]).then(([clicksData, redemptions]) => {
+    try {
+      const [clicksData, redemptions] = await Promise.all([
+        resilient(() => mDashboardService.getCampaignSpecificClicks(ids), { cacheKey: `dash_clicks_${user.id}` }),
+        resilient(() => mDashboardService.getCampaignSpecificRedemptions(user.id, ids), { cacheKey: `dash_redeem_${user.id}` }),
+      ]);
       setClickCounts(clicksData.views);
       setClaimClickCounts(clicksData.claimClicks);
       setRedeemCounts(redemptions);
-      timer.end('stats_rendered');
-    }).catch(() => { timer.end('error'); });
+    } catch {
+      /* keep previous counts */
+    }
   }, [activeDeals, user?.id]);
 
-  // Fetch merchant stores → extract states → compute upcoming festivals + cache stores for delivery lookup
-  const [merchantStores, setMerchantStores] = useState<any[]>([]);
+  useEffect(() => { loadCampaignStats(); }, [loadCampaignStats]);
+
+  // Merchant stores → states → upcoming festivals.
+  const loadStores = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const stores = await resilient(
+        () => merchantService.getMerchantStores(user.id),
+        { cacheKey: `dash_stores_${user.id}` },
+      );
+      setMerchantStores(stores || []);
+      const states = [...new Set((stores || []).map((s: any) => s.state).filter(Boolean))];
+      setUpcomingEvents(getUpcomingFestivals(states.length > 0 ? states : ['all']));
+    } catch {
+      // Keep stores as-is; show national festivals as a floor.
+      setUpcomingEvents(getUpcomingFestivals(['all']));
+    }
+  }, [user?.id]);
+
+  useEffect(() => { loadStores(); }, [loadStores]);
+
+  // On app resume, re-run all dashboard loaders so a stale/blank section heals.
+  useResumeRefetch(useCallback(() => {
+    loadCampaignUsage();
+    loadCampaignStats();
+    loadStores();
+  }, [loadCampaignUsage, loadCampaignStats, loadStores]));
 
   // DOTD badge corner — picked dynamically from the selected deal's cover image so
   // it doesn't sit on top of the merchant's chosen baked text band.
@@ -232,21 +253,6 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     pickBadgeCornerForImage(url).then(c => { if (!cancelled) setDotdBadgeCorner(c); });
     return () => { cancelled = true; };
   }, [selectedDeal]);
-  useEffect(() => {
-    if (!user?.id) return;
-    const timer = perfTimer('load_merchant_stores', 'merchant_dashboard');
-    timer.mark('stores_call');
-    merchantService.getMerchantStores(user.id).then(stores => {
-      setMerchantStores(stores || []);
-      const states = [...new Set((stores || []).map(s => s.state).filter(Boolean))];
-      setUpcomingEvents(getUpcomingFestivals(states.length > 0 ? states : ['all']));
-      timer.end('festivals_computed');
-    }).catch(() => {
-      // Fallback: show national festivals only
-      setUpcomingEvents(getUpcomingFestivals(['all']));
-      timer.end('error_fallback');
-    });
-  }, [user?.id]);
 
   const greeting = t(getGreetingKey());
 
