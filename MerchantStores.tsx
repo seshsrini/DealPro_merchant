@@ -8,6 +8,8 @@ import { AppView, MerchantStore, User } from './types';
 import { merchantService } from './services/merchantService';
 import { locationsearchService } from './services/locationsearchService';
 import { addCampaignService } from './services/addCampaignService';
+import { resilient } from './services/resilientData';
+import { useResumeRefetch } from './services/useResumeRefetch';
 import { useTranslation } from './contexts/LanguageContext';
 
 const SHIFT1_OPTIONS = [
@@ -100,22 +102,33 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
   // Fetch stores on mount. Force a FRESH fetch (bypass the 1-hour cache) so a
   // store just added during onboarding always shows here — the cache could
   // otherwise display a stale count (e.g. 1 of 4). This also refreshes the cache.
-  useEffect(() => {
-    merchantService.getMerchantStores(user.id, true)
-      .then(data => {
-        setStores(data);
-        const activeCount = data.filter(s => s.active_status !== 'disabled').length;
-        onStoreCountChange?.(activeCount);
-        if (forceAddMode && activeCount === 0) {
-          setForm(blankForm());
-          setEditingStoreId(null);
-          setShowPanel(true);
-          setError(null);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoadingStores(false));
+  const loadStores = useCallback(async () => {
+    try {
+      // Resilient: retries + falls back to last-good cache, so a resume-time
+      // blip can't blank the stores list. Still force-fresh on the happy path.
+      const data = await resilient(
+        () => merchantService.getMerchantStores(user.id, true),
+        { cacheKey: `stores_page_${user.id}` },
+      );
+      setStores(data);
+      const activeCount = data.filter(s => s.active_status !== 'disabled').length;
+      onStoreCountChange?.(activeCount);
+      if (forceAddMode && activeCount === 0) {
+        setForm(blankForm());
+        setEditingStoreId(null);
+        setShowPanel(true);
+        setError(null);
+      }
+    } catch {
+      /* keep last-good stores */
+    } finally {
+      setLoadingStores(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id]);
+
+  useEffect(() => { loadStores(); }, [loadStores]);
+  useResumeRefetch(loadStores);
 
   // Fetch store categories
   useEffect(() => {

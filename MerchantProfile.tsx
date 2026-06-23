@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Store,
   ShieldCheck,
@@ -30,6 +30,8 @@ import { userService } from './services/userService';
 import { MreferralService } from './services/MreferralService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { supabase } from './services/supabaseClient';
+import { resilient } from './services/resilientData';
+import { useResumeRefetch } from './services/useResumeRefetch';
 import { resetFeatureTour } from './components/FeatureTour';
 import { resetCampaignTour } from './components/CampaignTour';
 
@@ -53,11 +55,21 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
   const [referralCredits, setReferralCredits] = useState<{ qualified_referrals: number; available_months: number; referrals_to_next: number } | null>(null);
 
   // Referral free-month credits (5 referrals = 1 free month, carryover).
-  useEffect(() => {
-    let active = true;
-    merchantSubscriptionService.getReferralCredits().then((c) => { if (active && c) setReferralCredits(c); });
-    return () => { active = false; };
+  // Resilient: retries + last-good cache so a resume-time blip doesn't blank it.
+  const loadReferralCredits = useCallback(async () => {
+    try {
+      const c = await resilient(
+        () => merchantSubscriptionService.getReferralCredits(),
+        { cacheKey: `referral_credits_${user.id}` },
+      );
+      if (c) setReferralCredits(c);
+    } catch {
+      /* keep last-good */
+    }
   }, [user.id]);
+
+  useEffect(() => { loadReferralCredits(); }, [loadReferralCredits]);
+  useResumeRefetch(loadReferralCredits);
 
   // Fetch from DB if not on user object
   useEffect(() => {

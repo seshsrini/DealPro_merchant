@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { AppView, User } from './types';
 import { merchantStaffService, StaffMember, StaffInvite } from './services/merchantStaffService';
+import { resilient } from './services/resilientData';
+import { useResumeRefetch } from './services/useResumeRefetch';
 import { useTranslation } from './contexts/LanguageContext';
 
 interface MerchantTeamProps {
@@ -54,7 +56,12 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
     setLoading(true);
     setError(null);
     try {
-      const data = await merchantStaffService.listStaff();
+      // Resilient: retries + last-good cache fallback so a resume-time blip
+      // doesn't blank the team list or throw a spurious error.
+      const data = await resilient(
+        () => merchantStaffService.listStaff(),
+        { cacheKey: `team_${user.id}` },
+      );
       setStaff(data.staff);
       setInvites(data.invites);
       if (data.callerRole) setCallerRole(data.callerRole);
@@ -64,9 +71,10 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user.id]);
 
   useEffect(() => { loadTeam(); }, [loadTeam]);
+  useResumeRefetch(loadTeam);
 
   const handleInvite = async () => {
     if (!inviteName.trim()) return;
