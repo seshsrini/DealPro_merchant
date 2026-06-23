@@ -115,19 +115,26 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // Tiers are the essential "Choose a Plan" data (resilient: retries + cache).
     try {
       const fetchedTiers = await subscriptionService.getSubscriptionTiers();
       setTiers(fetchedTiers);
-
+    } catch (err: any) {
+      console.error('[MerchantSubscriptions] Tier fetch error:', err);
+      setError('Unable to load subscription plans. Please try again.');
+      setLoading(false);
+      return;
+    }
+    // Current subscription only drives current-plan highlighting — its failure
+    // must NOT blank the plan list, so it's best-effort and non-blocking.
+    try {
       const { tier_id, subscription } = await merchantSubscriptionService.fetchCurrentSubscription(user.id);
       setCurrentTierId(tier_id);
       setCurrentSubscription(subscription);
-    } catch (err: any) {
-      console.error('[MerchantSubscriptions] Fetch error:', err);
-      setError('Unable to load subscription plans. Please try again.');
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.warn('[MerchantSubscriptions] Current-subscription fetch failed (non-blocking):', err);
     }
+    setLoading(false);
   }, [user.id]);
 
   useEffect(() => {
