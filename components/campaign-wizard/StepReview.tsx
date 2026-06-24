@@ -76,7 +76,7 @@ const formatDate = (dateStr: string): string => {
 
 export const StepReview: React.FC<StepReviewProps> = ({
   wizardState, user, stores, editingDealId,
-  onBack, onPublishSuccess, onPublishError, onEditSection, onUpdateMainImage, onUpdateOriginalImage,
+  onPublishSuccess, onPublishError, onEditSection, onUpdateMainImage,
   onUpdateAdditional, theme,
   editStepMap, isBuyGetFreeMode,
 }) => {
@@ -159,37 +159,19 @@ export const StepReview: React.FC<StepReviewProps> = ({
   const bakedForPlacementRef = useRef<BannerPlacement | null>(null);
   useEffect(() => {
     if (!onUpdateMainImage || wizardState.skipBannerGeneration) return;
-    const sourceFile = wizardState.selectedImageFile;
-    const sourceUrl = wizardState.existingThumbnail;
-    if (!sourceFile && !sourceUrl) return;
+    // Only a freshly-uploaded photo (originalImageFile) is a clean source we can
+    // bake text onto. An existing/saved cover is already a finished banner with
+    // text baked in — re-baking it would stack a SECOND layer of text (the
+    // "double text" bug). So with no fresh upload we leave the existing cover as
+    // is; the carousel falls back to wizardState.existingThumbnail.
+    const original = wizardState.originalImageFile;
+    if (!original) return;
     const desired: BannerPlacement = wizardState.bannerPlacement ?? 'auto';
     if (bakedForPlacementRef.current === desired) return;
     bakedForPlacementRef.current = desired;
     (async () => {
       setGeneratingBanner(true);
       try {
-        // Resolve the source: prefer the preserved original (snapshotted at upload) so re-bakes
-        // don't apply text on top of an already-baked banner.
-        let original = wizardState.originalImageFile;
-        if (!original) {
-          if (sourceFile) {
-            original = sourceFile;
-          } else if (sourceUrl) {
-            const res = await fetch(sourceUrl);
-            const blob = await res.blob();
-            original = new File([blob], 'existing.jpg', { type: blob.type });
-          }
-          if (original && onUpdateOriginalImage) onUpdateOriginalImage(original);
-        }
-        if (!original) return;
-        // Bake-on-bake guard: skip if the source is itself a previously baked banner.
-        const sourceLooksBaked =
-          original.name.startsWith('promo-banner-') ||
-          (sourceUrl && /promo-banner/i.test(sourceUrl));
-        if (sourceLooksBaked) {
-          console.log('[StepReview] Source is already a baked banner — skipping bake to avoid ghost text.');
-          return;
-        }
         const badgeLabels = (wizardState.trustBadgeIds || [])
           .map(id => TRUST_BADGES.find(b => b.id === id)?.label)
           .filter(Boolean) as string[];
@@ -786,21 +768,14 @@ export const StepReview: React.FC<StepReviewProps> = ({
         />
       )}
 
-      {/* Publish button */}
+      {/* Publish button — no Back here by design: the merchant edits any section
+          via its pencil (which returns to this Review screen) and closes with the
+          top X. A Back button would walk them out of Review unexpectedly. */}
       <div style={floatIn(450, visible)} className="mt-auto pb-8 flex gap-3">
-        <button
-          onClick={onBack}
-          disabled={publishing}
-          className={`flex-1 h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all ${
-            isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
-          } disabled:opacity-40`}
-        >
-          {t('m_back')}
-        </button>
         <button
           onClick={handlePublish}
           disabled={publishing}
-          className="flex-[2] h-14 rounded-xl bg-emerald-600 text-white text-base font-bold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="flex-1 h-14 rounded-xl bg-emerald-600 text-white text-base font-bold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {publishing ? (
             <Loader2 className="w-5 h-5 animate-spin" />

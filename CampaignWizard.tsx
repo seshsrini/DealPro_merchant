@@ -703,7 +703,7 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
       case 'bannerPlacement':
         return (
           <StepBannerPlacement
-            originalImageFile={state.originalImageFile || state.selectedImageFile}
+            originalImageFile={state.originalImageFile}
             existingThumbnail={state.existingThumbnail}
             storeName={merchantStores.find(s => s.id === state.selectedStoreId)?.store_name || user.store_name || ''}
             dealHeading={state.dealHeading}
