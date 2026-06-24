@@ -7,7 +7,7 @@
  * Storage: Supabase `products` table — attributes stored as jsonb.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Plus, Edit2, Trash2, Package, AlertCircle,
@@ -15,6 +15,8 @@ import {
 import { User, AppView } from './types';
 import { CATEGORY_SCHEMAS } from './data/formSchema';
 import { supabase, ensureFreshToken } from './services/supabaseClient';
+import { resilient, peekCache } from './services/resilientData';
+import { useResumeRefetch } from './services/useResumeRefetch';
 import { MediaLightbox, LightboxSlide } from './components/MediaLightbox';
 import { MerchantProductPreview } from './components/MerchantProductPreview';
 
@@ -143,29 +145,33 @@ interface Props {
 
 export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEditProduct }) => {
   const isDark = theme === 'dark';
-  const [items, setItems] = useState<CatalogueItem[]>([]);
+  const catalogueCacheKey = `catalogue_${user.id}`;
+  // Seed from cache so the catalogue paints instantly on a cold resume.
+  const [items, setItems] = useState<CatalogueItem[]>(() => peekCache<CatalogueItem[]>(catalogueCacheKey) || []);
   const [filterSchemaId, setFilterSchemaId] = useState<string>('all');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [lightboxItem, setLightboxItem] = useState<CatalogueItem | null>(null);
   const [previewItem, setPreviewItem] = useState<CatalogueItem | null>(null);
 
-  useEffect(() => {
-    const loadProducts = async () => {
-      try {
-        await ensureFreshToken();
-      } catch {
-        // If refresh fails, still try — the invoke wrapper will retry on 401
-      }
-      try {
+  const loadProducts = useCallback(async () => {
+    try {
+      // resilient(): retries the token-wake blip and falls back to the cached
+      // catalogue, so the grid never blanks while fresh data loads.
+      const mapped = await resilient(async () => {
+        await ensureFreshToken().catch(() => { /* invoke wrapper retries on 401 */ });
         const res = await callManageProducts({ action: 'list', merchantId: user.id });
         const rows = (res.products as Record<string, unknown>[]) ?? [];
-        setItems(rows.map(rowToItem));
-      } catch (err) {
-        console.error('[MerchantCatalogue] Failed to load products:', err);
-      }
-    };
-    loadProducts();
-  }, [user.id]);
+        return rows.map(rowToItem);
+      }, { cacheKey: catalogueCacheKey });
+      setItems(mapped);
+    } catch (err) {
+      console.error('[MerchantCatalogue] Failed to load products:', err);
+    }
+  }, [user.id, catalogueCacheKey]);
+
+  useEffect(() => { loadProducts(); }, [loadProducts]);
+  // Silent refresh on foreground — recovers token + refreshes without blanking.
+  useResumeRefetch(loadProducts);
 
   const openAdd = () => {
     setEditProduct?.(null);

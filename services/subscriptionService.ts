@@ -72,4 +72,10 @@ export const subscriptionService = {
     console.error("[subscriptionService] Failed to fetch subscription tiers and no cache available:", lastErr?.message || lastErr);
     throw new Error(`Failed to load subscription plans: ${lastErr?.message || "Network error"}`);
   },
+
+  /** Read the last cached tiers synchronously (no network) for instant first
+   *  paint on a cold resume. Returns null if nothing cached yet. */
+  peekCachedTiers(): SubscriptionTier[] | null {
+    return readCachedTiers();
+  },
 };

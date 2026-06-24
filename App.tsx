@@ -21,6 +21,7 @@ import { supabase, updateSupabaseSession } from './services/supabaseClient';
 import { App as CapApp } from '@capacitor/app';
 import { userService } from './services/userService';
 import { addCampaignService } from './services/addCampaignService';
+import { resilient, peekCache } from './services/resilientData';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { isPaymentPending, clearPaymentPending } from './services/razorpayCheckoutService';
 import { OtpVerificationModal } from './OtpVerificationModal';
@@ -132,13 +133,25 @@ const AppContent: React.FC = () => {
     console.log(`[App.tsx refreshDeals] Pulse triggered for User: ${user.id} (${user.role})`);
 
     const isInitialLoad = !dealsLoadedRef.current;
-    if (isInitialLoad) setLoading(true);
+    const cacheKey = `merchant_deals_${user.id}`;
+
+    if (isInitialLoad) {
+      // Stale-while-revalidate: on a cold resume (WebView reloaded after a long
+      // background) paint the last-known deals INSTANTLY so My Campaigns / the
+      // dashboard never show a blank list while the fresh fetch runs. Only show
+      // the loading state when we genuinely have nothing cached to show.
+      const cached = peekCache<Deal[]>(cacheKey);
+      if (cached && cached.length > 0) setDeals(cached);
+      else setLoading(true);
+    }
 
     try {
       let fetchedDeals: Deal[] = [];
       if (user.role === 'merchant') {
         console.log(`[App.tsx refreshDeals] Invoking 'getMerchantDeals' for ID: ${user.id}`);
-        fetchedDeals = await addCampaignService.getMerchantDeals(user.id);
+        // resilient(): retries transient failures and, if they all fail, returns
+        // the cached deals instead of throwing — so a flaky resume never blanks.
+        fetchedDeals = await resilient(() => addCampaignService.getMerchantDeals(user.id), { cacheKey });
         console.log(`[App.tsx refreshDeals] Pipeline Success: Received ${fetchedDeals.length} campaigns.`);
       }
 
@@ -147,7 +160,7 @@ const AppContent: React.FC = () => {
     } catch (err) {
       console.error("[App.tsx refreshDeals] Data pipeline failure:", err);
     } finally {
-      if (isInitialLoad) setLoading(false);
+      setLoading(false);
     }
   }, [user.id, user.role, user.isLoggedIn, user.access_token]); // Removed 'loading' to prevent re-creation loops
 

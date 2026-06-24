@@ -1,10 +1,12 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Deal, AppView } from './types';
 import { addCampaignService } from './services/addCampaignService';
 import { mDashboardService } from './services/mDashboardService';
 import { merchantService } from './services/merchantService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
+import { resilient, peekCache } from './services/resilientData';
+import { useResumeRefetch } from './services/useResumeRefetch';
 import { useTranslation } from './contexts/LanguageContext';
 import {
   Megaphone,
@@ -155,7 +157,12 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
   const [perCampaignClaimClicks, setPerCampaignClaimClicks] = useState<Record<string, number>>({});
   const [perCampaignRedemptionCounts, setPerCampaignRedemptionCounts] = useState<Record<string, number>>({});
 
-  const [campaignUsage, setCampaignUsage] = useState({
+  // Seed from cache for an instant paint on cold resume — the "X/Y deals" counter
+  // must never blank to 0/0 while the fresh usage loads.
+  const usageCacheKey = `campaign_usage_${user.id}`;
+  const [campaignUsage, setCampaignUsage] = useState(() => peekCache<{
+    campaigns_used: number; campaigns_limit: number; dotd_used: number; dotd_limit: number; has_subscription: boolean;
+  }>(usageCacheKey) || {
     campaigns_used: 0,
     campaigns_limit: 0,
     dotd_used: 0,
@@ -256,28 +263,22 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
   // Fetch campaign usage. One retry on transient failure (auth refresh blip,
   // 5xx) so the New Deal button doesn't stay greyed forever just because the
   // first request failed.
-  useEffect(() => {
-    let cancelled = false;
-    const fetchCampaignUsage = async () => {
-      const tryOnce = () => merchantSubscriptionService.getCampaignUsage(user.id);
-      try {
-        let usage;
-        try {
-          usage = await tryOnce();
-        } catch (firstErr) {
-          if (cancelled) return;
-          console.warn('[MerchantMyCampaigns] usage fetch failed, retrying:', firstErr);
-          await new Promise((r) => setTimeout(r, 800));
-          usage = await tryOnce();
-        }
-        if (!cancelled) setCampaignUsage(usage);
-      } catch (err) {
-        console.error('Error fetching campaign usage:', err);
-      }
-    };
-    if (user.id) fetchCampaignUsage();
-    return () => { cancelled = true; };
-  }, [user.id, deals]);
+  const fetchCampaignUsage = useCallback(async () => {
+    if (!user.id) return;
+    try {
+      // resilient(): retries transient failures then falls back to the cached
+      // usage — the counter recovers silently instead of dropping to 0/0.
+      const usage = await resilient(
+        () => merchantSubscriptionService.getCampaignUsage(user.id),
+        { cacheKey: usageCacheKey, skipCacheIfEmpty: false },
+      );
+      setCampaignUsage(usage);
+    } catch (err) {
+      console.error('Error fetching campaign usage:', err);
+    }
+  }, [user.id, usageCacheKey]);
+
+  useEffect(() => { fetchCampaignUsage(); }, [fetchCampaignUsage, deals]);
 
   // Handle pre-selected edit deal (from dashboard deep link)
   useEffect(() => {
@@ -310,14 +311,15 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
 
   // Fetch per-campaign click and redemption stats for ALL campaigns (not just
   // the active tab) so counts persist when switching between active/expired.
+  // resilient() keeps the last-good counts on a resume blip instead of zeroing.
   useEffect(() => {
     const fetchCampaignStats = async () => {
       if (user?.id && merchantDeals.length > 0) {
         const campaignIds = merchantDeals.map(deal => deal.campaign_id);
         try {
           const [clicksData, redemptions] = await Promise.all([
-            mDashboardService.getCampaignSpecificClicks(campaignIds),
-            mDashboardService.getCampaignSpecificRedemptions(user.id, campaignIds)
+            resilient(() => mDashboardService.getCampaignSpecificClicks(campaignIds), { cacheKey: `mc_clicks_${user.id}`, skipCacheIfEmpty: false }),
+            resilient(() => mDashboardService.getCampaignSpecificRedemptions(user.id, campaignIds), { cacheKey: `mc_redeem_${user.id}`, skipCacheIfEmpty: false }),
           ]);
           setPerCampaignClickCounts(clicksData.views);
           setPerCampaignClaimClicks(clicksData.claimClicks);
@@ -329,6 +331,13 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
     };
     fetchCampaignStats();
   }, [user?.id, merchantDeals]);
+
+  // Silent refresh on foreground after a long background — recovers token +
+  // refreshes deals/usage without ever blanking (data stays painted from cache).
+  useResumeRefetch(useCallback(() => {
+    refreshDeals();
+    fetchCampaignUsage();
+  }, [refreshDeals, fetchCampaignUsage]));
 
   const handleEditClick = (deal: Deal) => {
     if (setDealIdToEdit) setDealIdToEdit(deal.campaign_id);

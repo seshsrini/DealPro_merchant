@@ -11,6 +11,8 @@ import { subscriptionService } from './services/subscriptionService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { razorpayCheckoutService, isPaymentPending, clearPaymentPending } from './services/razorpayCheckoutService';
 import { supabase } from './services/supabaseClient';
+import { resilient, peekCache } from './services/resilientData';
+import { useResumeRefetch } from './services/useResumeRefetch';
 import { useTranslation } from './contexts/LanguageContext';
 import {
   Loader2,
@@ -59,15 +61,21 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     return info.message || t('m_cancel_blocked_generic');
   };
   const isNative = Capacitor.isNativePlatform();
-  const [tiers, setTiers] = useState<SubscriptionTier[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Cache key for the current-subscription lookup so a cold resume can paint the
+  // current plan instantly (stale-while-revalidate).
+  const subCacheKey = `sub_current_${user.id}`;
+  const cachedSub = peekCache<{ tier_id: number | null; subscription: any }>(subCacheKey);
+  // Seed from the last cached tiers / subscription so the screen renders
+  // immediately on a cold resume instead of showing a 10s "Loading plans…" wall.
+  const [tiers, setTiers] = useState<SubscriptionTier[]>(() => subscriptionService.peekCachedTiers() || []);
+  const [loading, setLoading] = useState(() => (subscriptionService.peekCachedTiers()?.length ?? 0) === 0);
   const [error, setError] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selectedTierId, setSelectedTierId] = useState<number | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);
-  const [currentTierId, setCurrentTierId] = useState<number | null>(null);
-  const [currentSubscription, setCurrentSubscription] = useState<any>(null);
+  const [currentTierId, setCurrentTierId] = useState<number | null>(cachedSub?.tier_id ?? null);
+  const [currentSubscription, setCurrentSubscription] = useState<any>(cachedSub?.subscription ?? null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
@@ -114,7 +122,10 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
 
   // ── Fetch data ──
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    // Only show the full-screen spinner on a true first load (no cached tiers).
+    // On a resume we already have cached tiers painted, so refresh silently.
+    const haveCachedTiers = (subscriptionService.peekCachedTiers()?.length ?? 0) > 0;
+    if (!haveCachedTiers) setLoading(true);
     setError(null);
     // Tiers are the essential "Choose a Plan" data (resilient: retries + cache).
     try {
@@ -122,21 +133,29 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       setTiers(fetchedTiers);
     } catch (err: any) {
       console.error('[MerchantSubscriptions] Tier fetch error:', err);
-      setError('Unable to load subscription plans. Please try again.');
-      setLoading(false);
-      return;
+      // Only surface the error wall if we have nothing cached to show.
+      if (!haveCachedTiers) {
+        setError('Unable to load subscription plans. Please try again.');
+        setLoading(false);
+        return;
+      }
     }
     // Current subscription only drives current-plan highlighting — its failure
-    // must NOT blank the plan list, so it's best-effort and non-blocking.
+    // must NOT blank the plan list, so it's best-effort and non-blocking. Wrapped
+    // in resilient() so a resume blip falls back to the cached plan instead of
+    // dropping the "current plan" badge.
     try {
-      const { tier_id, subscription } = await merchantSubscriptionService.fetchCurrentSubscription(user.id);
+      const { tier_id, subscription } = await resilient(
+        () => merchantSubscriptionService.fetchCurrentSubscription(user.id),
+        { cacheKey: subCacheKey, skipCacheIfEmpty: false },
+      );
       setCurrentTierId(tier_id);
       setCurrentSubscription(subscription);
     } catch (err) {
       console.warn('[MerchantSubscriptions] Current-subscription fetch failed (non-blocking):', err);
     }
     setLoading(false);
-  }, [user.id]);
+  }, [user.id, subCacheKey]);
 
   useEffect(() => {
     if (user.isLoggedIn && user.role === 'merchant') {
@@ -146,6 +165,12 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       setLoading(false);
     }
   }, [user.isLoggedIn, user.role, fetchData]);
+
+  // Silently refresh tiers + current plan when the app returns to the foreground
+  // after a long background, so the data is current without ever blanking.
+  useResumeRefetch(useCallback(() => {
+    if (user.isLoggedIn && user.role === 'merchant') fetchData();
+  }, [user.isLoggedIn, user.role, fetchData]));
 
   // ── Supabase Realtime: listen for subscription changes ──
   useEffect(() => {

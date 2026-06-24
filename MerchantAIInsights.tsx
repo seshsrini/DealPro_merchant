@@ -4,7 +4,7 @@
  * Comprehensive AI-powered recommendations and predictions
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User } from './types';
 import {
   Brain,
@@ -35,6 +35,8 @@ import {
 import { aiInsightsDashboardService, DashboardInsights } from './services/aiInsightsDashboardService';
 import { customerSegmentationService, SegmentationInsights } from './services/customerSegmentationService';
 import { revenueForecastService, RevenueForecast } from './services/revenueForecastService';
+import { resilient, peekCache } from './services/resilientData';
+import { useResumeRefetch } from './services/useResumeRefetch';
 
 interface MerchantAIInsightsProps {
   user: User;
@@ -44,63 +46,70 @@ interface MerchantAIInsightsProps {
 
 export const MerchantAIInsights: React.FC<MerchantAIInsightsProps> = ({ user, theme, setView }) => {
   const isDark = theme === 'dark';
-  const [insights, setInsights] = useState<DashboardInsights | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [segmentation, setSegmentation] = useState<SegmentationInsights | null>(null);
-  const [loadingSegmentation, setLoadingSegmentation] = useState(true);
-  const [forecast, setForecast] = useState<RevenueForecast | null>(null);
-  const [loadingForecast, setLoadingForecast] = useState(true);
+  // Seed every panel from cache so AI Insights paints instantly on a cold resume
+  // instead of showing a full-screen spinner while the (slow) AI calls run.
+  const insightsKey = `ai_insights_${user?.id}`;
+  const segmentationKey = `ai_segmentation_${user?.id}`;
+  const forecastKey = `ai_forecast_${user?.id}`;
+  const cachedInsights = peekCache<DashboardInsights>(insightsKey);
+  const [insights, setInsights] = useState<DashboardInsights | null>(cachedInsights);
+  const [loading, setLoading] = useState(!cachedInsights);
+  const [segmentation, setSegmentation] = useState<SegmentationInsights | null>(() => peekCache<SegmentationInsights>(segmentationKey));
+  const [loadingSegmentation, setLoadingSegmentation] = useState(!peekCache<SegmentationInsights>(segmentationKey));
+  const [forecast, setForecast] = useState<RevenueForecast | null>(() => peekCache<RevenueForecast>(forecastKey));
+  const [loadingForecast, setLoadingForecast] = useState(!peekCache<RevenueForecast>(forecastKey));
 
-  useEffect(() => {
-    fetchInsights();
-    fetchSegmentation();
-    fetchForecast();
-  }, [user?.id]);
-
-  const fetchInsights = async () => {
+  const fetchInsights = useCallback(async () => {
     if (!user?.id) return;
-
-    setLoading(true);
+    if (!peekCache<DashboardInsights>(insightsKey)) setLoading(true);
     try {
-      const data = await aiInsightsDashboardService.getDashboardInsights(user.id);
+      const data = await resilient(() => aiInsightsDashboardService.getDashboardInsights(user.id), { cacheKey: insightsKey, skipCacheIfEmpty: false });
       setInsights(data);
-      console.log('[MerchantAIInsights] Dashboard insights fetched successfully');
     } catch (error) {
       console.error('[MerchantAIInsights] Error fetching insights:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id, insightsKey]);
 
-  const fetchSegmentation = async () => {
+  const fetchSegmentation = useCallback(async () => {
     if (!user?.id) return;
-
-    setLoadingSegmentation(true);
+    if (!peekCache<SegmentationInsights>(segmentationKey)) setLoadingSegmentation(true);
     try {
-      const data = await customerSegmentationService.getSegments(user.id);
+      const data = await resilient(() => customerSegmentationService.getSegments(user.id), { cacheKey: segmentationKey, skipCacheIfEmpty: false });
       setSegmentation(data);
-      console.log('[MerchantAIInsights] Customer segmentation fetched successfully');
     } catch (error) {
       console.error('[MerchantAIInsights] Error fetching segmentation:', error);
     } finally {
       setLoadingSegmentation(false);
     }
-  };
+  }, [user?.id, segmentationKey]);
 
-  const fetchForecast = async () => {
+  const fetchForecast = useCallback(async () => {
     if (!user?.id) return;
-
-    setLoadingForecast(true);
+    if (!peekCache<RevenueForecast>(forecastKey)) setLoadingForecast(true);
     try {
-      const data = await revenueForecastService.getForecast(user.id);
+      const data = await resilient(() => revenueForecastService.getForecast(user.id), { cacheKey: forecastKey, skipCacheIfEmpty: false });
       setForecast(data);
-      console.log('[MerchantAIInsights] Revenue forecast fetched successfully');
     } catch (error) {
       console.error('[MerchantAIInsights] Error fetching forecast:', error);
     } finally {
       setLoadingForecast(false);
     }
-  };
+  }, [user?.id, forecastKey]);
+
+  useEffect(() => {
+    fetchInsights();
+    fetchSegmentation();
+    fetchForecast();
+  }, [fetchInsights, fetchSegmentation, fetchForecast]);
+
+  // Silent refresh on foreground — never re-blanks (cached data stays painted).
+  useResumeRefetch(useCallback(() => {
+    fetchInsights();
+    fetchSegmentation();
+    fetchForecast();
+  }, [fetchInsights, fetchSegmentation, fetchForecast]));
 
   if (loading) {
     return (
