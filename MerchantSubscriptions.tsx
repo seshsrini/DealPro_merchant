@@ -6,7 +6,6 @@ import {
   SubscriptionTier,
   User
 } from './types';
-import { Capacitor } from '@capacitor/core';
 import { subscriptionService } from './services/subscriptionService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { razorpayCheckoutService, isPaymentPending, clearPaymentPending } from './services/razorpayCheckoutService';
@@ -26,7 +25,6 @@ import {
   Clock,
   Gift,
   CalendarDays,
-  ExternalLink,
   Shield,
 } from 'lucide-react';
 
@@ -36,8 +34,6 @@ interface MerchantSubscriptionsProps {
   setUser: (user: User) => void;
   theme?: 'light' | 'dark';
 }
-
-const GOOGLE_PLAY_SUBS_URL = 'https://play.google.com/store/account/subscriptions';
 
 export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ user, setView, setUser, theme = 'dark' }) => {
   const { t, locale } = useTranslation();
@@ -60,7 +56,6 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     }
     return info.message || t('m_cancel_blocked_generic');
   };
-  const isNative = Capacitor.isNativePlatform();
   // Cache key for the current-subscription lookup so a cold resume can paint the
   // current plan instantly (stale-while-revalidate).
   const subCacheKey = `sub_current_${user.id}`;
@@ -365,19 +360,6 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     }
   };
 
-  const handleManageSubscription = () => {
-    if (isNative) {
-      // Use Capacitor Browser to open Google Play subscriptions
-      import('@capacitor/browser').then(({ Browser }) => {
-        Browser.open({ url: GOOGLE_PLAY_SUBS_URL });
-      }).catch(() => {
-        window.open(GOOGLE_PLAY_SUBS_URL, '_blank');
-      });
-    } else {
-      window.open(GOOGLE_PLAY_SUBS_URL, '_blank');
-    }
-  };
-
   return (
     <div className="px-6 pt-6 pb-32 space-y-5">
       {/* Header */}
@@ -544,17 +526,6 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 )}
               </div>
             )}
-
-            {/* Manage Subscription button */}
-            <button
-              onClick={handleManageSubscription}
-              className={`w-full h-11 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${
-                isDark ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700'
-              }`}
-            >
-              <ExternalLink className="w-4 h-4" />
-              Manage Subscription
-            </button>
 
             {/* Cancel link */}
             {!currentSubscription.cancel_at_period_end ? (
