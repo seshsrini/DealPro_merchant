@@ -243,13 +243,25 @@ Deno.serve(async (req) => {
     // round-trips, which is what lets the connection pool absorb concurrency
     // (load test: ~8.6s -> ~2.1s p95 at 50 concurrent). The RPC's has_access
     // already covers active staff (who inherit the owner's access).
-    const { data: gateRows, error: gateErr } = await supabase.rpc('campaign_create_gate', {
+    // The gate is a pure read — safe to retry. One in-function retry absorbs a
+    // transient pool/connection hiccup so the merchant doesn't see a failure for
+    // something that succeeds 300ms later.
+    let { data: gateRows, error: gateErr } = await supabase.rpc('campaign_create_gate', {
       p_user_id: user.id,
       p_merchant_id: merchant_id,
       p_store_id: store_id,
     });
     if (gateErr) {
-      console.error('[create-campaign] gate RPC error:', gateErr.message);
+      console.warn('[create-campaign] gate RPC error, retrying once:', gateErr.message);
+      await new Promise((r) => setTimeout(r, 300));
+      ({ data: gateRows, error: gateErr } = await supabase.rpc('campaign_create_gate', {
+        p_user_id: user.id,
+        p_merchant_id: merchant_id,
+        p_store_id: store_id,
+      }));
+    }
+    if (gateErr) {
+      console.error('[create-campaign] gate RPC error (after retry):', gateErr.message);
       return new Response(JSON.stringify({ error: 'Unable to verify your account right now. Please try again.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
     }
     const gate = Array.isArray(gateRows) ? gateRows[0] : gateRows;
@@ -373,21 +385,71 @@ Deno.serve(async (req) => {
       campaignPayload.free_gifts = free_gifts;
     }
 
-    const { data, error } = await supabase
+    // ─── Idempotency ───
+    // The client sends one stable key per publish attempt and reuses it across
+    // automatic retries. This makes a retry after a lost response safe — we
+    // return the already-created deal instead of inserting a duplicate. Tolerant
+    // of the column not existing yet (pre-migration): we just skip dedup.
+    const dedupKey = (typeof body.client_dedup_key === 'string' && body.client_dedup_key.length > 0)
+      ? body.client_dedup_key
+      : null;
+
+    const okResponse = (campaign: any) => new Response(
+      JSON.stringify({ message: 'Campaign created successfully', campaign }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 201 },
+    );
+
+    if (dedupKey) {
+      try {
+        const { data: existing } = await supabase
+          .from('campaigns')
+          .select('*')
+          .eq('merchant_id', merchant_id)
+          .eq('client_dedup_key', dedupKey)
+          .maybeSingle();
+        if (existing) {
+          console.log('[create-campaign] idempotent hit — returning existing campaign for dedup key');
+          return okResponse(existing);
+        }
+        campaignPayload.client_dedup_key = dedupKey;
+      } catch (_) { /* column may not exist yet — proceed without dedup */ }
+    }
+
+    let { data, error } = await supabase
       .from('campaigns')
       .insert([campaignPayload])
       .select()
       .single();
+
+    // Pre-migration safety: if the dedup column isn't there yet, retry the
+    // insert without it so publishing keeps working regardless of deploy order.
+    if (error && /client_dedup_key/i.test(error.message || '')) {
+      delete campaignPayload.client_dedup_key;
+      ({ data, error } = await supabase.from('campaigns').insert([campaignPayload]).select().single());
+    }
+
+    // Concurrent-retry race: a parallel attempt with the same key inserted first
+    // and the unique index rejected this one. Fetch and return the winner — the
+    // merchant still gets exactly one deal and a success response.
+    if (error && dedupKey && /duplicate key|unique constraint|campaigns_merchant_dedup_key/i.test(error.message || '')) {
+      const { data: existing } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('merchant_id', merchant_id)
+        .eq('client_dedup_key', dedupKey)
+        .maybeSingle();
+      if (existing) {
+        console.log('[create-campaign] dedup race resolved — returning the winning campaign');
+        return okResponse(existing);
+      }
+    }
 
     if (error) {
       console.error('Failed to create campaign:', error.message);
       throw error;
     }
 
-    return new Response(JSON.stringify({ message: 'Campaign created successfully', campaign: data }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 201,
-    });
+    return okResponse(data);
   } catch (error: any) {
     console.error('Failed to create campaign:', error.message || error);
     let status = 500;

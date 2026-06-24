@@ -438,36 +438,82 @@ ALWAYS return the reason in English regardless of the input language.`,
     return { publicUrl: json.secure_url as string };
   },
 
-  // Calls Edge Function
+  // Calls Edge Function.
+  //
+  // Publishing must never fail on a transient hiccup. We attach ONE stable
+  // idempotency key and reuse it across automatic retries, so:
+  //   • network blip / edge cold start / transient 5xx / "connection closed" →
+  //     we retry with backoff instead of surfacing a publish error;
+  //   • a retry after a lost response can't create a duplicate — the server
+  //     dedupes on the key and returns the already-created deal.
+  // Real, user-actionable failures (moderation, validation, no subscription,
+  // store missing, dead session) are terminal and surfaced immediately — never
+  // retried, since retrying can't change the outcome.
   createCampaign: async (d: any) => {
-    let data, error;
-    try {
-      const result = await supabase.functions.invoke('create-campaign', {
-        body: d,
-      });
-      data = result.data;
-      error = result.error;
-    } catch (tokenErr: any) {
-      console.error('[addCampaignService] Session error:', tokenErr?.message);
-      throw new Error(tokenErr?.message?.includes('Session expired') || tokenErr?.message?.includes('log in')
-        ? 'Your session has expired. Please close and reopen the app.'
-        : 'Unable to process campaign. Please try again.');
-    }
-    if (error) {
+    const dedupKey =
+      (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+        ? globalThis.crypto.randomUUID()
+        : `${d?.merchant_id || 'm'}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const body = { ...d, client_dedup_key: dedupKey };
+
+    const MAX_ATTEMPTS = 4;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const sessionExpired = () =>
+      new Error('Your session has expired. Please close and reopen the app.');
+    let lastTransient: string = '';
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      let data: any, error: any;
       try {
-        const errorBody = await error.context?.json?.();
-        if (errorBody?.error) {
-          if (errorBody.error.includes('Unauthorized') || errorBody.error.includes('expired')) {
-            throw new Error('Your session has expired. Please close and reopen the app.');
-          }
-          throw new Error(errorBody.error);
-        }
-      } catch (parseErr: any) {
-        if (parseErr.message && parseErr.message !== error.message) throw parseErr;
+        const result = await supabase.functions.invoke('create-campaign', { body });
+        data = result.data;
+        error = result.error;
+      } catch (thrown: any) {
+        // invoke threw (usually a token/session refresh failure). A dead session
+        // is terminal; anything else is treated as transient and retried.
+        const m = thrown?.message || '';
+        if (/Session expired|log in|Invalid Refresh Token|refresh_token/i.test(m)) throw sessionExpired();
+        lastTransient = m || 'network error';
+        if (attempt < MAX_ATTEMPTS) { await sleep(400 * attempt); continue; }
+        throw new Error('Unable to publish right now. Please check your connection and try again.');
       }
-      throw new Error('Unable to process campaign. Please try again.');
+
+      // Some functions also surface a 200-with-{error} body — guard against the
+      // happy path swallowing that. A real success has no error and has data.
+      if (!error) {
+        const bodyErr = (data && typeof data === 'object' && (data as any).error) ? String((data as any).error) : '';
+        if (!bodyErr) return data;
+        if (/Unauthorized|expired/i.test(bodyErr)) throw sessionExpired();
+        throw new Error(bodyErr);
+      }
+
+      // Read the server's JSON error body (where create-campaign puts its
+      // human-readable message + moderation field) and the HTTP status to
+      // classify the failure.
+      let serverError = '';
+      let moderation: any = null;
+      try { const b = await error.context?.json?.(); serverError = b?.error || ''; moderation = b?.moderation || null; } catch { /* ignore */ }
+      const status: number | undefined = error?.context?.status;
+
+      if (/Unauthorized|expired/i.test(serverError)) throw sessionExpired();
+
+      // Terminal 4xx business errors — surface immediately, do not retry.
+      const isTerminal4xx = typeof status === 'number' && status >= 400 && status < 500;
+      const looksTerminal = /subscription|inappropriate|sexual|hateful|threat|guidelines|moderation|required|re-select|not found|mismatch|must be/i.test(serverError);
+      if ((isTerminal4xx || looksTerminal) && serverError) {
+        const e: any = new Error(serverError);
+        if (moderation?.field) { e.isModerationBlock = true; e.moderationField = moderation.field; }
+        throw e;
+      }
+
+      // Transient (network / 5xx / gate "try again") — retry with backoff. The
+      // idempotency key makes this safe even if an earlier attempt did insert.
+      lastTransient = serverError || error?.message || 'transient error';
+      if (attempt < MAX_ATTEMPTS) { await sleep(400 * attempt); continue; }
+      throw new Error(serverError || 'Unable to publish right now. Please try again.');
     }
-    return data;
+
+    throw new Error(lastTransient || 'Unable to publish. Please try again.');
   },
 
   // Calls Edge Function for Merchant's OWN campaign updates

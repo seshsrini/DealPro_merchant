@@ -1,5 +1,6 @@
 
 import { supabase } from "./supabaseClient";
+import { addCampaignService } from "./addCampaignService";
 
 export const dealOfDayService = {
   /**
@@ -39,32 +40,12 @@ export const dealOfDayService = {
       is_deal_of_the_day: true, // Force this to TRUE for Deal of the Day
     };
 
-    console.log('[dealOfDayService] Creating Deal of the Day with payload:', payload);
-
-    const { data, error } = await supabase.functions.invoke('create-campaign', {
-      body: payload,
-    });
-
-    if (error) {
-      console.error('[dealOfDayService] Failed to create Deal of the Day:', error);
-      // Try to extract moderation field info from the error response body
-      try {
-        const body = await (error as any).context?.json?.();
-        if (body?.moderation?.field) {
-          const modErr = new Error(body.error || 'Content moderation failed') as any;
-          modErr.isModerationBlock = true;
-          modErr.moderationField = body.moderation.field;
-          throw modErr;
-        }
-        if (body?.error) throw new Error(body.error);
-      } catch (parseErr: any) {
-        if (parseErr.isModerationBlock) throw parseErr;
-      }
-      throw new Error('Unable to process deal. Please try again.');
-    }
-
-    console.log('[dealOfDayService] Successfully created Deal of the Day:', data);
-    return data;
+    // Delegate to the hardened campaign creator: it carries the idempotency key
+    // + transient-retry logic so a DOTD publish never fails on a network blip /
+    // cold start / transient 5xx, and it preserves the moderation-field metadata
+    // (isModerationBlock / moderationField) that the wizard uses to highlight the
+    // offending field.
+    return addCampaignService.createCampaign(payload);
   },
 
   /**
