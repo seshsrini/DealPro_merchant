@@ -1,3 +1,11 @@
+-- ⚠️ SAMPLE / THROWAWAY DATA — DO NOT RUN AGAINST A LIVE PROJECT.
+-- These are placeholder tiers (basic ₹999 / pro ₹2499 / premium ₹4999) that do
+-- NOT match the real DealPro plan set (see scripts/seed-data.sql:
+-- basic_monthly ₹199→3 deals, etc.). Running this inserts a stray 'basic' tier
+-- with max_campaigns_per_month = 5 that shows up as a "5 max deals" plan card.
+-- If you've already run it, use supabase/migrations/normalize_tier_deal_limits.sql
+-- to find and deactivate the strays.
+--
 -- Insert sample subscription tiers for DealPro merchants
 -- Run this in your Supabase SQL Editor
 
