@@ -63,6 +63,36 @@ async function verifySignature(
   return diff === 0;
 }
 
+// Supabase edge runtime exposes EdgeRuntime.waitUntil for background tasks.
+// @ts-ignore
+declare const EdgeRuntime: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+
+// Best-effort merchant notification: in-app log + device push via
+// send-merchant-push. Never throws and never blocks the caller.
+function notifyMerchant(admin: any, merchantId: string, type: string, title: string, bodyText: string) {
+  const task = (async () => {
+    try {
+      await admin.from('notification_logs').insert({
+        merchant_id: merchantId, notification_type: type, channel: 'in_app',
+        subject: title, body: bodyText, status: 'sent',
+      });
+    } catch (_) { /* in-app log is best-effort */ }
+    try {
+      const url = Deno.env.get('SUPABASE_URL');
+      const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (url && key) {
+        await fetch(`${url}/functions/v1/send-merchant-push`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ merchant_id: merchantId, title, body: bodyText, data: { type } }),
+        });
+      }
+    } catch (_) { /* push is best-effort */ }
+  })();
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(task);
+  return task;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ error: 'POST only' }, 405);
@@ -126,7 +156,7 @@ Deno.serve(async (req) => {
   // ---- Tier lookup (for the recurring amount) -------------------------------
   const { data: tier } = await supabaseAdmin
     .from('subscription_tiers')
-    .select('tier_key, subscription_fee')
+    .select('tier_key, tier_name, subscription_fee')
     .eq('tier_key', tier_key)
     .maybeSingle();
 
@@ -161,6 +191,17 @@ Deno.serve(async (req) => {
     console.error('[verify-subscription] DB upsert failed', upsertErr);
     return jsonResponse({ error: `DB write failed: ${upsertErr.message}` }, 500);
   }
+
+  // Confirm the web-checkout completion (in-app + push). This is the ONLY push
+  // for a fresh subscribe / frequency-switch upgrade re-subscribe — the webhook's
+  // first subscription.charged won't fire the renewal push (it's gated to a prior
+  // 'active' status, and this row is pending_activation).
+  const tierLabel = tier?.tier_name ?? tier_key;
+  notifyMerchant(
+    supabaseAdmin, merchant_id, 'subscription_activated',
+    'Subscription confirmed 🎉',
+    `Payment received — your DealPro ${tierLabel} plan is now active. You're all set.`,
+  );
 
   return jsonResponse({ success: true, razorpay_subscription_id });
 });
