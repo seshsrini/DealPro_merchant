@@ -367,7 +367,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
           <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
             {isDotdMode ? t('m_dotd_title') : t('m_my_campaigns')}
           </h1>
-          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+          <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
             {isDotdMode ? t('m_dotd_feature') : t('m_create_manage_deals')}
           </p>
         </div>
@@ -388,12 +388,12 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 <Megaphone className="w-5 h-5 text-blue-500" />
               </div>
               <div>
-                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_campaigns')}</p>
+                <p className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_campaigns')}</p>
                 <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   <span className={campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? 'text-rose-500' : 'text-emerald-500'}>
                     {campaignUsage.campaigns_used}
                   </span>
-                  <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>/{campaignUsage.campaigns_limit}</span>
+                  <span className={isDark ? 'text-slate-300' : 'text-slate-900'}>/{campaignUsage.campaigns_limit}</span>
                 </p>
               </div>
             </div>
@@ -402,12 +402,12 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 <Zap className="w-5 h-5 text-amber-500" />
               </div>
               <div>
-                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_deal_of_day')}</p>
+                <p className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_deal_of_day')}</p>
                 <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   <span className={campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit ? 'text-rose-500' : 'text-emerald-500'}>
                     {campaignUsage.dotd_used}
                   </span>
-                  <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>/{campaignUsage.dotd_limit}</span>
+                  <span className={isDark ? 'text-slate-300' : 'text-slate-900'}>/{campaignUsage.dotd_limit}</span>
                 </p>
               </div>
             </div>
@@ -497,7 +497,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-            <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_auto_refresh')}</span>
+            <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_auto_refresh')}</span>
           </div>
         </div>
 
@@ -515,7 +515,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 className={`flex-1 py-2 rounded-md text-xs font-medium transition-all ${
                   activeListTab === tab.key
                     ? 'bg-slate-900 text-white'
-                    : isDark ? 'text-slate-400' : 'text-slate-500'
+                    : isDark ? 'text-slate-300' : 'text-slate-900'
                 }`}
               >
                 {tab.label} ({count})
@@ -530,7 +530,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
         ) : filteredDeals.length === 0 ? (
           <div className={`text-center py-16 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
             <Megaphone className={`w-8 h-8 mx-auto mb-3 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
-            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_no_campaigns_category')}</p>
+            <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_no_campaigns_category')}</p>
             <button
               onClick={handleNewDeal}
               className="text-xs font-medium text-blue-500 mt-2"
@@ -673,7 +673,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
 
                       <div className="grid grid-cols-3 gap-2 mb-3">
                         <div>
-                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_expected_claims')}</label>
+                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_expected_claims')}</label>
                           <input
                             type="number"
                             placeholder="100"
@@ -685,7 +685,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                           />
                         </div>
                         <div>
-                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_avg_spend')}</label>
+                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_avg_spend')}</label>
                           <input
                             type="number"
                             placeholder="500"
@@ -697,7 +697,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                           />
                         </div>
                         <div>
-                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_margin_pct')}</label>
+                          <label className={`text-[9px] font-medium block mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_margin_pct')}</label>
                           <input
                             type="number"
                             placeholder="20"
@@ -713,7 +713,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                       {roiData && roiData.projectedRevenue > 0 && (
                         <div className={`grid grid-cols-2 gap-2 pt-3 border-t ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
                           <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
-                            <p className={`text-[10px] font-medium mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_projected_revenue')}</p>
+                            <p className={`text-[10px] font-medium mb-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_projected_revenue')}</p>
                             <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Rs.{Math.round(roiData.projectedRevenue).toLocaleString('en-IN')}</p>
                           </div>
                           <div className={`p-3 rounded-lg ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
@@ -849,7 +849,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
             {/* Content — matches consumer CampaignDetails exactly */}
             <div className="px-4 py-6">
               {/* Store name */}
-              <p className={`text-xs font-normal mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              <p className={`text-xs font-normal mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                 {deal.shopName}
               </p>
 
@@ -883,7 +883,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                           : `Delivery available within ${(deal as any).delivery_radius_km} km`
                         : 'Delivery available — contact store'}
                     </p>
-                    <p className={`text-[11px] mt-0.5 leading-snug ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <p className={`text-[11px] mt-0.5 leading-snug ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                       Delivered by the merchant or their partner; DealPro is not liable.
                     </p>
                   </div>
@@ -899,7 +899,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                     </svg>
                   ))}
                 </div>
-                <span className={`text-sm font-normal ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                <span className={`text-sm font-normal ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   {(deal as any).averageRating > 0
                     ? `${((deal as any).averageRating).toFixed(1)} (${(deal as any).ratingCount || 0} reviews)`
                     : 'No reviews yet'}
@@ -912,7 +912,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                   {getLocalizedText(deal.localized_offer, deal.offerValue)}
                 </p>
                 {deal.end_date && (
-                  <p className={`text-sm font-normal ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  <p className={`text-sm font-normal ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                     Valid till {formatDateUTC(deal.end_date)}
                   </p>
                 )}
@@ -977,28 +977,28 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 <div className={`px-4 py-4 space-y-3 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
                   {deal.shopName && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Store Name</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Store Name</p>
                       <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{deal.shopName}</p>
                     </div>
                   )}
                   {deal.address && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Address</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Address</p>
                       <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{deal.address}</p>
                     </div>
                   )}
                   {deal.landmark && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Landmark</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Landmark</p>
                       <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{deal.landmark}</p>
                     </div>
                   )}
                   {(deal as any).storePhone && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Phone</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Phone</p>
                       <a href={`tel:${(deal as any).storePhone}`} className="text-sm text-blue-500 font-medium">{(deal as any).storePhone}</a>
                       {(deal as any).storePhoneAlt && (
-                        <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                           {' / '}
                           <a href={`tel:${(deal as any).storePhoneAlt}`} className="text-blue-500 font-medium">{(deal as any).storePhoneAlt}</a>
                         </span>
@@ -1007,13 +1007,13 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                   )}
                   {(deal as any).storeHrs && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Store Hours</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Store Hours</p>
                       <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{(deal as any).storeHrs}</p>
                     </div>
                   )}
                   {deal.start_date && deal.end_date && (
                     <div>
-                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Campaign Period</p>
+                      <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Campaign Period</p>
                       <p className={`text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{formatDateUTC(deal.start_date)} — {formatDateUTC(deal.end_date)}</p>
                     </div>
                   )}
@@ -1027,21 +1027,21 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
 
               {/* Merchant-only: Campaign Performance */}
               <div className={`rounded-xl border p-4 mb-4 ${isDark ? 'border-slate-700 bg-slate-800/50' : 'border-slate-200 bg-slate-50'}`}>
-                <p className={`text-[10px] font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   Campaign Performance
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="text-center">
                     <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{perCampaignClickCounts[deal.campaign_id] || 0}</p>
-                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_clicks')}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_clicks')}</p>
                   </div>
                   <div className="text-center">
                     <p className={`text-lg font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{perCampaignClaimClicks[deal.campaign_id] || 0}</p>
-                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Claims</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Claims</p>
                   </div>
                   <div className="text-center">
                     <p className={`text-lg font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{perCampaignRedemptionCounts[deal.campaign_id] || 0}</p>
-                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_redeemed')}</p>
+                    <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_redeemed')}</p>
                   </div>
                 </div>
               </div>
@@ -1095,7 +1095,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Pick a poster design
                 </h3>
-                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   A4 portrait, high-resolution. Print and stick in your store.
                 </p>
               </div>
@@ -1130,14 +1130,14 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                   <div className={`text-sm font-bold mt-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {tpl.label}
                   </div>
-                  <div className={`text-[11px] leading-snug mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <div className={`text-[11px] leading-snug mt-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                     {tpl.description}
                   </div>
                 </button>
               ))}
             </div>
 
-            <div className={`px-5 pb-6 pt-1 text-[11px] leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            <div className={`px-5 pb-6 pt-1 text-[11px] leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
               Tip: you'll get a preview to proof-read before the print dialog opens.
             </div>
           </div>
@@ -1162,7 +1162,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Proof-read your poster
                 </h3>
-                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   Check the wording fits cleanly before you print.
                 </p>
               </div>
@@ -1260,7 +1260,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 <h3 className={`text-lg font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   {t('m_deal_renewed')}
                 </h3>
-                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   {t('m_deal_live')}
                 </p>
               </div>
@@ -1274,7 +1274,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                     <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {t('m_renew_deal')}
                     </h3>
-                    <p className={`text-xs truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <p className={`text-xs truncate ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                       {renewDeal.deal_heading || renewDeal.details}
                     </p>
                   </div>
@@ -1282,7 +1282,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
 
                 <div className="space-y-3 mb-5">
                   <div>
-                    <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                       {t('m_start_date')}
                     </label>
                     <input
@@ -1298,7 +1298,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                     />
                   </div>
                   <div>
-                    <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <label className={`text-xs font-medium block mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                       {t('m_end_date')}
                     </label>
                     <input
