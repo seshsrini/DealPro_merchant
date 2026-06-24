@@ -5,7 +5,7 @@ import { AppView, Deal } from './types';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { merchantService } from './services/merchantService';
 import { mDashboardService } from './services/mDashboardService';
-import { resilient } from './services/resilientData';
+import { resilient, peekCache } from './services/resilientData';
 import { useResumeRefetch } from './services/useResumeRefetch';
 import { perfTimer } from './services/perfLogger';
 import { NotificationBadge } from './components/NotificationBadge';
@@ -132,7 +132,16 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
 
-  const [campaignUsage, setCampaignUsage] = useState({
+  // Seed from cache so the New Deal / DOTD gates reflect the LAST-KNOWN usage on
+  // the very first render. Without this the state starts at 0/0 (limit unknown),
+  // and since the "maxed" gate needs campaigns_limit > 0, a maxed-out merchant
+  // briefly saw the button ENABLED on return until the fresh usage loaded.
+  // Shared with My Campaigns so whichever screen last fetched usage seeds the
+  // other — a merchant who just maxed out sees the gate reflect it everywhere.
+  const usageCacheKey = `campaign_usage_${user?.id}`;
+  const [campaignUsage, setCampaignUsage] = useState(() => peekCache<{
+    campaigns_used: number; campaigns_limit: number; dotd_used: number; dotd_limit: number; has_subscription: boolean;
+  }>(usageCacheKey) || {
     campaigns_used: 0,
     campaigns_limit: 0,
     dotd_used: 0,
@@ -186,7 +195,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     try {
       const usage = await resilient(
         () => merchantSubscriptionService.getCampaignUsage(user.id),
-        { cacheKey: `dash_usage_${user.id}` },
+        { cacheKey: usageCacheKey },
       );
       setCampaignUsage(usage);
       timer.end('campaign_usage_done');
@@ -194,7 +203,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
       console.warn('[MerchantDashboard] usage load failed (kept last-good):', err);
       timer.end('error');
     }
-  }, [user?.id]);
+  }, [user?.id, usageCacheKey]);
 
   useEffect(() => { loadCampaignUsage(); }, [loadCampaignUsage, deals]);
 
