@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AppView,
   SubscriptionTier,
@@ -699,9 +700,9 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       )}
 
       {/* ═══ Cancel Subscription Modal ═══ */}
-      {showCancelModal && (
+      {showCancelModal && createPortal(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
-          <div className={`max-w-sm w-full rounded-2xl p-6 space-y-4 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+          <div className={`max-w-sm w-full max-h-[90vh] overflow-y-auto rounded-2xl p-6 space-y-4 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
             <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('m_cancel_sub')}</h3>
 
             <div className={`rounded-xl p-4 border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
@@ -780,13 +781,14 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ═══ Confirmation Modal ═══ */}
-      {showConfirmation && tierToConfirm && (
+      {showConfirmation && tierToConfirm && createPortal(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6">
-          <div className={`max-w-md w-full rounded-2xl p-6 space-y-5 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+          <div className={`max-w-md w-full max-h-[90vh] overflow-y-auto rounded-2xl p-6 space-y-5 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
             <div className="text-center">
               <div className={`w-14 h-14 mx-auto mb-4 rounded-xl flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
                 <BadgeDollarSign className="w-7 h-7 text-blue-500" />
@@ -863,7 +865,8 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
