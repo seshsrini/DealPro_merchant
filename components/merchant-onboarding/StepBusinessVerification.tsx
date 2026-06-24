@@ -218,22 +218,22 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   };
 
   // Validation
-  // A document business type must be VERIFIED against the registry (not just
-  // format-valid + unique), and the verified value must match the CURRENT input
-  // (so a merchant can't verify one number and then edit it). This blocks
-  // proceeding when verification failed / was never run.
+  // GST is the only document we verify against the live registry: it must be
+  // VERIFIED (and the verified value must match the CURRENT input, so a merchant
+  // can't verify one number and then edit it). Udyam / FSSAI / Trade License are
+  // accepted on format validity + uniqueness only (no realtime registry check).
   const isValid = (() => {
     if (!businessType) return false;
     if (businessType === 'none') return true;
-    const vr = verifyResult[businessType];
-    const verified = !!vr && vr.ok === true;
     if (businessType === 'gstin') {
+      const vr = verifyResult.gstin;
+      const verified = !!vr && vr.ok === true;
       return isGstValid(gstinValue) && gstinTaken === false && isPanValid(panValue) && panTaken === false
         && verified && vr!.value === gstinValue;
     }
-    if (businessType === 'udyam') return isUdyamValid(udyamValue) && udyamTaken === false && verified && vr!.value === udyamValue;
-    if (businessType === 'fssai') return isFssaiValid(fssaiValue) && fssaiTaken === false && verified && vr!.value === fssaiValue;
-    if (businessType === 'trade_license') return isTradeLicenseValid(tradeLicenseValue) && tradeLicenseTaken === false && verified && vr!.value === tradeLicenseValue;
+    if (businessType === 'udyam') return isUdyamValid(udyamValue) && udyamTaken === false;
+    if (businessType === 'fssai') return isFssaiValid(fssaiValue) && fssaiTaken === false;
+    if (businessType === 'trade_license') return isTradeLicenseValid(tradeLicenseValue) && tradeLicenseTaken === false;
     return false;
   })();
 
@@ -322,7 +322,6 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
             </div>
             {udyamValue && !isUdyamValid(udyamValue) && <p className="text-xs text-red-500 mt-1">Format: UDYAM-XX-00-0000000</p>}
             {udyamTaken === true && <p className="text-xs text-red-500 mt-1">This Udyam number is already registered</p>}
-            <VerifyButton docType="udyam" value={udyamValue} valid={isUdyamValid(udyamValue)} />
           </div>
         )}
 
@@ -337,7 +336,6 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
             </div>
             {fssaiValue && !isFssaiValid(fssaiValue) && <p className="text-xs text-red-500 mt-1">Must be exactly 14 digits</p>}
             {fssaiTaken === true && <p className="text-xs text-red-500 mt-1">This FSSAI number is already registered</p>}
-            <VerifyButton docType="fssai" value={fssaiValue} valid={isFssaiValid(fssaiValue)} />
           </div>
         )}
 
@@ -352,7 +350,6 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
             </div>
             {tradeLicenseValue && !isTradeLicenseValid(tradeLicenseValue) && <p className="text-xs text-red-500 mt-1">Format: XX/YYYY/NNNNNN</p>}
             {tradeLicenseTaken === true && <p className="text-xs text-red-500 mt-1">This trade license is already registered</p>}
-            <VerifyButton docType="trade_license" value={tradeLicenseValue} valid={isTradeLicenseValid(tradeLicenseValue)} />
           </div>
         )}
       </div>
