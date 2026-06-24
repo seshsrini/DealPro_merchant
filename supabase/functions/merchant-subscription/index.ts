@@ -57,6 +57,38 @@ function cancelRazorpaySubscription(subId: string, atCycleEnd: boolean) {
   });
 }
 
+// Supabase edge runtime exposes EdgeRuntime.waitUntil for background tasks.
+// @ts-ignore
+declare const EdgeRuntime: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+
+// Best-effort merchant notification: writes an in-app log + fires a device push
+// via send-merchant-push. Never throws and never blocks the caller — a plan
+// change or cancel must succeed even if delivery fails. Backgrounded with
+// EdgeRuntime.waitUntil so the function isn't torn down mid-send.
+function notifyMerchant(admin: any, merchantId: string, type: string, title: string, bodyText: string) {
+  const task = (async () => {
+    try {
+      await admin.from('notification_logs').insert({
+        merchant_id: merchantId, notification_type: type, channel: 'in_app',
+        subject: title, body: bodyText, status: 'sent',
+      });
+    } catch (_) { /* in-app log is best-effort */ }
+    try {
+      const url = Deno.env.get('SUPABASE_URL');
+      const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (url && key) {
+        await fetch(`${url}/functions/v1/send-merchant-push`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ merchant_id: merchantId, title, body: bodyText, data: { type } }),
+        });
+      }
+    } catch (_) { /* push is best-effort */ }
+  })();
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(task);
+  return task;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -257,6 +289,17 @@ Deno.serve(async (req) => {
         ({ error: updErr } = await supabaseAdmin.from('merchant_subscriptions').update(patch).eq('id', sub.id));
       }
       if (updErr) throw updErr;
+
+      // Confirm the plan change (in-app + push). Upgrades are instant; downgrades
+      // are scheduled for the next billing date.
+      notifyMerchant(
+        supabaseAdmin, user.id,
+        isUpgrade ? 'subscription_upgraded' : 'subscription_downgraded',
+        isUpgrade ? 'Plan upgraded 🚀' : 'Plan change scheduled',
+        isUpgrade
+          ? `You're now on ${newTier.tier_name}. Your new benefits are active right away.`
+          : `You'll move to ${newTier.tier_name} on your next billing date — you keep your current plan until then.`,
+      );
 
       return new Response(JSON.stringify({
         success: true,
@@ -655,6 +698,16 @@ Deno.serve(async (req) => {
       }
 
       console.log(`[manage-subscription] Subscription ${activeSub.id} cancelled for merchant ${user.id}, reason: ${reason}`);
+
+      // Confirm the cancellation (in-app + push) — they keep access until period end.
+      const endLabel = activeSub.current_period_end
+        ? new Date(activeSub.current_period_end as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        : 'the end of your billing period';
+      notifyMerchant(
+        supabaseAdmin, user.id, 'subscription_cancelled',
+        'Subscription cancelled',
+        `Your plan is set to cancel on ${endLabel}. You'll keep full access until then.`,
+      );
 
       return new Response(
         JSON.stringify({

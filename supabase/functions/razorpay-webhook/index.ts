@@ -6,6 +6,36 @@ declare const Deno: {
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.49.1';
 
+// Supabase edge runtime exposes EdgeRuntime.waitUntil for background tasks.
+// @ts-ignore
+declare const EdgeRuntime: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+
+// Best-effort merchant notification: in-app log + device push via
+// send-merchant-push. Never throws and never blocks the webhook ack.
+function notifyMerchant(admin: any, merchantId: string, type: string, title: string, bodyText: string) {
+  const task = (async () => {
+    try {
+      await admin.from('notification_logs').insert({
+        merchant_id: merchantId, notification_type: type, channel: 'in_app',
+        subject: title, body: bodyText, status: 'sent',
+      });
+    } catch (_) { /* in-app log is best-effort */ }
+    try {
+      const url = Deno.env.get('SUPABASE_URL');
+      const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (url && key) {
+        await fetch(`${url}/functions/v1/send-merchant-push`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ merchant_id: merchantId, title, body: bodyText, data: { type } }),
+        });
+      }
+    } catch (_) { /* push is best-effort */ }
+  })();
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(task);
+  return task;
+}
+
 // Razorpay subscription webhook handler.
 //
 // Deploy with JWT verification OFF (Razorpay can't send a Supabase JWT):
@@ -301,6 +331,19 @@ Deno.serve(async (req: Request) => {
     console.error('[razorpay-webhook] Upsert failed:', upsertErr);
     // Returning 500 makes Razorpay retry — desired so we don't drop state.
     return new Response('DB error', { status: 500 });
+  }
+
+  // Notify the merchant on the two outcomes they care about: a successful renewal
+  // (a SUBSEQUENT cycle — the first charge is the initial subscribe, already
+  // confirmed in-app, so gate on the prior status being active) and a halt
+  // (Razorpay's retries exhausted → payment failed → access revoked).
+  if (event.event === 'subscription.charged' && existingSub?.status === 'active') {
+    const amt = (payEntity && typeof payEntity.amount === 'number') ? ` for ₹${payEntity.amount / 100}` : '';
+    notifyMerchant(supabase, merchantId, 'payment_success', 'Subscription renewed',
+      `Your DealPro plan renewed${amt}. You're set for another month.`);
+  } else if (event.event === 'subscription.halted') {
+    notifyMerchant(supabase, merchantId, 'payment_failed', 'Payment failed — action needed',
+      'We could not renew your DealPro subscription after several attempts. Please update your payment method to keep your deals live.');
   }
 
   // Billing ledger — record the actual charge so revenue/billing analytics
