@@ -6,6 +6,9 @@ declare const Deno: {
   };
   serve: (handler: (req: Request) => Promise<Response> | Response) => void;
 };
+// Supabase edge runtime exposes EdgeRuntime.waitUntil for background tasks.
+// @ts-ignore
+declare const EdgeRuntime: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.49.1';
 
@@ -227,6 +230,26 @@ Deno.serve(async (req) => {
 
       throw error;
     }
+
+    // Best-effort: push the merchant that a customer just claimed their deal.
+    // Real-time engagement they can't otherwise see. Never blocks/fails the
+    // claim — runs in the background via EdgeRuntime.waitUntil.
+    try {
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (serviceKey) {
+        const push = fetch(`${supabaseUrl}/functions/v1/send-merchant-push`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            merchant_id: merchantId,
+            title: isDealOfDay ? 'New Deal of the Day claim 🎉' : 'New claim on your deal 🎉',
+            body: 'A customer just claimed one of your deals. Tap to view your campaigns.',
+            data: { type: 'new_claim', campaign_id: String(campaignId) },
+          }),
+        }).then(() => {}, () => {});
+        if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(push);
+      }
+    } catch (_) { /* best-effort push */ }
 
     return new Response(JSON.stringify({ claimNo: data.claim_no, message: 'Claim created successfully' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
