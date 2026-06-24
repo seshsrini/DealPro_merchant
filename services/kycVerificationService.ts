@@ -11,6 +11,14 @@ export interface KycVerifyResult {
   data?: unknown;
   mock?: boolean;
   error?: string;
+  /**
+   * True when we could NOT get a definitive answer from the registry/provider
+   * (transient 5xx / network / cold start, persisting after retries). Lets the
+   * UI allow the merchant through with the document flagged unverified, instead
+   * of hard-blocking onboarding on an outage. False for a definitive answer
+   * (verified, not-found, or name mismatch).
+   */
+  unreachable?: boolean;
   /** GST only: whether the registry's legal name matched the name supplied. */
   legalNameMatch?: boolean | null;
   /** GST only: the legal name returned by the registry. */
@@ -44,7 +52,7 @@ export const kycVerificationService = {
         if (!error) {
           // Function answered. A body-level error is a definitive business result
           // (e.g. number not found / name mismatch) — surface it, don't retry.
-          if (data?.error) return { verified: false, error: data.error };
+          if (data?.error) return { verified: false, error: data.error, unreachable: false };
           return {
             verified: !!data?.verified,
             data: data?.data,
@@ -52,6 +60,7 @@ export const kycVerificationService = {
             legalNameMatch: data?.legal_name_match ?? null,
             registryLegalName: data?.registry_legal_name ?? null,
             registryNames: Array.isArray(data?.registry_names) ? data.registry_names : undefined,
+            unreachable: false,
           };
         }
 
@@ -63,20 +72,21 @@ export const kycVerificationService = {
 
         // A 4xx with a real message is a definitive answer — return it as-is.
         if (typeof status === "number" && status >= 400 && status < 500 && bodyErr) {
-          return { verified: false, error: bodyErr };
+          return { verified: false, error: bodyErr, unreachable: false };
         }
 
-        // Transient (5xx / network / empty body) — retry with backoff.
+        // Transient (5xx / network / empty body) — retry with backoff, then
+        // report as unreachable so the UI can allow-with-review.
         lastMsg = bodyErr || FRIENDLY;
         if (attempt < MAX_ATTEMPTS) { await sleep(500 * attempt); continue; }
-        return { verified: false, error: lastMsg };
+        return { verified: false, error: lastMsg, unreachable: true };
       } catch (e) {
         // invoke threw (network / token). Retry, then fall back to friendly text.
         lastMsg = FRIENDLY;
         if (attempt < MAX_ATTEMPTS) { await sleep(500 * attempt); continue; }
-        return { verified: false, error: lastMsg };
+        return { verified: false, error: lastMsg, unreachable: true };
       }
     }
-    return { verified: false, error: lastMsg };
+    return { verified: false, error: lastMsg, unreachable: true };
   },
 };

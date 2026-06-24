@@ -61,7 +61,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   const [checking, setChecking] = useState<string | null>(null);
   // Government-database verification (Verify button) per document.
   const [verifying, setVerifying] = useState<string | null>(null);
-  const [verifyResult, setVerifyResult] = useState<Record<string, { ok: boolean; value: string; msg: string; nameMismatch?: boolean }>>({});
+  const [verifyResult, setVerifyResult] = useState<Record<string, { ok: boolean; value: string; msg: string; nameMismatch?: boolean; unreachable?: boolean }>>({});
 
   const debounceRef = useRef<number | null>(null);
   // Track the original values so we can skip duplicate check for unchanged data
@@ -156,12 +156,17 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
         ? r.registryNames
         : (r.registryLegalName ? [r.registryLegalName] : []))
         .map((n) => `"${n}"`).join(' or ');
+      // A provider outage (unreachable) is not a rejection — let the merchant
+      // continue with GST flagged unverified for later review.
+      const unreachable = r.unreachable === true && r.legalNameMatch !== false;
       const failMsg = r.legalNameMatch === false
         ? `Name doesn't match this GST${registered ? ` — it's registered as ${registered}` : ''}`
-        : (r.error || 'Could not verify');
+        : unreachable
+          ? "Couldn't reach the GST registry — you can continue; we'll verify this later."
+          : (r.error || 'Could not verify');
       setVerifyResult((prev) => ({
         ...prev,
-        [docType]: { ok: r.verified, value, msg: r.verified ? (r.mock ? 'Verified ✓ (test mode)' : 'Verified ✓') : failMsg, nameMismatch: r.legalNameMatch === false },
+        [docType]: { ok: r.verified, value, msg: r.verified ? (r.mock ? 'Verified ✓ (test mode)' : 'Verified ✓') : failMsg, nameMismatch: r.legalNameMatch === false, unreachable },
       }));
     } finally {
       setVerifying(null);
@@ -193,7 +198,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
           {isV ? 'Verifying…' : show && res.ok ? 'Re-verify' : 'Verify'}
         </button>
         {show && (
-          <span className={`text-xs font-medium ${res.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+          <span className={`text-xs font-medium ${res.ok ? 'text-emerald-600' : res.unreachable ? 'text-amber-600' : 'text-red-500'}`}>
             {res.msg}
             {!res.ok && res.nameMismatch && onEditLegalName && (
               <button
@@ -218,18 +223,22 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   };
 
   // Validation
-  // GST is the only document we verify against the live registry: it must be
-  // VERIFIED (and the verified value must match the CURRENT input, so a merchant
-  // can't verify one number and then edit it). Udyam / FSSAI / Trade License are
-  // accepted on format validity + uniqueness only (no realtime registry check).
+  // GST is the only document we verify against the live registry. The merchant
+  // must run Verify for the CURRENT GSTIN (so they can't verify one number then
+  // edit it), and it must either come back VERIFIED or be UNREACHABLE (provider
+  // outage → allowed through, flagged unverified for review). A definitive
+  // rejection — name mismatch or unknown GSTIN — still blocks. Udyam / FSSAI /
+  // Trade License are accepted on format validity + uniqueness only.
   const isValid = (() => {
     if (!businessType) return false;
     if (businessType === 'none') return true;
     if (businessType === 'gstin') {
+      const okFormat = isGstValid(gstinValue) && gstinTaken === false && isPanValid(panValue) && panTaken === false;
+      if (!okFormat) return false;
       const vr = verifyResult.gstin;
-      const verified = !!vr && vr.ok === true;
-      return isGstValid(gstinValue) && gstinTaken === false && isPanValid(panValue) && panTaken === false
-        && verified && vr!.value === gstinValue;
+      if (!vr || vr.value !== gstinValue) return false; // must have run Verify for this exact GSTIN
+      if (vr.nameMismatch) return false;                // definitive rejection — block
+      return vr.ok === true || vr.unreachable === true; // verified, or provider unreachable
     }
     if (businessType === 'udyam') return isUdyamValid(udyamValue) && udyamTaken === false;
     if (businessType === 'fssai') return isFssaiValid(fssaiValue) && fssaiTaken === false;
