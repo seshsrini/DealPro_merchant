@@ -4,6 +4,7 @@ import { floatIn } from './floatIn';
 import { getSchemaForCategory } from '../../data/formSchema';
 import { addCampaignService } from '../../services/addCampaignService';
 import { supabase } from '../../services/supabaseClient';
+import { toMerchantMessage } from '../../services/friendlyError';
 
 async function callManageProducts(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke('manage-products', { body });
@@ -186,7 +187,7 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
 
       onSaveSuccess();
     } catch (err: any) {
-      onSaveError('Unable to save product. Please try again.');
+      onSaveError(toMerchantMessage(err, { action: 'save your product', tag: '[ProductReview]' }));
     } finally {
       setSaving(false);
       setProgress(null);

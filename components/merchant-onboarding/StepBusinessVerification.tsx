@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ShieldCheck, Loader2, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { userService } from '../../services/userService';
 import { kycVerificationService, KycDocType } from '../../services/kycVerificationService';
+import { toMerchantMessage } from '../../services/friendlyError';
 import { floatIn } from './floatIn';
 
 // Validation regex — same as memberJoin.tsx
@@ -163,7 +164,9 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
         ? `Name doesn't match this GST${registered ? ` — it's registered as ${registered}` : ''}`
         : unreachable
           ? "Couldn't reach the GST registry — you can continue; we'll verify this later."
-          : (r.error || 'Could not verify');
+          // Safety net: a clear provider message (e.g. "GSTIN not found") shows as
+          // is; anything cryptic/internal becomes a friendly fallback, never raw.
+          : toMerchantMessage(r.error, { action: 'verify this number', tag: '[KYC]' });
       setVerifyResult((prev) => ({
         ...prev,
         [docType]: { ok: r.verified, value, msg: r.verified ? (r.mock ? 'Verified ✓ (test mode)' : 'Verified ✓') : failMsg, nameMismatch: r.legalNameMatch === false, unreachable },

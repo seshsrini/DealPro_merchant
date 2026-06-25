@@ -12,6 +12,7 @@ import { razorpayCheckoutService, isPaymentPending, clearPaymentPending } from '
 import { supabase } from './services/supabaseClient';
 import { resilient, peekCache } from './services/resilientData';
 import { useResumeRefetch } from './services/useResumeRefetch';
+import { toMerchantMessage } from './services/friendlyError';
 import { useTranslation } from './contexts/LanguageContext';
 import {
   Loader2,
@@ -130,7 +131,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       console.error('[MerchantSubscriptions] Tier fetch error:', err);
       // Only surface the error wall if we have nothing cached to show.
       if (!haveCachedTiers) {
-        setError('Unable to load subscription plans. Please try again.');
+        setError(toMerchantMessage(err, { action: 'load your plans', tag: '[Subscriptions]' }));
         setLoading(false);
         return;
       }
@@ -325,7 +326,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         }
       } catch (err) {
         console.error('[MerchantSubscriptions] change_tier failed:', err);
-        setError('Could not change your plan. Please try again.');
+        setError(toMerchantMessage(err, { action: 'change your plan', tag: '[Subscriptions]' }));
       }
       return;
     }
@@ -337,7 +338,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       });
     } catch (err) {
       console.error('[MerchantSubscriptions] Razorpay checkout open failed:', err);
-      setError('Could not open the payment page. Please try again.');
+      setError(toMerchantMessage(err, { action: 'open the payment page', tag: '[Subscriptions]' }));
     }
   };
 
@@ -356,7 +357,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       await razorpayCheckoutService.openCheckout({ tierKey, merchantId: user.id });
     } catch (err) {
       console.error('[MerchantSubscriptions] Autopay migration checkout failed:', err);
-      setError('Could not open the payment page. Please try again.');
+      setError(toMerchantMessage(err, { action: 'open the payment page', tag: '[Subscriptions]' }));
     }
   };
 
@@ -764,8 +765,8 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                       setError('Unable to cancel subscription. Please try again.');
                       setShowCancelModal(false);
                     }
-                  } catch {
-                    setError('Unable to cancel subscription. Please try again.');
+                  } catch (err) {
+                    setError(toMerchantMessage(err, { action: 'cancel your subscription', tag: '[Subscriptions]' }));
                     setShowCancelModal(false);
                   } finally {
                     setCancelling(false);

@@ -5,6 +5,7 @@ import { addCampaignService } from '../../services/addCampaignService';
 import { dealOfDayService } from '../../services/dealOfDayService';
 import { campaignOptimizerService, OptimizationResult } from '../../services/campaignOptimizerService';
 import { perfTimer } from '../../services/perfLogger';
+import { toMerchantMessage } from '../../services/friendlyError';
 import { useTranslation } from '../../contexts/LanguageContext';
 import { ensureFreshToken, supabase, recoverSessionOrSilentReauth } from '../../services/supabaseClient';
 import { biometricService } from '../../services/biometricService';
@@ -510,12 +511,7 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
       if (err.isModerationBlock && err.moderationField) {
         onModerationBlock(err.moderationField, err.message || 'This field contains content that violates our guidelines.');
       } else {
-        const msg = err?.message || '';
-        if (msg.includes('session') || msg.includes('Session') || msg.includes('log in')) {
-          onPublishError('Your session has expired. Please close and reopen the app.');
-        } else {
-          onPublishError(msg || 'Unable to publish. Please try again.');
-        }
+        onPublishError(toMerchantMessage(err, { action: 'publish your Deal of the Day', tag: '[StepDotdReview]' }));
       }
     } finally {
       setPublishing(false);
