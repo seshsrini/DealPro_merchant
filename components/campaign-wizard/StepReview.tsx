@@ -507,12 +507,24 @@ export const StepReview: React.FC<StepReviewProps> = ({
       onPublishSuccess();
     } catch (err: any) {
       timer.end('error');
-      const msg = err?.message || '';
-      if (msg.includes('session') || msg.includes('Session') || msg.includes('log in')) {
-        onPublishError('Your session has expired. Please close and reopen the app.');
+      const raw = (err?.message || '').trim();
+      const lc = raw.toLowerCase();
+      let friendly: string;
+      if (/session|expired|log in|unauthor|invalid token|jwt/.test(lc)) {
+        // Auth/token issue — reopening the app recovers the session.
+        friendly = 'Your session timed out. Please close and reopen the app, then publish again.';
+      } else if (raw && /subscription|inappropriate|sexual|hateful|threat|guidelines|moderation|image|video|photo|store|heading|offer|description|\bdate\b|category|go back|re-select|connection|network|try again/.test(lc)) {
+        // Already a clear, merchant-actionable message (moderation, missing field,
+        // image/upload, subscription, store, network) — show it as-is.
+        friendly = raw;
       } else {
-        onPublishError(msg || 'Unable to publish. Please try again.');
+        // Anything else — including internal/server validation strings that should
+        // never reach a merchant (e.g. an ID field they don't control). Never show
+        // the raw text; give a clear next step instead.
+        friendly = "We couldn't publish your deal just now. Please go back, double-check your deal details, and try again. If it keeps happening, close and reopen the app, then retry.";
+        if (raw) console.warn('[StepReview] Unmapped publish error surfaced to merchant:', raw);
       }
+      onPublishError(friendly);
     } finally {
       setPublishing(false);
       publishingRef.current = false;
