@@ -88,6 +88,9 @@ export const StepDescription: React.FC<StepDescriptionProps> = ({
   const [checking, setChecking] = useState(false);
   const [moderationError, setModerationError] = useState<string | null>(null);
   const [showPlaceholderHint, setShowPlaceholderHint] = useState(false);
+  // Remembers the description that existed BEFORE the last "Suggest" so the same
+  // button can flip to "Revert" and restore it (no extra screen real estate).
+  const [preSuggestValue, setPreSuggestValue] = useState<string | null>(null);
 
   const hasPlaceholder = /<[^>]+>/.test(plainText);
 
@@ -117,15 +120,25 @@ export const StepDescription: React.FC<StepDescriptionProps> = ({
     }
   }, [plainText, heading, offer, freeGifts, isBuyGetFree, t, onChange]);
 
-  // Manual regenerate — overwrites the current description with a freshly-built
-  // suggestion using the latest heading/offer values.
-  const handleRegenerate = () => {
+  // "Suggest" — snapshot the current text, then overwrite with a freshly-built
+  // suggestion from the latest heading/offer. The button then flips to "Revert".
+  const handleSuggest = () => {
     const suggested = buildSuggestedDescription({ heading, offer, freeGifts, isBuyGetFree, t });
     if (suggested) {
+      setPreSuggestValue(value);
       onChange(suggested);
       if (moderationError) setModerationError(null);
     }
   };
+  // "Revert" — restore the text that existed before the last suggestion and flip
+  // the button back to "Suggest".
+  const handleRevert = () => {
+    if (preSuggestValue === null) return;
+    onChange(preSuggestValue);
+    setPreSuggestValue(null);
+    if (moderationError) setModerationError(null);
+  };
+  const isReverting = preSuggestValue !== null;
   const canSuggest = !!((heading && heading.trim()) || (offer && offer.trim()));
 
   const handleContinue = async () => {
@@ -164,17 +177,21 @@ export const StepDescription: React.FC<StepDescriptionProps> = ({
         <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           {t('m_desc_hint')}
         </p>
-        {canSuggest && (
+        {(canSuggest || isReverting) && (
           <button
             type="button"
-            onClick={handleRegenerate}
+            onClick={isReverting ? handleRevert : handleSuggest}
             className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all active:scale-95 ${
-              isDark
-                ? 'bg-purple-500/15 text-purple-300 hover:bg-purple-500/25'
-                : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+              isReverting
+                ? (isDark
+                    ? 'bg-slate-600/30 text-slate-200 hover:bg-slate-600/40'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300')
+                : (isDark
+                    ? 'bg-purple-500/15 text-purple-300 hover:bg-purple-500/25'
+                    : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200')
             }`}
           >
-            {t('m_desc_regenerate')}
+            {isReverting ? t('m_desc_revert') : t('m_desc_regenerate')}
           </button>
         )}
       </div>

@@ -450,10 +450,16 @@ ALWAYS return the reason in English regardless of the input language.`,
   // store missing, dead session) are terminal and surfaced immediately — never
   // retried, since retrying can't change the outcome.
   createCampaign: async (d: any) => {
+    // Prefer the stable key the wizard attached to this in-flight deal (persisted in
+    // the draft). A re-publish after an error / close-reopen then sends the SAME key,
+    // so the server dedupes instead of inserting a duplicate. Callers that don't pass
+    // one fall back to a fresh key (still safe for the in-call retry loop below).
     const dedupKey =
-      (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
-        ? globalThis.crypto.randomUUID()
-        : `${d?.merchant_id || 'm'}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      (typeof d?.client_dedup_key === 'string' && d.client_dedup_key.length > 0)
+        ? d.client_dedup_key
+        : (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+          ? globalThis.crypto.randomUUID()
+          : `${d?.merchant_id || 'm'}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const body = { ...d, client_dedup_key: dedupKey };
 
     const MAX_ATTEMPTS = 4;

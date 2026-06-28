@@ -267,8 +267,23 @@ Deno.serve(async (req) => {
             isUpgrade ? 'now' : 'cycle_end',
           );
         } catch (rzpErr: any) {
-          console.error('[merchant-subscription] Razorpay plan update failed:', rzpErr?.message);
-          return new Response(JSON.stringify({ error: rzpErr?.message || 'Could not update your plan with Razorpay. Please try again.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 });
+          const rzpMsg = rzpErr?.message || '';
+          // Razorpay can't update a plan in place when the mandate is UPI AutoPay
+          // ("subscriptions cannot be updated when payment mode is upi") — the only
+          // way to switch is a fresh subscription. Fall back to the resubscribe flow
+          // (the app opens checkout; verify-subscription cancels the old sub once the
+          // new one is active) instead of failing. Same handling as a frequency switch.
+          if (/payment mode is upi|cannot be updated/i.test(rzpMsg)) {
+            return new Response(JSON.stringify({
+              success: true,
+              resubscribe: true,
+              tier_key: newTier.tier_key,
+              tier_name: newTier.tier_name,
+              message: `To switch to ${newTier.tier_name}, we'll set up a new subscription — your UPI AutoPay plan can't be changed in place. Continue to pay.`,
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+          }
+          console.error('[merchant-subscription] Razorpay plan update failed:', rzpMsg);
+          return new Response(JSON.stringify({ error: rzpMsg || 'Could not update your plan with Razorpay. Please try again.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 });
         }
       }
 
@@ -282,11 +297,24 @@ Deno.serve(async (req) => {
       patch.tier_change_locked_until = lockUntil;
       patch.updated_at = now.toISOString();
 
-      let { error: updErr } = await supabaseAdmin.from('merchant_subscriptions').update(patch).eq('id', sub.id);
-      // Resilience: if the lock column isn't present yet, save without it.
-      if (updErr && /tier_change_locked_until/i.test(updErr.message || '')) {
-        delete patch.tier_change_locked_until;
+      // Resilience: the lock + pending_* scheduling fields + total_recurring_amount
+      // are optional columns that may not exist in every environment yet. If the
+      // UPDATE fails because one is missing, drop just that column and retry — a
+      // plan change must NEVER hard-fail on a schema lag. (The migration adds these;
+      // this loop is the zero-tolerance safety net.) For an upgrade the critical
+      // field is plan_name, which always survives, so the new plan still applies.
+      const OPTIONAL_COLS = [
+        'tier_change_locked_until', 'pending_tier_id', 'pending_plan_name',
+        'pending_amount', 'pending_effective_date', 'total_recurring_amount',
+      ];
+      let updErr: any;
+      for (let attempt = 0; attempt <= OPTIONAL_COLS.length; attempt++) {
         ({ error: updErr } = await supabaseAdmin.from('merchant_subscriptions').update(patch).eq('id', sub.id));
+        if (!updErr) break;
+        const msg = updErr.message || '';
+        const offending = OPTIONAL_COLS.find((c) => c in patch && msg.includes(c));
+        if (!offending) break;     // a genuine error, not a missing optional column
+        delete (patch as Record<string, unknown>)[offending];
       }
       if (updErr) throw updErr;
 
@@ -531,34 +559,41 @@ Deno.serve(async (req) => {
         throw tierError;
       }
 
-      // 3. Count campaigns active during the current calendar month
-      // A campaign is "active this month" if its date range overlaps with the month:
-      //   start_date <= end of month AND (end_date >= start of month OR end_date is null)
-      // IST = UTC + 5h30m. Shift now() into IST before reading year/month so
-      // the period boundary lines up with midnight IST on the 1st.
+      // 3. Count campaigns CREATED during the current calendar month.
+      // The plan limit is "max campaigns per month", so a deal counts in the month
+      // it was CREATED — not the months its run-dates happen to overlap. Counting by
+      // created_at (a) makes the counter match what the merchant actually created
+      // (so it lines up with the Live list), and (b) closes the loophole where a
+      // future-dated deal (created in June, dated for July) escaped June's limit.
+      // IST = UTC + 5h30m; the period resets at midnight IST on the 1st, so the
+      // month window is the IST calendar month expressed as precise UTC instants.
       const istNow = new Date(Date.now() + 5.5 * 3600 * 1000);
       const currentYear = year || istNow.getUTCFullYear();
       const currentMonth = month !== undefined ? month : istNow.getUTCMonth();
 
-      const startOfMonth = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
-      const endOfMonth = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0]; // last day of month
+      const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+      const monthStartTs = new Date(Date.UTC(currentYear, currentMonth, 1) - IST_OFFSET_MS).toISOString();
+      const nextMonthStartTs = new Date(Date.UTC(currentYear, currentMonth + 1, 1) - IST_OFFSET_MS).toISOString();
 
       console.log('[manage-subscription] Campaign count query params:', {
         merchant_id: user.id,
-        startOfMonth,
-        endOfMonth,
+        monthStartTs,
+        nextMonthStartTs,
         year: currentYear,
         month: currentMonth
       });
 
-      // Count regular campaigns (exclude DOTD) active during this month
+      // Count regular campaigns (exclude DOTD) CREATED this month.
+      // Exclude DOTD with `.not(... is true)` — matches both `false` and NULL
+      // (regular deals) and excludes only `true`. No chained `.or()`, so the DOTD
+      // exclusion can't be silently dropped.
       const { count: campaignsCount, error: campaignsError } = await supabaseAdmin
         .from('campaigns')
         .select('*', { count: 'exact', head: true })
         .eq('merchant_id', user.id)
-        .or('is_deal_of_the_day.is.null,is_deal_of_the_day.eq.false')
-        .lte('start_date', endOfMonth)
-        .or(`end_date.gte.${startOfMonth},end_date.is.null`);
+        .not('is_deal_of_the_day', 'is', true)
+        .gte('created_at', monthStartTs)
+        .lt('created_at', nextMonthStartTs);
 
       console.log('[manage-subscription] Campaign count result:', { campaignsCount, error: campaignsError });
 
@@ -567,14 +602,14 @@ Deno.serve(async (req) => {
         throw campaignsError;
       }
 
-      // 4. Count DOTD campaigns active during this month
+      // 4. Count DOTD campaigns CREATED this month
       const { count: dotdCount, error: dotdError } = await supabaseAdmin
         .from('campaigns')
         .select('*', { count: 'exact', head: true })
         .eq('merchant_id', user.id)
         .eq('is_deal_of_the_day', true)
-        .lte('start_date', endOfMonth)
-        .or(`end_date.gte.${startOfMonth},end_date.is.null`);
+        .gte('created_at', monthStartTs)
+        .lt('created_at', nextMonthStartTs);
 
       if (dotdError) {
         console.error('[manage-subscription] DOTD count error:', dotdError);

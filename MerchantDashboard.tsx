@@ -207,6 +207,18 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
   useEffect(() => { loadCampaignUsage(); }, [loadCampaignUsage, deals]);
 
+  // Auto-refresh deals + usage every 5s so the dashboard reflects DB changes
+  // (new deals, status edits, expiries) without a manual reload. The "X/limit"
+  // counter is created-this-month, so an expiry won't lower it; the "Live deals"
+  // count (status-based) will drop once the refreshed list excludes it.
+  useEffect(() => {
+    const id = setInterval(() => {
+      refreshDeals();
+      loadCampaignUsage();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [refreshDeals, loadCampaignUsage]);
+
   // Per-deal clicks & redemptions for active deals.
   const loadCampaignStats = useCallback(async () => {
     if (!activeDeals.length || !user?.id) return;

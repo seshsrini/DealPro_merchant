@@ -569,8 +569,10 @@ export async function generatePromoBanner(
         ctx.fillText(bandBadgeText, centerX, cy + bandBadgeH / 2);
         cy += bandBadgeH + SIZE * 0.018;
 
-        // TRUST BADGES — inline horizontal row (up to 3 to fit)
-        const bandBadges = (trustBadgeLabels || []).slice(0, 3);
+        // TRUST BADGES — centered, up to 4, wrapped across lines so longer labels
+        // (e.g. "Best Price Guarantee") never overflow the image edges and the 4th
+        // badge isn't dropped.
+        const bandBadges = (trustBadgeLabels || []).slice(0, 4);
         if (bandBadges.length > 0) {
           const ICONS_INLINE: Record<string, string> = {
             'Premium Quality': '🏆', 'Genuine Product': '✅', '100% Natural': '🌿',
@@ -583,8 +585,19 @@ export async function generatePromoBanner(
           ctx.fillStyle = 'rgba(255,255,255,0.75)';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
-          const inlineText = bandBadges.map(l => `${ICONS_INLINE[l] || '✅'} ${l}`).join('   ·   ');
-          ctx.fillText(inlineText, centerX, cy);
+          const sep = '   ·   ';
+          const maxW = SIZE * 0.9;
+          const items = bandBadges.map(l => `${ICONS_INLINE[l] || '✅'} ${l}`);
+          // Greedily pack items onto centered lines that each fit within maxW.
+          const lines: string[] = [];
+          let cur = '';
+          for (const it of items) {
+            const test = cur ? cur + sep + it : it;
+            if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = it; }
+            else { cur = test; }
+          }
+          if (cur) lines.push(cur);
+          lines.forEach(ln => { ctx.fillText(ln, centerX, cy); cy += SIZE * 0.024; });
         }
       }
 
@@ -616,6 +629,100 @@ export async function generatePromoBanner(
         },
         'image/jpeg',
         0.92
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
+    img.src = url;
+  });
+}
+
+/**
+ * Generates a "tag-only" image for ADDITIONAL deal photos: the clean product
+ * photo plus a compact price-tag pill (top-left) — discount % / offer price only.
+ * Deliberately omits the store name, heading, trust badges, "LIMITED TIME OFFER",
+ * and branding bar so additional images never duplicate the cover's full banner.
+ * (The cover image still uses generatePromoBanner with the merchant's chosen placement.)
+ */
+export async function generatePriceTagImage(
+  imageFile: File,
+  tag: { discountPct?: string; offerPrice?: string },
+): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(imageFile);
+    img.onload = () => {
+      const SIZE = Math.max(img.width, img.height, 1080);
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { URL.revokeObjectURL(url); resolve(imageFile); return; }
+
+      // Dark base + center-crop the photo to a square (same framing as the cover).
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, SIZE, SIZE);
+      const imgAspect = img.width / img.height;
+      let drawW: number, drawH: number, drawX: number, drawY: number;
+      if (imgAspect >= 1) {
+        drawH = SIZE; drawW = drawH * imgAspect; drawX = (SIZE - drawW) / 2; drawY = 0;
+      } else {
+        drawW = SIZE; drawH = drawW / imgAspect; drawX = 0; drawY = (SIZE - drawH) / 2;
+      }
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+      // Compact price-tag pill, top-left. Nothing else is drawn.
+      const disc = tag.discountPct?.trim();
+      const price = tag.offerPrice?.trim();
+      if (disc || price) {
+        ctx.textBaseline = 'top';
+        type TagLine = { t: string; f: string; c: string; h: number; strike?: boolean };
+        const lines: TagLine[] = [];
+        if (disc) lines.push({ t: `${disc}% OFF`, f: `900 ${SIZE * 0.058}px Arial, sans-serif`, c: '#eab308', h: SIZE * 0.062 });
+        if (price) {
+          const n = parseFloat(price);
+          const mrp = isFinite(n) && n > 0 ? Math.round(n * 1.3) : null;
+          lines.push({ t: `₹${price}`, f: `bold ${SIZE * 0.042}px Arial, sans-serif`, c: '#ffffff', h: SIZE * 0.05 });
+          if (mrp) lines.push({ t: `MRP ₹${mrp}`, f: `${SIZE * 0.02}px Arial, sans-serif`, c: 'rgba(255,255,255,0.65)', h: SIZE * 0.028, strike: true });
+        }
+        let maxW = 0;
+        lines.forEach(l => { ctx.font = l.f; maxW = Math.max(maxW, ctx.measureText(l.t).width); });
+        const boxPad = SIZE * 0.025;
+        const boxW = maxW + boxPad * 2;
+        const boxH = lines.reduce((a, l) => a + l.h, 0) + boxPad * 2;
+        const pad = SIZE * 0.045;
+        ctx.fillStyle = 'rgba(15,23,42,0.82)';
+        ctx.beginPath();
+        ctx.roundRect(pad, pad, boxW, boxH, SIZE * 0.03);
+        ctx.fill();
+        const tx = pad + boxPad;
+        let ty = pad + boxPad;
+        ctx.textAlign = 'left';
+        lines.forEach(l => {
+          ctx.font = l.f;
+          ctx.fillStyle = l.c;
+          ctx.fillText(l.t, tx, ty);
+          if (l.strike) {
+            const w = ctx.measureText(l.t).width;
+            ctx.strokeStyle = l.c;
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(tx, ty + l.h * 0.45);
+            ctx.lineTo(tx + w, ty + l.h * 0.45);
+            ctx.stroke();
+          }
+          ty += l.h;
+        });
+      }
+
+      URL.revokeObjectURL(url);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(imageFile); return; }
+          // Keep the promo-banner-* name so the already-baked guard recognizes it.
+          resolve(new File([blob], `promo-banner-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+        },
+        'image/jpeg',
+        0.92,
       );
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
@@ -1105,17 +1212,23 @@ export const StepImage: React.FC<StepImageProps> = ({
             const uploads = await Promise.all(
               filesToCheck.map(async (file) => {
                 try {
-                  const { publicUrl } = await addCampaignService.uploadDealImageDraft(merchantId, file);
-                  return { file, url: publicUrl };
+                  const { publicUrl, imageName } = await addCampaignService.uploadDealImageDraft(merchantId, file);
+                  return { file, url: publicUrl, name: imageName };
                 } catch (err) {
                   console.warn('[StepImage] Draft upload failed (file will stay as File in state):', err);
-                  return { file, url: null };
+                  return { file, url: null, name: null };
                 }
               }),
             );
 
             // Convert cover File → URL (if uploaded successfully).
-            const coverUpload = selectedFile ? uploads.find(u => u.file === selectedFile) : null;
+            // Only a CLEAN (un-baked) cover may become the existingThumbnail source.
+            // Promoting an already-baked banner here would make the clean-source URL a
+            // baked image, so a later placement re-bake would stack a second layer of
+            // text (the "double text" bug). A baked cover stays as selectedImageFile.
+            const coverUpload = (selectedFile && !selectedFile.name.startsWith('promo-banner-'))
+              ? uploads.find(u => u.file === selectedFile)
+              : null;
             const newAdditionalUploads = uploads.filter(u => u.file !== selectedFile && u.url);
             const remainingAdditionalFiles = additionalImageFiles.filter(f =>
               !uploads.some(u => u.file === f && u.url),
@@ -1123,7 +1236,7 @@ export const StepImage: React.FC<StepImageProps> = ({
 
             if (coverUpload?.url) {
               onFileSelected(null);
-              onExistingSelected(coverUpload.url, null);
+              onExistingSelected(coverUpload.url, coverUpload.name ?? null);
             }
 
             if (newAdditionalUploads.length > 0 || remainingAdditionalFiles.length !== additionalImageFiles.length) {

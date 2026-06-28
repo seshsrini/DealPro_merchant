@@ -49,18 +49,10 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
     [trustBadgeIds],
   );
 
-  // A clean (un-baked) photo is required to generate placement previews.
-  // `originalImageFile` is set ONLY by a fresh upload — an existing/saved cover is
-  // already a finished banner with text baked in, so baking onto it again would
-  // stack a SECOND layer of text (the "double text" bug). When there's no fresh
-  // upload we skip generation and show the saved cover as-is (see render below).
-  const canRebake = !!originalImageFile;
-
-  // Bake all placement variants in parallel and stash the resulting blob URLs.
-  // We only re-bake when the merchant returns to this step (mount), not on every
-  // render — they only get here after upload + heading/offer/badges are settled.
+  // Bake all 5 placement variants in parallel and stash the resulting blob URLs.
+  // We only re-bake when the merchant returns to this step (mount), not on every render —
+  // they would only get here after upload + heading/offer/badges are settled.
   useEffect(() => {
-    if (!canRebake) { setGenerating(false); return; }
     let cancelled = false;
     const objectUrls: string[] = [];
 
@@ -68,12 +60,22 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
       setGenerating(true);
       setGenerationError(null);
       try {
-        const source = originalImageFile!;
-        // Bake all variants in parallel for snappy UI.
+        // Resolve a single source File for all bakes.
+        let source = originalImageFile;
+        if (!source && existingThumbnail) {
+          const res = await fetch(existingThumbnail);
+          const blob = await res.blob();
+          source = new File([blob], 'existing.jpg', { type: blob.type || 'image/jpeg' });
+        }
+        if (!source) {
+          setGenerationError('No cover image found. Go back and upload an image first.');
+          return;
+        }
+        // Bake all 5 in parallel for snappy UI.
         const results = await Promise.all(
           ALL_BANNER_PLACEMENTS.map(placement =>
             generatePromoBanner(
-              source,
+              source!,
               storeName || 'Your Store',
               dealHeading || 'Special Deal',
               offerValue || 'Great Offer',
@@ -104,7 +106,7 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
       cancelled = true;
       objectUrls.forEach(u => URL.revokeObjectURL(u));
     };
-  }, [canRebake, originalImageFile, storeName, dealHeading, offerValue, badgeLabels]);
+  }, [originalImageFile, existingThumbnail, storeName, dealHeading, offerValue, badgeLabels]);
 
   return (
     <div className="flex flex-col min-h-full px-6 pt-6">
@@ -124,27 +126,6 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
         </div>
       )}
 
-      {!canRebake ? (
-        // Editing a saved deal without a new upload — the cover is already a
-        // finished banner. Show it as-is (no re-bake → no double text) and tell
-        // the merchant how to change the layout.
-        <div style={floatIn(250, visible)} className="mb-6">
-          {existingThumbnail ? (
-            <div className={`rounded-xl overflow-hidden border-2 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-              <img src={existingThumbnail} alt="Current cover" className="w-full aspect-square object-cover" />
-            </div>
-          ) : (
-            <div className={`rounded-xl aspect-square flex items-center justify-center ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
-              <p className={`text-xs px-6 text-center ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No cover image found. Go back and upload one.</p>
-            </div>
-          )}
-          <div className={`mt-3 p-3 rounded-xl ${isDark ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50 border border-amber-200'}`}>
-            <p className={`text-xs ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
-              This is your current cover. To change where the deal text sits, go back to the image step and upload a new cover photo.
-            </p>
-          </div>
-        </div>
-      ) : (
       <div style={floatIn(250, visible)} className="grid grid-cols-2 gap-3 mb-6">
         {ALL_BANNER_PLACEMENTS.map((placement) => {
           const isSelected = value === placement;
@@ -185,10 +166,8 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
           );
         })}
       </div>
-      )}
 
-      {/* Hint — only relevant when the merchant can actually change placement. */}
-      {canRebake && (
+      {/* Hint */}
       <div style={floatIn(350, visible)} className={`mb-4 p-3 rounded-xl ${isDark ? 'bg-purple-500/5 border border-purple-500/10' : 'bg-purple-50/50 border border-purple-100'}`}>
         <p className={`text-[11px] ${isDark ? 'text-purple-400/70' : 'text-purple-600/80'}`}>
           {value === 'auto'
@@ -198,7 +177,6 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
               : `Text will sit on the ${BANNER_PLACEMENT_LABELS[value].toLowerCase()} of the cover image.`}
         </p>
       </div>
-      )}
 
       {/* Navigation */}
       <div style={floatIn(450, visible)} className="mt-auto pb-8 flex gap-3">

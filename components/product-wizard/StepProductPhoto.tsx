@@ -146,7 +146,7 @@ function getVideoDuration(file: File): Promise<number> {
 }
 
 export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
-  onResult, onSkip, onBack, theme,
+  onResult, onBack, theme,
   initialImageUrl, initialAdditionalImages, initialVideoUrl,
 }) => {
   const isDark = theme === 'dark';
@@ -706,14 +706,16 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
             )}
           </button>
         ) : (
+          // A product needs at least one photo — keep the action grayed out and
+          // unclickable until the merchant has added a cover image.
           <button
-            onClick={onSkip}
-            className={`flex-[2] h-14 rounded-xl text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2 ${
-              isDark ? 'bg-slate-800 text-white' : 'bg-slate-900 text-white'
+            disabled
+            aria-disabled="true"
+            className={`flex-[2] h-14 rounded-xl text-base font-semibold transition-all flex items-center justify-center gap-2 opacity-50 cursor-not-allowed ${
+              isDark ? 'bg-slate-800 text-slate-400' : 'bg-slate-200 text-slate-500'
             }`}
           >
-            Skip — Enter Manually
-            <ArrowRight className="w-4 h-4" />
+            Continue <ArrowRight className="w-4 h-4" />
           </button>
         )}
       </div>

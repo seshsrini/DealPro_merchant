@@ -47,12 +47,23 @@ interface WizardState {
   originalImageFile: File | null;
   // Cover banner text placement chosen by the merchant. 'auto' = heuristic decides.
   bannerPlacement: 'auto' | 'left' | 'right' | 'top' | 'bottom' | 'none';
+  // Stable idempotency key for THIS in-flight deal. Persisted in the draft so a
+  // re-publish after an error / close-reopen reuses it and the server dedupes
+  // instead of creating a duplicate.
+  clientDedupKey: string;
 }
 
 type WizardAction =
   | { type: 'SET_FIELD'; field: keyof WizardState; value: any }
   | { type: 'RESTORE_DRAFT'; draft: Partial<WizardState> }
   | { type: 'RESET' };
+
+// Generates a stable per-deal idempotency key — a temporary unique ID for the
+// in-flight publish, reused across retries so a re-published deal dedupes.
+function makeDedupKey(): string {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return `dk-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 const initialState: WizardState = {
   dealHeading: '',
@@ -74,6 +85,7 @@ const initialState: WizardState = {
   freeGifts: [],
   originalImageFile: null,
   bannerPlacement: 'auto',
+  clientDedupKey: '',
 };
 
 function wizardReducer(state: WizardState, action: WizardAction): WizardState {
@@ -124,6 +136,15 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
   const { t } = useTranslation();
   const [state, dispatch] = useReducer(wizardReducer, initialState);
   const [currentStep, setCurrentStep] = useState(0);
+
+  // Assign this draft a stable idempotency key the first time it's needed. It rides
+  // along in the saved draft, so resuming (even after an error / close-reopen) reuses
+  // it and the server dedupes the re-publish instead of creating a duplicate.
+  useEffect(() => {
+    if (!state.clientDedupKey) {
+      dispatch({ type: 'SET_FIELD', field: 'clientDedupKey', value: makeDedupKey() });
+    }
+  }, [state.clientDedupKey]);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('left');
   const [isTransitioning, setIsTransitioning] = useState(false);
   // When true, "Continue" on any step jumps back to Review instead of next step

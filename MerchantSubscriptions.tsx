@@ -322,7 +322,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           }
           await fetchData();
         } else {
-          throw new Error(res.error || 'change failed');
+          // Show the real server/Razorpay reason so the failure is diagnosable
+          // (e.g. "That plan isn't available…", a Razorpay auth message) instead
+          // of a generic "couldn't change plan".
+          setNoticeTone('error');
+          setNoticeMsg(res.error || 'Unable to change plan. Please try again.');
         }
       } catch (err) {
         console.error('[MerchantSubscriptions] change_tier failed:', err);

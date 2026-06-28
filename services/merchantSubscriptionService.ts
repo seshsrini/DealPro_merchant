@@ -14,10 +14,20 @@ export const merchantSubscriptionService = {
       const { data, error } = await supabase.functions.invoke('merchant-subscription', {
         body: { action: 'change_tier', tier_key: tierKey },
       });
-      if (error) return { success: false, error: 'Unable to change plan. Please try again.' };
+      if (error) {
+        // Surface the function's ACTUAL error (Razorpay message, "plan not
+        // available", a missing-column DB error, etc.) instead of a generic
+        // string, so a failed plan change is diagnosable.
+        let serverMsg = '';
+        try {
+          const body = await (error as any).context?.json?.();
+          serverMsg = body?.error || body?.message || '';
+        } catch { /* body not JSON — fall through to generic */ }
+        return { success: false, error: serverMsg || 'Unable to change plan. Please try again.' };
+      }
       return data;
-    } catch {
-      return { success: false, error: 'Unable to change plan. Please try again.' };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Unable to change plan. Please try again.' };
     }
   },
 

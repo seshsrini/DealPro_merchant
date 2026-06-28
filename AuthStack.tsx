@@ -23,8 +23,6 @@ import { supabase, updateSupabaseSession } from './services/supabaseClient';
 const COUNTRY_CODES = [
   { code: "+91", country: "India", flag: "\u{1F1EE}\u{1F1F3}" },
   { code: "+1", country: "USA", flag: "\u{1F1FA}\u{1F1F8}" },
-  { code: "+44", country: "UK", flag: "\u{1F1EC}\u{1F1E7}" },
-  { code: "+971", country: "UAE", flag: "\u{1F1E6}\u{1F1EA}" },
 ];
 
 interface AuthStackProps {

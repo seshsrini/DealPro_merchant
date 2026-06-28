@@ -37,8 +37,6 @@ import { merchantService } from './services/merchantService'; // New import for 
 const COUNTRY_CODES = [
   { code: "+91", country: "India", flag: "🇮🇳" },
   { code: "+1", country: "USA", flag: "🇺🇸" },
-  { code: "+44", country: "UK", "flag": "🇬🇧" },
-  { code: "+971", country: "UAE", "flag": "🇦🇪" }
 ];
 
 const LANGUAGE_OPTIONS = [

@@ -44,6 +44,7 @@ interface DotdWizardState {
   freeGifts?: FreeGiftItem[];
   originalImageFile?: File | null;
   bannerPlacement?: BannerPlacement;
+  clientDedupKey?: string;
 }
 
 interface StepDotdReviewProps {
@@ -180,23 +181,28 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
     (async () => {
       setGeneratingBanner(true);
       try {
+        // Always bake from a CLEAN (never-baked) source so changing the placement
+        // can't stack a second layer of text. Priority: clean snapshot → un-baked
+        // cover URL → a clean selected file. selectedImageFile is deprioritized
+        // because after a bake it holds the BAKED result (the "double text" cause).
         let original = wizardState.originalImageFile;
+        if (original && original.name.startsWith('promo-banner-')) original = null;
         if (!original) {
-          if (sourceFile) {
-            original = sourceFile;
-          } else if (sourceUrl) {
+          if (sourceUrl) {
             const res = await fetch(sourceUrl);
             const blob = await res.blob();
             original = new File([blob], 'existing.jpg', { type: blob.type });
+          } else if (sourceFile && !sourceFile.name.startsWith('promo-banner-')) {
+            original = sourceFile;
           }
           if (original && onUpdateOriginalImage) onUpdateOriginalImage(original);
         }
         if (!original) return;
         const sourceLooksBaked =
           original.name.startsWith('promo-banner-') ||
-          (sourceUrl && /promo-banner/i.test(sourceUrl));
+          (!!sourceUrl && /promo-banner/i.test(sourceUrl));
         if (sourceLooksBaked) {
-          console.log('[StepDotdReview] Source is already a baked banner — skipping bake to avoid ghost text.');
+          console.log('[StepDotdReview] Source is already a baked banner — skipping bake to avoid double text.');
           return;
         }
         const badgeLabels = (wizardState.trustBadgeIds || [])
@@ -391,7 +397,17 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
         }
       }
 
-      if (!finalImageUrl || !finalImageName) {
+      // Safety net: a cover URL may be present while image_name is empty (baked banner /
+      // promoted image). Derive a name so the merchant never hits a publish-time error.
+      if (finalImageUrl && !finalImageName) {
+        let derived = '';
+        try {
+          derived = new URL(finalImageUrl).pathname.split('/').filter(Boolean).pop() || '';
+        } catch { /* not a parseable URL — fall through to generated name */ }
+        finalImageName = derived || `dotd_${user.id}_${Date.now()}`;
+      }
+
+      if (!finalImageUrl) {
         throw new Error('Image is required for Deal of the Day');
       }
 
@@ -470,6 +486,7 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
         image_name: finalImageName,
         latlong: store ? `${store.latitude}, ${store.longitude}` : '0.0, 0.0',
         trust_badges: wizardState.trustBadgeIds || [],
+        client_dedup_key: wizardState.clientDedupKey,
       };
 
       if (mediaUrls.length > 0) payload.media_urls = mediaUrls;

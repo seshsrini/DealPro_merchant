@@ -43,12 +43,22 @@ interface DotdWizardState {
   freeGifts: FreeGiftItem[];
   originalImageFile: File | null;
   bannerPlacement: 'auto' | 'left' | 'right' | 'top' | 'bottom' | 'none';
+  // Stable idempotency key for this in-flight DOTD (persisted in the draft) so a
+  // re-publish after an error / close-reopen dedupes instead of duplicating.
+  clientDedupKey: string;
 }
 
 type DotdAction =
   | { type: 'SET_FIELD'; field: keyof DotdWizardState; value: any }
   | { type: 'RESTORE_DRAFT'; draft: Partial<DotdWizardState> }
   | { type: 'RESET' };
+
+// Generates a stable per-deal idempotency key — a temporary unique ID for the
+// in-flight publish, reused across retries so a re-published DOTD dedupes.
+function makeDedupKey(): string {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return `dk-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 const initialState: DotdWizardState = {
   dealHeading: '',
@@ -68,6 +78,7 @@ const initialState: DotdWizardState = {
   freeGifts: [],
   originalImageFile: null,
   bannerPlacement: 'auto',
+  clientDedupKey: '',
 };
 
 function dotdReducer(state: DotdWizardState, action: DotdAction): DotdWizardState {
@@ -111,6 +122,15 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   const { t } = useTranslation();
   const [state, dispatch] = useReducer(dotdReducer, initialState);
   const [currentStep, setCurrentStep] = useState(0);
+
+  // Assign this draft a stable idempotency key the first time it's needed. It rides
+  // along in the saved draft, so resuming (even after an error / close-reopen) reuses
+  // it and the server dedupes the re-publish instead of creating a duplicate.
+  useEffect(() => {
+    if (!state.clientDedupKey) {
+      dispatch({ type: 'SET_FIELD', field: 'clientDedupKey', value: makeDedupKey() });
+    }
+  }, [state.clientDedupKey]);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('left');
   const [isTransitioning, setIsTransitioning] = useState(false);
 

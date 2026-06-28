@@ -9,7 +9,7 @@ import { useTranslation } from '../../contexts/LanguageContext';
 import { ensureFreshToken, supabase, recoverSessionOrSilentReauth } from '../../services/supabaseClient';
 import { biometricService } from '../../services/biometricService';
 import { userService } from '../../services/userService';
-import { generatePromoBanner, generateFreeGiftsImage, BannerPlacement } from './StepImage';
+import { generatePromoBanner, generatePriceTagImage, generateFreeGiftsImage, BannerPlacement } from './StepImage';
 import { TRUST_BADGES } from './StepTrustBadges';
 import { FreeGiftItem } from './StepBuyGetFree';
 import { UploadVideoLoader } from '../UploadVideoLoader';
@@ -43,6 +43,7 @@ interface WizardState {
   freeGifts?: FreeGiftItem[];
   originalImageFile?: File | null;
   bannerPlacement?: BannerPlacement;
+  clientDedupKey?: string;
 }
 
 interface StepReviewProps {
@@ -77,7 +78,7 @@ const formatDate = (dateStr: string): string => {
 
 export const StepReview: React.FC<StepReviewProps> = ({
   wizardState, user, stores, editingDealId,
-  onPublishSuccess, onPublishError, onEditSection, onUpdateMainImage,
+  onPublishSuccess, onPublishError, onEditSection, onUpdateMainImage, onUpdateOriginalImage,
   onUpdateAdditional, theme,
   editStepMap, isBuyGetFreeMode,
 }) => {
@@ -160,19 +161,43 @@ export const StepReview: React.FC<StepReviewProps> = ({
   const bakedForPlacementRef = useRef<BannerPlacement | null>(null);
   useEffect(() => {
     if (!onUpdateMainImage || wizardState.skipBannerGeneration) return;
-    // Only a freshly-uploaded photo (originalImageFile) is a clean source we can
-    // bake text onto. An existing/saved cover is already a finished banner with
-    // text baked in — re-baking it would stack a SECOND layer of text (the
-    // "double text" bug). So with no fresh upload we leave the existing cover as
-    // is; the carousel falls back to wizardState.existingThumbnail.
-    const original = wizardState.originalImageFile;
-    if (!original) return;
+    const sourceFile = wizardState.selectedImageFile;
+    const sourceUrl = wizardState.existingThumbnail;
+    if (!sourceFile && !sourceUrl) return;
     const desired: BannerPlacement = wizardState.bannerPlacement ?? 'auto';
     if (bakedForPlacementRef.current === desired) return;
     bakedForPlacementRef.current = desired;
     (async () => {
       setGeneratingBanner(true);
       try {
+        // Always bake from a CLEAN (never-baked) source so changing the placement
+        // can't stack a second layer of text. Priority:
+        //   1) originalImageFile — the clean snapshot from a fresh upload,
+        //   2) existingThumbnail — the un-baked photo URL (catalogue / draft cover),
+        //   3) selectedImageFile — only if it isn't itself a baked banner.
+        // selectedImageFile is deprioritized because AFTER a bake it holds the BAKED
+        // result; using it as a source is exactly what produced the "double text" bug.
+        let original = wizardState.originalImageFile;
+        if (original && original.name.startsWith('promo-banner-')) original = null;
+        if (!original) {
+          if (sourceUrl) {
+            const res = await fetch(sourceUrl);
+            const blob = await res.blob();
+            original = new File([blob], 'existing.jpg', { type: blob.type });
+          } else if (sourceFile && !sourceFile.name.startsWith('promo-banner-')) {
+            original = sourceFile;
+          }
+          if (original && onUpdateOriginalImage) onUpdateOriginalImage(original);
+        }
+        if (!original) return;
+        // Final safety: never bake onto a source that is itself a baked banner.
+        const sourceLooksBaked =
+          original.name.startsWith('promo-banner-') ||
+          (!!sourceUrl && /promo-banner/i.test(sourceUrl));
+        if (sourceLooksBaked) {
+          console.log('[StepReview] Source is already a baked banner — skipping bake to avoid double text.');
+          return;
+        }
         const badgeLabels = (wizardState.trustBadgeIds || [])
           .map(id => TRUST_BADGES.find(b => b.id === id)?.label)
           .filter(Boolean) as string[];
@@ -208,10 +233,6 @@ export const StepReview: React.FC<StepReviewProps> = ({
     (async () => {
       setGeneratingBanner(true);
       try {
-        const badgeLabels = (wizardState.trustBadgeIds || [])
-          .map(id => TRUST_BADGES.find(b => b.id === id)?.label)
-          .filter(Boolean) as string[];
-
         const urls = wizardState.additionalImageUrls;
         const files = wizardState.additionalImageFiles;
         // Combined display order: URLs first (slots 1..urls.length), then Files
@@ -224,17 +245,24 @@ export const StepReview: React.FC<StepReviewProps> = ({
           const slot = i + 1;
           const ov = overlays[slot];
           const tagged = ov && (ov.discountPct || ov.offerPrice);
-          if (tagged) {
+          // Skip sources that are already a baked banner (catalogue image, a
+          // re-entered Review, or a restored draft). Re-baking stacks a SECOND
+          // layer of text — the "double text" bug. Mirrors the cover's clean-source
+          // guard. Keep the image as-is and drop the tag so it isn't baked again.
+          const alreadyBaked = /promo-banner-/.test(urls[i]);
+          if (tagged && alreadyBaked) {
+            newUrls.push(urls[i]);
+            delete newOverlays[slot];
+          } else if (tagged) {
             try {
               const res = await fetch(urls[i]);
               const blob = await res.blob();
               const srcFile = new File([blob], `existing-add-${slot}.jpg`, { type: blob.type || 'image/jpeg' });
-              const banner = await generatePromoBanner(
+              // Additional images carry the price tag ONLY — never the full deal
+              // banner (that's the cover's job). Keeps them clean and avoids any
+              // chance of duplicating the cover's text.
+              const banner = await generatePriceTagImage(
                 srcFile,
-                store?.store_name || user.store_name || 'Your Store',
-                wizardState.dealHeading || 'Special Deal',
-                wizardState.offerValue || 'Great Offer',
-                badgeLabels,
                 { discountPct: ov.discountPct, offerPrice: ov.offerPrice },
               );
               newFiles.push(banner);
@@ -253,14 +281,18 @@ export const StepReview: React.FC<StepReviewProps> = ({
           const slot = urls.length + j + 1;
           const ov = overlays[slot];
           const tagged = ov && (ov.discountPct || ov.offerPrice);
-          if (tagged) {
+          // Skip files that are already a baked banner — re-baking stacks a second
+          // text layer (the "double text" bug). generatePromoBanner names its output
+          // `promo-banner-*`, so that prefix reliably flags an already-baked source.
+          const alreadyBaked = files[j].name.startsWith('promo-banner-');
+          if (tagged && alreadyBaked) {
+            newFiles.push(files[j]);
+            delete newOverlays[slot];
+          } else if (tagged) {
             try {
-              const banner = await generatePromoBanner(
+              // Tag-only treatment for additional images (see URL branch above).
+              const banner = await generatePriceTagImage(
                 files[j],
-                store?.store_name || user.store_name || 'Your Store',
-                wizardState.dealHeading || 'Special Deal',
-                wizardState.offerValue || 'Great Offer',
-                badgeLabels,
                 { discountPct: ov.discountPct, offerPrice: ov.offerPrice },
               );
               newFiles.push(banner);
@@ -378,6 +410,18 @@ export const StepReview: React.FC<StepReviewProps> = ({
         }
       }
 
+      // Safety net: some cover paths (baked banner, promoted additional image) can leave
+      // image_name empty while the URL is set. The create-campaign edge function requires a
+      // non-empty image_name, so derive one from the URL — and fall back to a generated name —
+      // so a merchant never sees an "Image name is required" publication error.
+      if (finalImageUrl && !finalImageName) {
+        let derived = '';
+        try {
+          derived = new URL(finalImageUrl).pathname.split('/').filter(Boolean).pop() || '';
+        } catch { /* not a parseable URL — fall through to generated name */ }
+        finalImageName = derived || `deal_${user.id}_${Date.now()}`;
+      }
+
       if (!finalImageUrl) {
         throw new Error('Image upload failed. Please go back and re-select your image, then try again.');
       }
@@ -460,6 +504,7 @@ export const StepReview: React.FC<StepReviewProps> = ({
         latlong: store ? `${store.latitude}, ${store.longitude}` : '0.0, 0.0',
         is_deal_of_the_day: false,
         trust_badges: wizardState.trustBadgeIds || [],
+        client_dedup_key: wizardState.clientDedupKey,
       };
 
       if (mediaUrls.length > 0) payload.media_urls = mediaUrls;
