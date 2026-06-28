@@ -402,7 +402,14 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       {isPlanChangeLocked && lockedUntilDate && (
         <div className={`rounded-xl border px-4 py-3 text-xs font-medium flex items-center gap-2 ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
           <Clock className="w-4 h-4 shrink-0" />
-          <span>You changed your plan recently. You can change it again after <span className="font-bold">{fmtDate(lockedUntilDate)}</span>.</span>
+          {(() => {
+            // Use the localized m_change_locked string and bold the date by
+            // splitting around its {date} placeholder (present in every language).
+            const [before, after] = t('m_change_locked').split('{date}');
+            return (
+              <span>{before}<span className="font-bold">{fmtDate(lockedUntilDate)}</span>{after}</span>
+            );
+          })()}
         </div>
       )}
 
