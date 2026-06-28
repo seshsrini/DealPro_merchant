@@ -241,19 +241,6 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
       .catch(() => setMerchantStores([]));
   }, [user?.id]);
 
-  // Auto-refresh deals + usage counts every 5s so DB changes (new deals, status
-  // edits, expiries) reflect on the list and the Live count without a manual reload.
-  // NOTE: the "X/limit" usage counter is by created-this-month, so neither expiring
-  // a deal nor editing its start/end dates changes it — only its created_at month
-  // (or deleting the row) does. The Live (status) count drops when status changes.
-  useEffect(() => {
-    const refreshInterval = setInterval(() => {
-      refreshDeals();
-      fetchCampaignUsage();
-    }, 5000);
-    return () => clearInterval(refreshInterval);
-  }, [refreshDeals, fetchCampaignUsage]);
-
   // Load image library for deal card thumbnails
   useEffect(() => {
     if (user.id) {
@@ -284,6 +271,20 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
   }, [user.id, usageCacheKey]);
 
   useEffect(() => { fetchCampaignUsage(); }, [fetchCampaignUsage, deals]);
+
+  // Auto-refresh deals + usage counts every 5s so DB changes (new deals, status
+  // edits, expiries) reflect on the list and the Live count without a manual reload.
+  // NOTE: the "X/limit" usage counter is by created-this-month, so neither expiring
+  // a deal nor editing its start/end dates changes it — only its created_at month
+  // (or deleting the row) does. The Live (status) count drops when status changes.
+  // Declared after fetchCampaignUsage so its dep ref isn't in the TDZ at render.
+  useEffect(() => {
+    const refreshInterval = setInterval(() => {
+      refreshDeals();
+      fetchCampaignUsage();
+    }, 5000);
+    return () => clearInterval(refreshInterval);
+  }, [refreshDeals, fetchCampaignUsage]);
 
   // Handle pre-selected edit deal (from dashboard deep link)
   useEffect(() => {

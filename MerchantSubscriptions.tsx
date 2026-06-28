@@ -840,6 +840,17 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               </div>
             </div>
 
+            {/* Plan change only: warn that monthly usage resets to the new plan's
+                limits so the merchant doesn't expect unused deals to carry over. */}
+            {currentSubscription?.status === 'active' && tierToConfirm.id !== currentTierId && (
+              <div className={`flex gap-2 rounded-xl border p-3 text-xs leading-snug ${
+                isDark ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-800'
+              }`}>
+                <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{t('m_change_reset_note')}</span>
+              </div>
+            )}
+
             {/* Single action — always the Razorpay path: change_tier (in-place
                 upgrade/downgrade) for an active subscriber, or web checkout for a
                 new subscription. No legacy 'create' bypass that could let an
