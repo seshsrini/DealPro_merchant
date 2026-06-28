@@ -510,17 +510,14 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'campaign_usage') {
-      // Campaign / DOTD limits reset on the 1st of each month at 12:00 AM IST
-      // (UTC+5:30). The Edge Function runtime is UTC, so naively reading
-      // new Date().getMonth() rolls the period over at 5:30 AM IST instead of
-      // midnight IST — making merchants wait an extra 5.5 hours past their
-      // expected reset. Default to IST when the client doesn't specify.
-      const { year, month } = body;
+      // Campaign / DOTD limits reset on the merchant's BILLING anniversary (see the
+      // window computation below), at midnight IST (UTC+5:30). The Edge runtime is
+      // UTC, so every boundary is computed in IST then converted to a UTC instant.
 
-      // 1. Get merchant's active subscription and tier limits
+      // 1. Get merchant's active subscription, tier limits, and billing-cycle dates.
       const { data: subscription, error: subError } = await supabaseAdmin
         .from('merchant_subscriptions')
-        .select('plan_name')
+        .select('plan_name, current_period_start, current_period_end')
         .eq('merchant_id', user.id)
         .eq('status', 'active')
         .gte('current_period_end', new Date().toISOString())
@@ -559,28 +556,52 @@ Deno.serve(async (req) => {
         throw tierError;
       }
 
-      // 3. Count campaigns CREATED during the current calendar month.
-      // The plan limit is "max campaigns per month", so a deal counts in the month
-      // it was CREATED — not the months its run-dates happen to overlap. Counting by
-      // created_at (a) makes the counter match what the merchant actually created
-      // (so it lines up with the Live list), and (b) closes the loophole where a
-      // future-dated deal (created in June, dated for July) escaped June's limit.
-      // IST = UTC + 5h30m; the period resets at midnight IST on the 1st, so the
-      // month window is the IST calendar month expressed as precise UTC instants.
-      const istNow = new Date(Date.now() + 5.5 * 3600 * 1000);
-      const currentYear = year || istNow.getUTCFullYear();
-      const currentMonth = month !== undefined ? month : istNow.getUTCMonth();
-
+      // 3. Count campaigns CREATED during the current BILLING cycle.
+      // A deal counts in the cycle it was CREATED (created_at), so the counter
+      // matches what the merchant actually created (lines up with the Live list)
+      // and a future-dated deal can't escape its cycle's limit.
+      //
+      // Billing renews on the merchant's signup anniversary (instant payment at
+      // signup → Razorpay charges that same date every month), so the deal
+      // allowance must reset on the SAME date — not the 1st. Otherwise a cycle
+      // that straddles a month boundary (e.g. billed on the 27th) would hand out
+      // two calendar months' worth of deals.
+      //
+      // The window is [anchorDay this period, anchorDay next period) at midnight
+      // IST. The anchor day comes from when billing started (current_period_start,
+      // falling back to current_period_end's day, then to the 1st for any legacy
+      // row without dates). It's clamped to each month's length, so a 31st anchor
+      // resets on the 30th/28th in shorter months. A day-1 anchor reproduces the
+      // old calendar-month behaviour exactly.
       const IST_OFFSET_MS = 5.5 * 3600 * 1000;
-      const monthStartTs = new Date(Date.UTC(currentYear, currentMonth, 1) - IST_OFFSET_MS).toISOString();
-      const nextMonthStartTs = new Date(Date.UTC(currentYear, currentMonth + 1, 1) - IST_OFFSET_MS).toISOString();
+      const anchorSource = subscription.current_period_start || subscription.current_period_end || null;
+      const anchorDay = anchorSource
+        ? new Date(new Date(anchorSource).getTime() + IST_OFFSET_MS).getUTCDate()
+        : 1;
 
-      console.log('[manage-subscription] Campaign count query params:', {
+      // Clamp a target day to the real length of (year, monthIdx) in IST.
+      const clampDay = (y: number, mIdx: number, day: number) =>
+        Math.min(day, new Date(Date.UTC(y, mIdx + 1, 0)).getUTCDate());
+
+      // Locate the billing window that contains "now", working in IST.
+      const istNow = new Date(Date.now() + IST_OFFSET_MS);
+      let wy = istNow.getUTCFullYear();
+      let wm = istNow.getUTCMonth();
+      if (istNow.getUTCDate() < clampDay(wy, wm, anchorDay)) {
+        // Before this month's anchor → the current window started last month.
+        wm -= 1;
+        if (wm < 0) { wm = 11; wy -= 1; }
+      }
+      let ny = wy, nm = wm + 1;
+      if (nm > 11) { nm = 0; ny += 1; }
+      const windowStartTs = new Date(Date.UTC(wy, wm, clampDay(wy, wm, anchorDay)) - IST_OFFSET_MS).toISOString();
+      const windowEndTs = new Date(Date.UTC(ny, nm, clampDay(ny, nm, anchorDay)) - IST_OFFSET_MS).toISOString();
+
+      console.log('[manage-subscription] Billing-cycle count window:', {
         merchant_id: user.id,
-        monthStartTs,
-        nextMonthStartTs,
-        year: currentYear,
-        month: currentMonth
+        anchorDay,
+        windowStartTs,
+        windowEndTs,
       });
 
       // Count regular campaigns (exclude DOTD) CREATED this month.
@@ -592,8 +613,8 @@ Deno.serve(async (req) => {
         .select('*', { count: 'exact', head: true })
         .eq('merchant_id', user.id)
         .not('is_deal_of_the_day', 'is', true)
-        .gte('created_at', monthStartTs)
-        .lt('created_at', nextMonthStartTs);
+        .gte('created_at', windowStartTs)
+        .lt('created_at', windowEndTs);
 
       console.log('[manage-subscription] Campaign count result:', { campaignsCount, error: campaignsError });
 
@@ -608,8 +629,8 @@ Deno.serve(async (req) => {
         .select('*', { count: 'exact', head: true })
         .eq('merchant_id', user.id)
         .eq('is_deal_of_the_day', true)
-        .gte('created_at', monthStartTs)
-        .lt('created_at', nextMonthStartTs);
+        .gte('created_at', windowStartTs)
+        .lt('created_at', windowEndTs);
 
       if (dotdError) {
         console.error('[manage-subscription] DOTD count error:', dotdError);
