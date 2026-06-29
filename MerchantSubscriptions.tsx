@@ -79,6 +79,22 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<'success' | 'error'>('success');
 
+  // A plan change opens an EXTERNAL web checkout; if the merchant abandons it the
+  // plan never changes. We record the target tier when the checkout opens and, on
+  // return, decide success vs "didn't complete" by whether the subscription
+  // actually became that tier — the authoritative completion signal (the app
+  // never receives the Razorpay confirmation id of an abandoned web checkout).
+  const [incompleteChange, setIncompleteChange] = useState<{ tierKey: string; tierName: string } | null>(null);
+  const PENDING_CHANGE_KEY = `dealpro_pending_change_${user.id}`;
+  const PENDING_CHANGE_TTL_MS = 30 * 60 * 1000;
+  const writePendingChange = (tierKey: string, tierName: string) => {
+    try { localStorage.setItem(PENDING_CHANGE_KEY, JSON.stringify({ tierKey, tierName, startedAt: Date.now() })); } catch { /* ignore */ }
+  };
+  const readPendingChange = (): { tierKey: string; tierName: string; startedAt: number } | null => {
+    try { const r = localStorage.getItem(PENDING_CHANGE_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+  };
+  const clearPendingChange = () => { try { localStorage.removeItem(PENDING_CHANGE_KEY); } catch { /* ignore */ } };
+
   // ── Derived subscription info ──
   const isTrialing = currentSubscription?.status === 'active' &&
     currentSubscription?.current_period_end &&
@@ -206,6 +222,27 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     };
   }, [user.id, setUser]);
 
+  // ── Reconcile a tracked plan-change checkout (success vs "didn't complete") ──
+  // Runs whenever the current subscription updates (mount, return-from-checkout,
+  // realtime). If the plan became the target tier → completed, clear the markers.
+  // If the attempt is still fresh and the plan hasn't changed → show the banner.
+  // Self-corrects: a late-landing change (via realtime) flips the banner to done.
+  useEffect(() => {
+    const pc = readPendingChange();
+    if (!pc) { setIncompleteChange(null); return; }
+    const onTarget = currentSubscription?.plan_name === pc.tierKey
+      && currentSubscription?.status === 'active'
+      && !!currentSubscription?.razorpay_subscription_id;
+    if (onTarget || Date.now() - pc.startedAt > PENDING_CHANGE_TTL_MS) {
+      clearPaymentPending();
+      clearPendingChange();
+      setIncompleteChange(null);
+    } else {
+      setIncompleteChange({ tierKey: pc.tierKey, tierName: pc.tierName });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSubscription]);
+
   // ── Refresh on return from the web checkout ──
   // The Autopay/plan payment completes in an external browser; coming back fires
   // an app resume (native) / postMessage (web) / CustomEvent (legacy). Realtime
@@ -216,14 +253,28 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     if (!user.id) return;
     const refreshAfterPayment = async () => {
       const wasPending = isPaymentPending();
+      const pc = readPendingChange();
       const { tier_id, subscription } = await merchantSubscriptionService.fetchCurrentSubscription(user.id);
       setCurrentTierId(tier_id);
-      setCurrentSubscription(subscription);
+      setCurrentSubscription(subscription); // the reconcile effect updates the "didn't complete" banner
+      const active = subscription?.status === 'active' && !!subscription?.razorpay_subscription_id;
+      const next = subscription?.current_period_end
+        ? new Date(subscription.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        : '';
+      if (pc) {
+        // A tracked plan change: only a SUCCESS if the plan is now the target
+        // tier. If it isn't, the merchant didn't finish the checkout — the
+        // reconcile effect shows the "didn't complete" banner (no false success).
+        if (subscription?.plan_name === pc.tierKey && active) {
+          const planName = subscription?.tier_name || subscription?.plan_name || pc.tierName;
+          setNoticeTone('success');
+          setNoticeMsg(t('m_autopay_set').replace('{plan}', planName).replace('{date}', next));
+        }
+        return;
+      }
+      // New subscription / legacy-Autopay migration (no tracked change) — unchanged.
       if (wasPending && subscription?.razorpay_subscription_id) {
         clearPaymentPending();
-        const next = subscription.current_period_end
-          ? new Date(subscription.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-          : '';
         const planName = subscription.tier_name || subscription.plan_name || 'plan';
         setNoticeTone('success');
         setNoticeMsg(t('m_autopay_set').replace('{plan}', planName).replace('{date}', next));
@@ -288,9 +339,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       try {
         const res = await merchantSubscriptionService.changeTier(tierToConfirm.tier_key);
         if ((res as any).resubscribe) {
-          // Switching billing frequency (monthly↔yearly) — Razorpay can't swap
-          // the plan in place, so set up a fresh subscription. The web checkout's
-          // verify step cancels the old subscription once this one is active.
+          // Upgrade (Model B) or frequency switch — Razorpay can't change the plan
+          // in place, so set up a fresh subscription via web checkout. Record the
+          // target tier so that, on return, we can tell the merchant whether the
+          // payment completed (the plan became this tier) or was abandoned.
+          writePendingChange((res as any).tier_key || tierToConfirm.tier_key, (res as any).tier_name || tierToConfirm.tier_name);
           await razorpayCheckoutService.openCheckout({
             tierKey: (res as any).tier_key || tierToConfirm.tier_key,
             merchantId: user.id,
@@ -336,6 +389,10 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     }
 
     try {
+      // New / expired subscriber path — App.tsx's activation poll handles the
+      // "stuck"/not-completed case for these (it's gated on !hasActiveSubscription),
+      // so we don't set the change marker here to avoid a double message. The
+      // marker is only for an already-active merchant upgrading (resubscribe above).
       await razorpayCheckoutService.openCheckout({
         tierKey: tierToConfirm.tier_key,
         merchantId: user.id,
@@ -388,6 +445,40 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
             : 'border-emerald-200 bg-emerald-50 text-emerald-700'
         }`}>
           {noticeMsg}
+        </div>
+      )}
+
+      {/* Abandoned-checkout notice: a plan change was started in the web checkout
+          but the subscription never became that tier → tell the merchant it didn't
+          complete (no charge), with a one-tap retry. */}
+      {incompleteChange && (
+        <div className={`rounded-xl border px-4 py-3 ${isDark ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+          <div className="flex items-start gap-2">
+            <Clock className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold">Your {incompleteChange.tierName} payment didn&apos;t complete</p>
+              <p className="text-xs mt-0.5 opacity-90">No charge was made and your plan is unchanged. You can try again.</p>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => {
+                    const tier = tiers.find((tt) => tt.tier_key === incompleteChange.tierKey);
+                    clearPendingChange();
+                    setIncompleteChange(null);
+                    if (tier) handleShowConfirmation(tier);
+                  }}
+                  className="h-8 px-3 rounded-lg bg-slate-900 text-white text-xs font-semibold active:scale-[0.98]"
+                >
+                  Try again
+                </button>
+                <button
+                  onClick={() => { clearPendingChange(); setIncompleteChange(null); }}
+                  className={`h-8 px-3 rounded-lg text-xs font-semibold ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-white text-slate-600 border border-slate-200'}`}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
