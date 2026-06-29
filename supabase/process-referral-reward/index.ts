@@ -148,6 +148,38 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+  // SECURITY: deployed with --no-verify-jwt. This is an INTERNAL endpoint, invoked
+  // ONLY by the referral DB trigger (migrations/00015_referral_stacking.sql) which
+  // sends `Authorization: Bearer <service_role_key>`. Require that exact bearer so
+  // an anonymous caller can't POST a body merchant_id and extend any merchant's
+  // paid period by 30 days at will.
+  //
+  // ⚠️ PREREQUISITE before deploying this function: the DB GUC
+  //    app.settings.service_role_key MUST be set (the trigger reads it via
+  //    current_setting). If it is empty, the trigger sends an empty bearer and
+  //    this check will reject it — i.e. referral rewards would stop. Verify with:
+  //      SELECT current_setting('app.settings.service_role_key', true);
+  //    and set (Supabase SQL editor, postgres role) with:
+  //      ALTER DATABASE postgres SET app.settings.service_role_key = '<service_role_key>';
+  //    then reconnect, before deploying this version.
+  {
+    const authToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+    const expected = serviceRoleKey ?? '';
+    // constant-time compare (length check first is acceptable for a long secret)
+    let ok = authToken.length > 0 && authToken.length === expected.length;
+    let diff = 0;
+    for (let i = 0; i < authToken.length && i < expected.length; i++) {
+      diff |= authToken.charCodeAt(i) ^ expected.charCodeAt(i);
+    }
+    ok = ok && diff === 0;
+    if (!ok) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+  }
+
   try {
     const body = await req.json();
     const { merchant_id, subscription_id: subDbId, referral_count } = body;
