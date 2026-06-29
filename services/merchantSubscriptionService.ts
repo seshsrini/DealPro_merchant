@@ -185,6 +185,8 @@ export const merchantSubscriptionService = {
     dotd_used: number;
     dotd_limit: number;
     has_subscription: boolean;
+    /** ISO timestamp the allowance refreshes — the merchant's billing date, not the 1st. */
+    next_reset?: string | null;
   }> => {
     console.log("[merchantSubscriptionService] Fetching campaign usage");
 
@@ -207,6 +209,7 @@ export const merchantSubscriptionService = {
           dotd_used: 0,
           dotd_limit: 0,
           has_subscription: false,
+          next_reset: null,
         };
       }
 
@@ -217,6 +220,7 @@ export const merchantSubscriptionService = {
         dotd_used: data?.dotd_used || 0,
         dotd_limit: data?.dotd_limit || 0,
         has_subscription: data?.has_subscription || false,
+        next_reset: data?.next_reset ?? null,
       };
     } catch (err: any) {
       console.error("[merchantSubscriptionService] Exception fetching campaign usage:", err.message);
@@ -226,6 +230,7 @@ export const merchantSubscriptionService = {
         dotd_used: 0,
         dotd_limit: 0,
         has_subscription: false,
+        next_reset: null,
       };
     }
   },

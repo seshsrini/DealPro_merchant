@@ -162,13 +162,14 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
   // must never blank to 0/0 while the fresh usage loads.
   const usageCacheKey = `campaign_usage_${user.id}`;
   const [campaignUsage, setCampaignUsage] = useState(() => peekCache<{
-    campaigns_used: number; campaigns_limit: number; dotd_used: number; dotd_limit: number; has_subscription: boolean;
+    campaigns_used: number; campaigns_limit: number; dotd_used: number; dotd_limit: number; has_subscription: boolean; next_reset?: string | null;
   }>(usageCacheKey) || {
     campaigns_used: 0,
     campaigns_limit: 0,
     dotd_used: 0,
     dotd_limit: 0,
     has_subscription: false,
+    next_reset: null,
   });
 
   // Auto-Renew state
@@ -433,13 +434,14 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
             (campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit) ||
             (campaignUsage.dotd_limit > 0 && campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit)
           ) && (() => {
-            // Limits reset on the 1st of next month at 12 AM IST. Compute the
-            // friendly label using the device's local time — Indian merchants
-            // are already on IST, so this lines up with the server-side window.
-            const next = new Date();
-            next.setMonth(next.getMonth() + 1);
-            next.setDate(1);
-            const nextResetLabel = next.toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+            // Limits reset on the merchant's BILLING DATE (the end of the current
+            // billing-cycle usage window), NOT the 1st of the month. The server
+            // returns that exact moment as next_reset; fall back to +30 days only
+            // if it's somehow missing so the message still renders.
+            const nextResetDate = campaignUsage.next_reset
+              ? new Date(campaignUsage.next_reset)
+              : new Date(Date.now() + 30 * 86400000);
+            const nextResetLabel = nextResetDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
             const waitMsg = t('m_or_wait_until_reset').replace('{date}', nextResetLabel);
             return (
               <div className="mt-3 space-y-2">

@@ -244,10 +244,31 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({ error: "That plan isn't available for online subscription yet." }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
         }
 
-        // Razorpay can't swap a plan across billing intervals on the same
-        // subscription. Tell the app to cancel + re-subscribe to the new plan
-        // (it opens web checkout; verify-subscription cancels the old sub once
-        // the new one is active). No lock and no DB mutation here.
+        // ── UPGRADE → fresh start from today (Model B / instant gratification) ──
+        // An upgrade RESTARTS the subscription from today: the merchant pays the
+        // full new amount now, the billing date moves to today, and the deal
+        // allowance refreshes to 0/<new limit> immediately. Razorpay can't move a
+        // live subscription's billing anchor in place, so route through resubscribe:
+        // the app opens web checkout for the new tier; verify-subscription then
+        // creates the new cycle (current_period_start = now → the created_at usage
+        // window restarts → counts reset to 0), cancels the old subscription, and
+        // applies the change-lock so they can't immediately re-change. Covers both
+        // same-frequency and frequency-changing upgrades.
+        if (isUpgrade) {
+          return new Response(JSON.stringify({
+            success: true,
+            resubscribe: true,
+            upgrade: true,
+            tier_key: newTier.tier_key,
+            tier_name: newTier.tier_name,
+            new_amount: recurringAmount,
+            message: `Upgrading to ${newTier.tier_name}: you'll pay ₹${recurringAmount} now, your billing date moves to today, and your deal limits refresh right away. Continue to pay.`,
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+        }
+
+        // ── DOWNGRADE → parked, applied at the next billing date (no charge) ──
+        // A frequency-changing downgrade still needs a fresh subscription, since
+        // Razorpay can't swap a plan across billing intervals on the same sub.
         if ((curTier?.billing_frequency || null) !== (newTier.billing_frequency || null)) {
           return new Response(JSON.stringify({
             success: true,
@@ -258,13 +279,13 @@ Deno.serve(async (req) => {
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
         }
 
-        // Same frequency → PATCH the plan. Upgrade applies now (prorated charge
-        // + instant benefit); downgrade applies at cycle end (no mid-cycle charge).
+        // Same-frequency downgrade → schedule the plan change at cycle end (the
+        // merchant keeps the plan they paid for until then; no mid-cycle charge).
         try {
           await updateRazorpaySubscriptionPlan(
             sub.razorpay_subscription_id as string,
             newTier.razorpay_plan_id,
-            isUpgrade ? 'now' : 'cycle_end',
+            'cycle_end',
           );
         } catch (rzpErr: any) {
           const rzpMsg = rzpErr?.message || '';
@@ -287,11 +308,13 @@ Deno.serve(async (req) => {
         }
       }
 
+      // NOTE: Razorpay UPGRADES no longer reach here — they return `resubscribe`
+      // above and restart via verify-subscription (Model B: full charge now,
+      // billing date = today, usage reset). This in-place branch now applies only to
+      //   • LEGACY (non-Razorpay) upgrades → switch plan_name now; the billing run
+      //     applies the new rate next cycle.
+      //   • DOWNGRADES (any billing type) → park in pending_* for the next cycle.
       const patch: Record<string, unknown> = isUpgrade
-        // Instant upgrade: switch the plan + go-forward amount now. For Razorpay
-        // subs the prorated charge was just raised; subscription.charged/updated
-        // webhooks reconcile current_period_end. For legacy subs the billing run
-        // applies the new rate at the next cycle.
         ? { plan_name: newTier.tier_key, total_recurring_amount: recurringAmount, pending_tier_id: null, pending_plan_name: null, pending_amount: null, pending_effective_date: null }
         : { pending_tier_id: newTier.id, pending_plan_name: newTier.tier_key, pending_amount: recurringAmount, pending_effective_date: sub.current_period_end };
       patch.tier_change_locked_until = lockUntil;
@@ -643,7 +666,11 @@ Deno.serve(async (req) => {
           campaigns_limit: tierData.max_campaigns_per_month,
           dotd_used: dotdCount || 0,
           dotd_limit: tierData.max_dotd_per_month,
-          has_subscription: true
+          has_subscription: true,
+          // Exact moment the allowance refreshes = end of the current billing-cycle
+          // window (the merchant's billing date), NOT the 1st of the month. The UI
+          // shows this so "wait until … to reset" always names the billing date.
+          next_reset: windowEndTs,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );

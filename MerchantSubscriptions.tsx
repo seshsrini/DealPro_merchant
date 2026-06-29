@@ -847,9 +847,12 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               </div>
             </div>
 
-            {/* Plan change only: warn that monthly usage resets to the new plan's
-                limits so the merchant doesn't expect unused deals to carry over. */}
-            {currentSubscription?.status === 'active' && tierToConfirm.id !== currentTierId && (
+            {/* UPGRADE only: upgrading restarts the billing cycle today (full charge
+                now, billing date → today) and resets the deal count to the new
+                plan's limits. Not shown for downgrades, which are parked for the
+                next cycle and don't reset usage now. */}
+            {currentSubscription?.status === 'active' && tierToConfirm.id !== currentTierId
+              && tierToConfirm.subscription_fee > (currentTier?.subscription_fee ?? 0) && (
               <div className={`flex gap-2 rounded-xl border p-3 text-xs leading-snug ${
                 isDark ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-800'
               }`}>
