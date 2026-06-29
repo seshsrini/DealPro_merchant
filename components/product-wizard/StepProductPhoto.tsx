@@ -170,10 +170,13 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
   const [extraUploading, setExtraUploading] = useState(false);
   const [videoUploading, setVideoUploading] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  // Source picker for an additional photo — camera (live) vs gallery, same as the cover.
+  const [extraSourceOpen, setExtraSourceOpen] = useState(false);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const extraImageInputRef = useRef<HTMLInputElement>(null);
+  const extraCameraInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -404,8 +407,9 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
         {/* Hidden file inputs */}
         <input ref={cameraInputRef}     type="file" accept="image/*" capture="environment" onChange={handleCoverSelected}   className="hidden" />
         <input ref={galleryInputRef}    type="file" accept="image/*"                       onChange={handleCoverSelected}   className="hidden" />
-        <input ref={extraImageInputRef} type="file" accept="image/*"                       onChange={handleExtraImageSelected} className="hidden" />
-        <input ref={videoInputRef}      type="file" accept="video/*"                       onChange={handleVideoSelected}   className="hidden" />
+        <input ref={extraImageInputRef}  type="file" accept="image/*"                       onChange={handleExtraImageSelected} className="hidden" />
+        <input ref={extraCameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleExtraImageSelected} className="hidden" />
+        <input ref={videoInputRef}       type="file" accept="video/*"                       onChange={handleVideoSelected}   className="hidden" />
 
         {!previewUrl ? (
           // ── Empty state — show camera + gallery buttons ──
@@ -611,7 +615,7 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
                   ))}
                   {additionalImages.length < MAX_ADDITIONAL_IMAGES && (
                     <button
-                      onClick={() => extraImageInputRef.current?.click()}
+                      onClick={() => setExtraSourceOpen(true)}
                       disabled={extraUploading}
                       className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1 active:scale-[0.98] transition-all ${
                         isDark ? 'border-slate-700 bg-slate-800/40 hover:bg-slate-800' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'
@@ -719,6 +723,50 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
           </button>
         )}
       </div>
+
+      {/* Action sheet: pick camera (live) or gallery for an additional photo —
+          mirrors the cover photo's two options so every photo can be shot live. */}
+      {extraSourceOpen && (
+        <div className="fixed inset-0 z-50 flex items-end" onClick={() => setExtraSourceOpen(false)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div
+            className={`relative w-full rounded-t-2xl p-4 pb-8 space-y-2 ${isDark ? 'bg-slate-900 border-t border-slate-800' : 'bg-white'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Add a photo</p>
+            <button
+              onClick={() => { setExtraSourceOpen(false); extraCameraInputRef.current?.click(); }}
+              className={`w-full p-4 rounded-xl flex items-center gap-3 active:scale-[0.98] transition-all ${isDark ? 'bg-emerald-500/10 hover:bg-emerald-500/15' : 'bg-emerald-50 hover:bg-emerald-100'}`}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDark ? 'bg-emerald-500/20' : 'bg-emerald-100'}`}>
+                <Camera className="w-5 h-5 text-emerald-500" />
+              </div>
+              <div className="text-left">
+                <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Take Photo</p>
+                <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Use your camera</p>
+              </div>
+            </button>
+            <button
+              onClick={() => { setExtraSourceOpen(false); extraImageInputRef.current?.click(); }}
+              className={`w-full p-4 rounded-xl flex items-center gap-3 active:scale-[0.98] transition-all ${isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-50 hover:bg-slate-100'}`}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}>
+                <Upload className={`w-5 h-5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`} />
+              </div>
+              <div className="text-left">
+                <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Choose from Gallery</p>
+                <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Pick an existing photo</p>
+              </div>
+            </button>
+            <button
+              onClick={() => setExtraSourceOpen(false)}
+              className={`w-full h-11 rounded-xl text-sm font-semibold mt-1 ${isDark ? 'bg-slate-800/60 text-slate-300' : 'bg-slate-100 text-slate-600'}`}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
