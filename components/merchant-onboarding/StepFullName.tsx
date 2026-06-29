@@ -35,7 +35,7 @@ export const StepFullName: React.FC<StepFullNameProps> = ({ value, onChange, onN
         <UserIcon className="w-8 h-8 text-slate-700" />
       </div>
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        What's your name?
+        What's your name? <span className="text-red-500">*</span>
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-8 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
         This will be displayed on your merchant profile.

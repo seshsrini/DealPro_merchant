@@ -268,7 +268,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
             Business verification
           </h2>
           <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Select your business registration type
+            Select your business registration type <span className="text-red-500">*</span>
           </p>
         </div>
       </div>
@@ -298,7 +298,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
         {businessType === 'gstin' && (
           <>
             <div>
-              <label className={labelClass}>GSTIN Number</label>
+              <label className={labelClass}>GSTIN Number <span className="text-red-500">*</span></label>
               <div className="relative">
                 <input value={gstinValue} onChange={(e) => handleGstinChange(e.target.value)} placeholder="27AAAPA1234A1Z5" className={inputClass} maxLength={15} />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -310,7 +310,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
               <VerifyButton docType="gstin" value={gstinValue} valid={isGstValid(gstinValue)} />
             </div>
             <div>
-              <label className={labelClass}>PAN Number</label>
+              <label className={labelClass}>PAN Number <span className="text-red-500">*</span></label>
               <div className="relative">
                 <input value={panValue} onChange={(e) => handlePanChange(e.target.value)} placeholder="AFZPK7190K" className={inputClass} maxLength={10} />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -325,7 +325,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
 
         {businessType === 'udyam' && (
           <div>
-            <label className={labelClass}>Udyam Registration Number</label>
+            <label className={labelClass}>Udyam Registration Number <span className="text-red-500">*</span></label>
             <div className="relative">
               <input value={udyamValue} onChange={(e) => handleUdyamChange(e.target.value)} placeholder="UDYAM-KA-01-0000001" className={inputClass} />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -339,7 +339,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
 
         {businessType === 'fssai' && (
           <div>
-            <label className={labelClass}>FSSAI License Number</label>
+            <label className={labelClass}>FSSAI License Number <span className="text-red-500">*</span></label>
             <div className="relative">
               <input value={fssaiValue} onChange={(e) => handleFssaiChange(e.target.value)} placeholder="14-digit license number" inputMode="numeric" className={inputClass} maxLength={14} />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -353,7 +353,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
 
         {businessType === 'trade_license' && (
           <div>
-            <label className={labelClass}>Trade License Number</label>
+            <label className={labelClass}>Trade License Number <span className="text-red-500">*</span></label>
             <div className="relative">
               <input value={tradeLicenseValue} onChange={(e) => handleTradeLicenseChange(e.target.value)} placeholder="KA/2024/123456" className={inputClass} />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">

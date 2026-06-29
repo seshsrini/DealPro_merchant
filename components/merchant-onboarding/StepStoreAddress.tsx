@@ -270,7 +270,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
       <div style={floatIn(150, visible)} className="space-y-4 pb-4">
         {/* Branch Name */}
         <div>
-          <label className={labelClass}>Branch / Location Name</label>
+          <label className={labelClass}>Branch / Location Name <span className="text-red-500">*</span></label>
           <input
             value={store.store_name}
             onChange={(e) => onChange('store_name', e.target.value)}
@@ -281,7 +281,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
 
         {/* Store Category */}
         <div>
-          <label className={labelClass}>Store Category *</label>
+          <label className={labelClass}>Store Category <span className="text-red-500">*</span></label>
           <select
             value={store.store_category}
             onChange={(e) => onChange('store_category', e.target.value)}
@@ -296,7 +296,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
 
         {/* Street */}
         <div>
-          <label className={labelClass}>Street Address *</label>
+          <label className={labelClass}>Street Address <span className="text-red-500">*</span></label>
           <input
             value={store.street}
             // Max 80 chars (free-form address — special characters allowed).
@@ -309,7 +309,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
 
         {/* Pincode */}
         <div>
-          <label className={labelClass}>Pincode *</label>
+          <label className={labelClass}>Pincode <span className="text-red-500">*</span></label>
           <div className="relative">
             <input
               value={store.pincode}
@@ -393,7 +393,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
         {/* Store Phone Numbers */}
         <div>
           <label className={`${labelClass} flex items-center gap-2`}>
-            <Phone className="w-3.5 h-3.5" /> Store Phone Number
+            <Phone className="w-3.5 h-3.5" /> Store Phone Number <span className="text-red-500">*</span>
           </label>
           <input
             value={store.store_phone || ''}
@@ -508,7 +508,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
         {/* Store Hours */}
         <div>
           <label className={`${labelClass} flex items-center gap-2`}>
-            <Clock className="w-3.5 h-3.5" /> Store Hours
+            <Clock className="w-3.5 h-3.5" /> Store Hours <span className="text-red-500">*</span>
           </label>
           <label className={`flex items-center gap-2 mb-3 cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
             <input
