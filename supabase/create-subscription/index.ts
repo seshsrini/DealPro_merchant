@@ -14,12 +14,31 @@ Deno.serve(async (req) => {
 
   try {
     const adminClient = createClient(supabaseUrl, serviceKey);
-    const body = await req.json();
-    const { merchantId, tier_id, tier_key, tier_name } = body;
 
-    if (!merchantId || !tier_key || !tier_name) {
+    // SECURITY: deployed with --no-verify-jwt. This endpoint creates/cancels
+    // subscriptions, so verify the caller's JWT and act ONLY on their own
+    // account — the merchant id is taken from the VERIFIED token, never from the
+    // body (which previously let anyone grant any merchant a free trial or
+    // cancel a competitor). In production this path is unused — signup takes
+    // payment via Razorpay on StepPayment; it remains only behind the dev-only
+    // VITE_ALLOW_TEST_SUBSCRIPTION bypass, where the tester is logged in, so a
+    // valid token is always present.
+    const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+    const { data: { user }, error: authErr } = await adminClient.auth.getUser(token);
+    if (authErr || !user) {
       return new Response(
-        JSON.stringify({ error: 'merchantId, tier_key, and tier_name are required.' }),
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const body = await req.json();
+    const { tier_id, tier_key, tier_name } = body;
+    const merchantId = user.id; // force to the verified caller; ignore any body merchantId
+
+    if (!tier_key || !tier_name) {
+      return new Response(
+        JSON.stringify({ error: 'tier_key and tier_name are required.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

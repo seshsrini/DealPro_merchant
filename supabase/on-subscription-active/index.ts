@@ -1,8 +1,3 @@
-if (req.method === 'OPTIONS') {
-
-return new Response('ok', { headers: corsHeaders });
-
-}
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // 1. GLOBAL CORS HEADERS
@@ -43,14 +38,29 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    const { refereeId, refereePhoneNumber } = await req.json();
-    console.log('[OnSubscriptionActive] Processing referral for:', refereePhoneNumber);
-
-    // 4. VALIDATION
-    if (!isString(refereeId) || !isValidPhoneNumber(refereePhoneNumber)) {
-      return new Response(JSON.stringify({ error: 'Invalid Referee ID or Phone Number format.' }), { 
+    // SECURITY: deployed with --no-verify-jwt — authenticate here and derive the
+    // referee from the VERIFIED token, never from a body-supplied refereeId
+    // (which let anyone fabricate 'qualified' referrals crediting any referrer).
+    // The app calls this while logged in as the referee, so user.id already
+    // equals the refereeId it sends — behaviour is unchanged for real callers.
+    const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400 
+        status: 401,
+      });
+    }
+
+    const { refereePhoneNumber } = await req.json();
+    const refereeId = user.id;
+    console.log('[OnSubscriptionActive] Processing referral for referee:', refereeId);
+
+    // 4. VALIDATION — refereeId is the verified caller; only validate the phone.
+    if (!isValidPhoneNumber(refereePhoneNumber)) {
+      return new Response(JSON.stringify({ error: 'Invalid Phone Number format.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400
       });
     }
 

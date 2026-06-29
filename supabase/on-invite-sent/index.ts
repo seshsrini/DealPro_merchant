@@ -24,20 +24,35 @@ serve(async (req: Request) => {
 
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
 
+    // SECURITY: deployed with --no-verify-jwt, so the gateway does NOT
+    // authenticate the caller. Verify the JWT here and derive the referrer from
+    // the VERIFIED token — never from a body-supplied referrerId (which let
+    // anyone forge invite rows crediting any merchant). The app calls this via
+    // supabase.functions.invoke while logged in, so the session token is always
+    // attached and user.id already equals the referrerId it sends — behaviour is
+    // unchanged for real callers; only anonymous/forged calls are rejected.
+    const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? ''
+    const { data: { user }, error: authErr } = await supabaseClient.auth.getUser(token)
+    if (authErr || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      )
+    }
+
     // 2. Parse the body
     const body = await req.json()
-    console.log("Processing invite request:", body)
+    console.log("Processing invite request for referrer:", user.id)
 
-    const { referrerId, referralCode, inviteePhoneNumber } = body
+    const { referralCode, inviteePhoneNumber } = body
 
-    // 3. Database Insertion
-    // Note: Mapped strictly to your 'merchant_invites' table
+    // 3. Database Insertion — referrer_id is the VERIFIED caller, not a body value.
     const { data, error: dbError } = await supabaseClient
-      .from('merchant_invites') 
+      .from('merchant_invites')
       .insert([
-        { 
-          referrer_id: referrerId,
-          invite_code: referralCode, 
+        {
+          referrer_id: user.id,
+          invite_code: referralCode,
           invitee_phone: inviteePhoneNumber || 'Not Provided', // Ensure NOT NULL constraint is met
           status: 'sent'
         }
