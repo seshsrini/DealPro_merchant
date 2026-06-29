@@ -5,6 +5,7 @@ import { AppView, Deal } from './types';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { merchantService } from './services/merchantService';
 import { mDashboardService } from './services/mDashboardService';
+import { mrpFromDiscount } from './components/campaign-wizard/StepImage';
 import { resilient, peekCache } from './services/resilientData';
 import { useResumeRefetch } from './services/useResumeRefetch';
 import { perfTimer } from './services/perfLogger';
@@ -744,7 +745,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   {allMedia.map((item, i) => {
                     const overlay = priceOverlays[String(i)];
                     const hasOverlay = overlay && (overlay.discountPct || overlay.offerPrice);
-                    const mrp = overlay?.offerPrice ? Math.round(parseFloat(overlay.offerPrice) * 1.3) : null;
+                    const mrp = overlay?.offerPrice ? mrpFromDiscount(parseFloat(overlay.offerPrice), overlay.discountPct) : null;
                     return (
                       <div key={i} className="w-full h-full flex-shrink-0 snap-center relative">
                         {item.isVideo ? (

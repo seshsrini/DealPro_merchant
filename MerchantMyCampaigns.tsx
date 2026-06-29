@@ -5,6 +5,7 @@ import { addCampaignService } from './services/addCampaignService';
 import { mDashboardService } from './services/mDashboardService';
 import { merchantService } from './services/merchantService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
+import { mrpFromDiscount } from './components/campaign-wizard/StepImage';
 import { resilient, peekCache } from './services/resilientData';
 import { useResumeRefetch } from './services/useResumeRefetch';
 import { useTranslation } from './contexts/LanguageContext';
@@ -812,7 +813,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                   {allMedia.map((item, i) => {
                     const overlay = priceOverlays[String(i)];
                     const hasOverlay = overlay && (overlay.discountPct || overlay.offerPrice);
-                    const mrp = overlay?.offerPrice ? Math.round(parseFloat(overlay.offerPrice) * 1.3) : null;
+                    const mrp = overlay?.offerPrice ? mrpFromDiscount(parseFloat(overlay.offerPrice), overlay.discountPct) : null;
                     return (
                       <div key={i} className="w-full h-full flex-shrink-0 snap-center relative">
                         {item.isVideo ? (

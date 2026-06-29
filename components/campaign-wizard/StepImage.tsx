@@ -11,7 +11,22 @@ const ACCEPTED_VIDEO_TYPES = 'video/mp4,video/quicktime,video/webm';
 
 export interface PromoBannerTagOverride {
   discountPct?: string;  // e.g. "30"
-  offerPrice?: string;   // e.g. "699" (MRP auto = +30%)
+  offerPrice?: string;   // e.g. "699" (MRP is derived from discountPct)
+}
+
+/**
+ * The implied original price (MRP) the offer price was discounted FROM, using the
+ * % the merchant entered: MRP = offerPrice / (1 - discount/100). E.g. "10% off"
+ * on ₹699 → ₹777. Returns null when there's no valid positive discount (< 100),
+ * since we can't infer an original price — callers then show just the offer price,
+ * with no strikethrough MRP. (Previously this was hardcoded to offerPrice * 1.3,
+ * i.e. always ~30%, which ignored the discount the merchant typed.)
+ */
+export function mrpFromDiscount(price: number, discountPct?: string): number | null {
+  if (!isFinite(price) || price <= 0) return null;
+  const d = discountPct != null ? parseFloat(discountPct) : NaN;
+  if (!isFinite(d) || d <= 0 || d >= 100) return null;
+  return Math.round(price / (1 - d / 100));
 }
 
 export type BannerTextSide = 'left' | 'right';
@@ -360,7 +375,7 @@ export async function generatePromoBanner(
         }
         if (tagPrice) {
           const priceNum = parseFloat(tagPrice);
-          const mrp = isFinite(priceNum) && priceNum > 0 ? Math.round(priceNum * 1.3) : null;
+          const mrp = mrpFromDiscount(priceNum, tagDiscount);
           ctx.fillStyle = '#ffffff';
           ctx.font = `bold ${SIZE * 0.045}px Arial, sans-serif`;
           ctx.fillText(`₹${tagPrice}`, textAnchorX, y);
@@ -528,7 +543,7 @@ export async function generatePromoBanner(
           }
           if (bandTagPrice) {
             const priceNum = parseFloat(bandTagPrice);
-            const mrp = isFinite(priceNum) && priceNum > 0 ? Math.round(priceNum * 1.3) : null;
+            const mrp = mrpFromDiscount(priceNum, bandTagDiscount);
             ctx.fillStyle = '#ffffff';
             ctx.font = `bold ${SIZE * 0.038}px Arial, sans-serif`;
             const priceLine = mrp ? `₹${bandTagPrice}   (MRP ₹${mrp})` : `₹${bandTagPrice}`;
@@ -680,7 +695,7 @@ export async function generatePriceTagImage(
         if (disc) lines.push({ t: `${disc}% OFF`, f: `900 ${SIZE * 0.058}px Arial, sans-serif`, c: '#eab308', h: SIZE * 0.062 });
         if (price) {
           const n = parseFloat(price);
-          const mrp = isFinite(n) && n > 0 ? Math.round(n * 1.3) : null;
+          const mrp = mrpFromDiscount(n, disc);
           lines.push({ t: `₹${price}`, f: `bold ${SIZE * 0.042}px Arial, sans-serif`, c: '#ffffff', h: SIZE * 0.05 });
           if (mrp) lines.push({ t: `MRP ₹${mrp}`, f: `${SIZE * 0.02}px Arial, sans-serif`, c: 'rgba(255,255,255,0.65)', h: SIZE * 0.028, strike: true });
         }
@@ -1339,7 +1354,7 @@ export const StepImage: React.FC<StepImageProps> = ({
           {allImages.map((img, i) => {
             const overlay = overlays[i];
             const hasOverlay = overlay && (overlay.discountPct || overlay.offerPrice);
-            const mrp = overlay?.offerPrice ? Math.round(parseFloat(overlay.offerPrice) * 1.3) : null;
+            const mrp = overlay?.offerPrice ? mrpFromDiscount(parseFloat(overlay.offerPrice), overlay.discountPct) : null;
             return (
               <div
                 key={`img-${i}`}
@@ -1480,14 +1495,16 @@ export const StepImage: React.FC<StepImageProps> = ({
               <div className="flex-1">
                 <label className={`text-[10px] font-medium block mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>MRP (auto)</label>
                 <div className={`w-full h-9 px-3 rounded-lg text-sm flex items-center border ${isDark ? 'bg-slate-700/50 border-slate-600 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
-                  {overlays[editingOverlayIdx]?.offerPrice
-                    ? `₹${Math.round(parseFloat(overlays[editingOverlayIdx].offerPrice) * 1.3)}`
-                    : '—'}
+                  {(() => {
+                    const o = overlays[editingOverlayIdx];
+                    const m = o?.offerPrice ? mrpFromDiscount(parseFloat(o.offerPrice), o.discountPct) : null;
+                    return m ? `₹${m}` : '—';
+                  })()}
                 </div>
               </div>
             </div>
             <p className={`text-[9px] mt-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              Optional — adds price tag overlay on the image. MRP = offer price + 30%.
+              Optional — adds price tag overlay on the image. MRP is calculated from your discount %.
             </p>
           </div>
         )}
