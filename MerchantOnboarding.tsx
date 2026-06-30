@@ -408,12 +408,28 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       };
       setUser(updatedUser);
 
-      // Re-save biometric session so app reopen sees complete profile
-      await biometricService.saveSession(updatedUser);
+      // Decide whether to skip the subscription step by re-verifying the ACTUAL
+      // subscription status from the server — NOT user.hasActiveSubscription, which
+      // can be stale (a saved/biometric session carried over from a previously
+      // subscribed account, or a since-expired sub). Trusting the stale flag was
+      // skipping the subscription step for merchants who haven't actually
+      // subscribed (they landed on the dashboard with no plan / no deal limits).
+      let actuallySubscribed = false;
+      try {
+        const subInfo = await merchantSubscriptionService.checkActiveSubscription(user.id, (user as any).access_token);
+        actuallySubscribed = !!subInfo.hasActiveSubscription;
+      } catch (e) {
+        // If the check fails, default to SHOWING the subscription step rather than
+        // skipping it — never let a merchant reach the dashboard unsubscribed.
+        console.warn('[MerchantOnboarding] Subscription re-check failed; showing subscription step:', e);
+        actuallySubscribed = false;
+      }
+      // Keep the user object consistent with the verified status.
+      setUser({ ...updatedUser, hasActiveSubscription: actuallySubscribed });
+      await biometricService.saveSession({ ...updatedUser, hasActiveSubscription: actuallySubscribed });
 
-      // Skip subscription step if merchant already has an active subscription
-      if (user.hasActiveSubscription) {
-        goToStep(12); // Congrats
+      if (actuallySubscribed) {
+        goToStep(12); // Congrats — already subscribed, don't charge again
       } else {
         goToStep(10); // Subscription selection
       }
