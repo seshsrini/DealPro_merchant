@@ -111,12 +111,8 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     || currentTier?.subscription_fee
     || null;
 
-  // Plan-change lock: after an upgrade/downgrade the merchant can't change again
-  // until this date (≥ 1 billing month). Also surface a parked (downgrade) change.
-  const lockedUntilDate = currentSubscription?.tier_change_locked_until
-    ? new Date(currentSubscription.tier_change_locked_until)
-    : null;
-  const isPlanChangeLocked = !!(lockedUntilDate && lockedUntilDate > new Date());
+  // Plan changes are NOT locked: an upgrade is a full instant payment and a
+  // downgrade is parked for the next cycle, so merchants may change plans freely.
   const fmtDate = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   const pendingPlanName = currentSubscription?.pending_plan_name || null;
   const pendingEffectiveDate = currentSubscription?.pending_effective_date
@@ -489,20 +485,6 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         </div>
       )}
 
-      {/* Change-lock notice */}
-      {isPlanChangeLocked && lockedUntilDate && (
-        <div className={`rounded-xl border px-4 py-3 text-xs font-medium flex items-center gap-2 ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
-          <Clock className="w-4 h-4 shrink-0" />
-          {(() => {
-            // Use the localized m_change_locked string and bold the date by
-            // splitting around its {date} placeholder (present in every language).
-            const [before, after] = t('m_change_locked').split('{date}');
-            return (
-              <span>{before}<span className="font-bold">{fmtDate(lockedUntilDate)}</span>{after}</span>
-            );
-          })()}
-        </div>
-      )}
 
       {/* Legacy → Autopay migration nudge (P3) */}
       {isLegacyBilling && !loading && (
@@ -762,13 +744,6 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 {currentTierId === tier.id ? (
                   <span className="px-3 h-8 rounded-lg bg-emerald-500 text-white font-semibold text-[11px] flex items-center">
                     Current
-                  </span>
-                ) : isPlanChangeLocked ? (
-                  <span
-                    title={lockedUntilDate ? `You can change plans again after ${fmtDate(lockedUntilDate)}` : undefined}
-                    className={`px-3 h-8 rounded-lg font-semibold text-[11px] flex items-center gap-1 ${isDark ? 'bg-slate-800 text-slate-500' : 'bg-slate-100 text-slate-400'}`}
-                  >
-                    <Clock className="w-3 h-3" /> Locked
                   </span>
                 ) : (
                   <button

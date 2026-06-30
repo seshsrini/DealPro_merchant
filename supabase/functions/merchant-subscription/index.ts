@@ -188,25 +188,9 @@ Deno.serve(async (req) => {
       }
       const isRazorpaySub = sub.billing_type === 'razorpay' && !!sub.razorpay_subscription_id;
 
-      // Enforce the change-lock (best-effort; tolerate a missing column).
-      let lockedUntil: string | null = null;
-      try {
-        const { data: lockRow } = await supabaseAdmin
-          .from('merchant_subscriptions')
-          .select('tier_change_locked_until')
-          .eq('id', sub.id)
-          .maybeSingle();
-        lockedUntil = (lockRow as any)?.tier_change_locked_until ?? null;
-      } catch { /* column may not exist yet */ }
-      if (lockedUntil && new Date(lockedUntil) > new Date()) {
-        const until = new Date(lockedUntil);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'locked',
-          locked_until: lockedUntil,
-          message: `You changed your plan recently. You can change it again after ${until.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.`,
-        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
-      }
+      // No change-lock: an upgrade is a full instant payment (Model B) and a
+      // downgrade is parked for the next cycle, so there's no "instant benefit
+      // then revert" to guard against — merchants may change plans freely.
 
       const { data: newTier } = await supabaseAdmin
         .from('subscription_tiers')
@@ -232,11 +216,7 @@ Deno.serve(async (req) => {
       // The tier fee is the full recurring amount — no paid loyalty add-on.
       const recurringAmount = newFee;
 
-      // Lock for at least one billing month: the later of next billing or +30d.
       const now = new Date();
-      const in30 = new Date(now.getTime() + 30 * 86400000);
-      const periodEnd = sub.current_period_end ? new Date(sub.current_period_end) : in30;
-      const lockUntil = (periodEnd > in30 ? periodEnd : in30).toISOString();
 
       // ── Razorpay-managed subscription: drive the change through Razorpay ─────
       if (isRazorpaySub) {
@@ -317,7 +297,6 @@ Deno.serve(async (req) => {
       const patch: Record<string, unknown> = isUpgrade
         ? { plan_name: newTier.tier_key, total_recurring_amount: recurringAmount, pending_tier_id: null, pending_plan_name: null, pending_amount: null, pending_effective_date: null }
         : { pending_tier_id: newTier.id, pending_plan_name: newTier.tier_key, pending_amount: recurringAmount, pending_effective_date: sub.current_period_end };
-      patch.tier_change_locked_until = lockUntil;
       patch.updated_at = now.toISOString();
 
       // Resilience: the lock + pending_* scheduling fields + total_recurring_amount
@@ -355,7 +334,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         upgraded: isUpgrade,
-        locked_until: lockUntil,
         effective_date: sub.current_period_end,
         new_amount: recurringAmount,
         message: isUpgrade
