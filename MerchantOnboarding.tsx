@@ -648,6 +648,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             storeName={state.storeName}
             onGoToDashboard={handleGoToDashboard}
             theme={theme}
+            pendingSubscription={PLAY_COMPLIANT && !user.hasActiveSubscription}
           />
         );
       default:

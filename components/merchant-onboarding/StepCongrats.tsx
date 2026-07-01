@@ -6,9 +6,13 @@ interface StepCongratsProps {
   storeName: string;
   onGoToDashboard: () => void;
   theme: 'light' | 'dark';
+  /** Compliant (Play Store) build: the merchant still needs to set up their
+      subscription on the web, so the copy + CTA point there instead of implying
+      they can already post deals. */
+  pendingSubscription?: boolean;
 }
 
-export const StepCongrats: React.FC<StepCongratsProps> = ({ storeName, onGoToDashboard, theme }) => {
+export const StepCongrats: React.FC<StepCongratsProps> = ({ storeName, onGoToDashboard, theme, pendingSubscription = false }) => {
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
 
@@ -42,15 +46,17 @@ export const StepCongrats: React.FC<StepCongratsProps> = ({ storeName, onGoToDas
         style={floatIn(200, visible)}
         className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}
       >
-        You're all set!
+        {pendingSubscription ? 'Almost there!' : "You're all set!"}
       </h2>
 
       <p
         style={floatIn(350, visible)}
         className={`text-sm mb-8 max-w-[280px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
       >
-        <strong className={isDark ? 'text-white' : 'text-slate-800'}>{storeName}</strong> is ready to go.
-        Start creating deals and reach customers in your area.
+        <strong className={isDark ? 'text-white' : 'text-slate-800'}>{storeName}</strong>{' '}
+        {pendingSubscription
+          ? 'is registered. One last step — set up your subscription on our website to start posting deals.'
+          : 'is ready to go. Start creating deals and reach customers in your area.'}
       </p>
 
       {/* What you can do now */}
@@ -82,7 +88,7 @@ export const StepCongrats: React.FC<StepCongratsProps> = ({ storeName, onGoToDas
           onClick={onGoToDashboard}
           className="w-full h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
-          Go to Dashboard <ArrowRight className="w-4 h-4" />
+          {pendingSubscription ? 'Set up subscription' : 'Go to Dashboard'} <ArrowRight className="w-4 h-4" />
         </button>
       </div>
     </div>
