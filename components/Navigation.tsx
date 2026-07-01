@@ -197,8 +197,14 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
               {isActive && (
                 <span className={`absolute top-0 h-[3px] w-8 rounded-full ${isDark ? 'bg-amber-400' : 'bg-amber-500'}`} />
               )}
-              <Icon className="w-[21px] h-[21px]" strokeWidth={isActive ? 2.4 : 1.9} />
-              <span className={`text-[9px] leading-none truncate max-w-full ${isActive ? 'font-bold' : `font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}`}>{tab.label}</span>
+              {/* Persistent highlight behind the ACTIVE tab — a soft amber glow so
+                  the current screen's icon stays visibly brighter until you
+                  navigate to another tab. */}
+              {isActive && (
+                <span aria-hidden className={`absolute inset-x-1.5 top-1.5 bottom-1 rounded-xl ${isDark ? 'bg-amber-400/15' : 'bg-amber-500/15'}`} />
+              )}
+              <Icon className="relative w-[21px] h-[21px]" strokeWidth={isActive ? 2.4 : 1.9} />
+              <span className={`relative text-[9px] leading-none truncate max-w-full ${isActive ? 'font-bold' : `font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}`}>{tab.label}</span>
             </button>
           );
         })}
