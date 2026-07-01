@@ -232,12 +232,24 @@ Deno.serve(async (req: Request) => {
         console.log('[MerchantOtpLogin] Invite code lookup:', invite_code, '→', pendingInvite ? 'FOUND' : 'NOT FOUND');
       }
 
-      // Priority 2: match by phone number
+      // Priority 2: match by phone number. The invite phone may have been stored
+      // in different formats depending on how the merchant typed it when adding
+      // the staff (plain 10-digit, 91-prefixed, +91-prefixed, or with spaces), so
+      // match against all common variants of the same number — otherwise a real
+      // staff member falls through and gets sent into the signup wizard.
       if (!pendingInvite && normalizedPhone) {
+        const last10 = cleanPhone.slice(-10);
+        const phoneVariants = Array.from(new Set([
+          last10,
+          normalizedPhone,
+          `91${last10}`,
+          `+91${last10}`,
+          cleanPhone,
+        ].filter(Boolean)));
         const { data } = await adminClient
           .from('merchant_staff_invites')
           .select('*')
-          .eq('phone', normalizedPhone)
+          .in('phone', phoneVariants)
           .eq('status', 'pending')
           .gt('expires_at', new Date().toISOString())
           .order('created_at', { ascending: false })

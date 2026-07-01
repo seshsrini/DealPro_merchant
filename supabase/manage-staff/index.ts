@@ -139,6 +139,16 @@ Deno.serve(async (req) => {
       }
       const staffRole = role === 'manager' ? 'manager' : 'staff';
 
+      // Store the invite phone as the plain last-10-digits, so it matches the
+      // phone login-merchant normalizes a staff member's number to (regardless of
+      // whether the merchant typed +91, a country code, or spaces). A format
+      // mismatch here means the staff invite never matches on login and the staff
+      // member gets bounced into the signup wizard.
+      const invitePhone = (() => {
+        const digits = (phone || '').replace(/\D/g, '');
+        return digits.length >= 10 ? digits.slice(-10) : (digits || null);
+      })();
+
       // Generate unique invite code
       let inviteCode = generateInviteCode();
       let attempts = 0;
@@ -161,7 +171,7 @@ Deno.serve(async (req) => {
           invite_code: inviteCode,
           role: staffRole,
           display_name: display_name.trim(),
-          phone: phone?.trim() || null,
+          phone: invitePhone,
           status: 'pending',
         })
         .select()
