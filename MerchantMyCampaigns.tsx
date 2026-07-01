@@ -408,10 +408,16 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
               <div>
                 <p className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_campaigns')}</p>
                 <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  <span className={campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? 'text-rose-500' : 'text-emerald-500'}>
-                    {campaignUsage.campaigns_used}
-                  </span>
-                  <span className={isDark ? 'text-slate-300' : 'text-slate-900'}>/{campaignUsage.campaigns_limit}</span>
+                  {campaignUsage.campaigns_limit >= 999 ? (
+                    <span className="text-emerald-500">Unlimited</span>
+                  ) : (
+                    <>
+                      <span className={campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? 'text-rose-500' : 'text-emerald-500'}>
+                        {campaignUsage.campaigns_used}
+                      </span>
+                      <span className={isDark ? 'text-slate-300' : 'text-slate-900'}>/{campaignUsage.campaigns_limit}</span>
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -422,10 +428,16 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
               <div>
                 <p className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_deal_of_day')}</p>
                 <p className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  <span className={campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit ? 'text-rose-500' : 'text-emerald-500'}>
-                    {campaignUsage.dotd_used}
-                  </span>
-                  <span className={isDark ? 'text-slate-300' : 'text-slate-900'}>/{campaignUsage.dotd_limit}</span>
+                  {campaignUsage.dotd_limit >= 999 ? (
+                    <span className="text-emerald-500">Unlimited</span>
+                  ) : (
+                    <>
+                      <span className={campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit ? 'text-rose-500' : 'text-emerald-500'}>
+                        {campaignUsage.dotd_used}
+                      </span>
+                      <span className={isDark ? 'text-slate-300' : 'text-slate-900'}>/{campaignUsage.dotd_limit}</span>
+                    </>
+                  )}
                 </p>
               </div>
             </div>

@@ -92,11 +92,13 @@ const UsageRing: React.FC<{
   color: string;
   bgColor: string;
   size?: number;
-}> = ({ used, limit, color, bgColor, size = 52 }) => {
+  unlimited?: boolean;
+}> = ({ used, limit, color, bgColor, size = 52, unlimited = false }) => {
   const strokeWidth = 5;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const pct = limit > 0 ? Math.min(used / limit, 1) : 0;
+  // Unlimited plans show a full ring (not a nearly-empty one) to read as "no cap".
+  const pct = unlimited ? 1 : (limit > 0 ? Math.min(used / limit, 1) : 0);
   const offset = circumference * (1 - pct);
 
   return (
@@ -354,8 +356,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     <UsageRing
                       used={campaignUsage.campaigns_used}
                       limit={campaignUsage.campaigns_limit}
-                      color={campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? '#f43f5e' : '#3b82f6'}
+                      color={campaignUsage.campaigns_limit > 0 && campaignUsage.campaigns_limit < 999 && campaignUsage.campaigns_used >= campaignUsage.campaigns_limit ? '#f43f5e' : '#3b82f6'}
                       bgColor={isDark ? '#1e293b' : '#f1f5f9'}
+                      unlimited={campaignUsage.campaigns_limit >= 999}
                     />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <Megaphone className="w-4 h-4 text-blue-500" />
@@ -364,10 +367,16 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   <div>
                     <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_campaigns')}</p>
                     <p className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      {campaignUsage.campaigns_used}
-                      <span className={`text-sm font-bold ${isDark ? 'text-amber-400' : 'text-amber-500'}`}>
-                        /{campaignUsage.campaigns_limit}
-                      </span>
+                      {campaignUsage.campaigns_limit >= 999 ? (
+                        <span className="text-base">Unlimited</span>
+                      ) : (
+                        <>
+                          {campaignUsage.campaigns_used}
+                          <span className={`text-sm font-bold ${isDark ? 'text-amber-400' : 'text-amber-500'}`}>
+                            /{campaignUsage.campaigns_limit}
+                          </span>
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -388,8 +397,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     <UsageRing
                       used={campaignUsage.dotd_used}
                       limit={campaignUsage.dotd_limit}
-                      color={campaignUsage.dotd_limit > 0 && campaignUsage.dotd_used >= campaignUsage.dotd_limit ? '#f43f5e' : '#f59e0b'}
+                      color={campaignUsage.dotd_limit > 0 && campaignUsage.dotd_limit < 999 && campaignUsage.dotd_used >= campaignUsage.dotd_limit ? '#f43f5e' : '#f59e0b'}
                       bgColor={isDark ? '#1e293b' : '#f1f5f9'}
+                      unlimited={campaignUsage.dotd_limit >= 999}
                     />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <Zap className="w-4 h-4 text-amber-500" />
@@ -398,10 +408,16 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   <div>
                     <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_deal_of_day')}</p>
                     <p className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      {campaignUsage.dotd_used}
-                      <span className={`text-sm font-bold ${isDark ? 'text-amber-400' : 'text-amber-500'}`}>
-                        /{campaignUsage.dotd_limit}
-                      </span>
+                      {campaignUsage.dotd_limit >= 999 ? (
+                        <span className="text-base">Unlimited</span>
+                      ) : (
+                        <>
+                          {campaignUsage.dotd_used}
+                          <span className={`text-sm font-bold ${isDark ? 'text-amber-400' : 'text-amber-500'}`}>
+                            /{campaignUsage.dotd_limit}
+                          </span>
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
