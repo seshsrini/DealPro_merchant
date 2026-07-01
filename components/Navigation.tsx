@@ -153,6 +153,38 @@ export const BottomNav: React.FC<{ currentView: AppView; setView: (view: AppView
   );
 };
 
+// Which bottom-nav tab "owns" each sub-screen, so the tab stays highlighted while
+// you're anywhere under it (e.g. Hub stays lit on My Subscription / Edit Profile /
+// Team, Campaigns stays lit inside the deal wizard, etc.). Views not listed here
+// (or global overlays like notifications) simply highlight no tab.
+const MERCHANT_VIEW_TO_TAB: Record<string, AppView> = {
+  merchant_dashboard: 'merchant_dashboard',
+
+  merchant_deals: 'merchant_deals',
+  campaign_wizard: 'merchant_deals',
+  dealadmin_edit_deal: 'merchant_deals',
+
+  merchant_catalogue: 'merchant_catalogue',
+  product_wizard: 'merchant_catalogue',
+
+  merchant_deal_of_day: 'merchant_deal_of_day',
+  dotd_wizard: 'merchant_deal_of_day',
+
+  merchant_analytics: 'merchant_analytics',
+  merchant_ai_insights: 'merchant_analytics',
+
+  profile: 'profile',
+  edit_profile: 'profile',
+  merchant_subscriptions: 'profile',
+  payment_plans: 'profile',
+  bank_verification: 'profile',
+  merchant_stores: 'profile',
+  refer_consumer: 'profile',
+  referral_tracker: 'profile',
+  merchant_team: 'profile',
+  help_feedback: 'profile',
+};
+
 export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view: AppView) => void; theme: 'light' | 'dark' }> = ({ currentView, setView, theme }) => {
   const isDark = theme === 'dark';
   const { can } = usePermissions();
@@ -169,6 +201,11 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
 
   const tabs = allTabs.filter(tab => !tab.permission || can(tab.permission));
 
+  // Highlight the tab that OWNS the current screen, so it stays lit across that
+  // section's sub-screens (e.g. Hub stays lit on My Subscription), not just the
+  // exact tab view.
+  const activeTabId = MERCHANT_VIEW_TO_TAB[currentView as string] ?? currentView;
+
   return (
     // Flush, full-width bar pinned to the bottom (constrained to the app's
     // max-w-md width), above the system gesture bar via the safe-area inset.
@@ -182,7 +219,7 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
       >
         {tabs.map((tab) => {
           const Icon = tab.icon;
-          const isActive = currentView === tab.id;
+          const isActive = activeTabId === tab.id;
           const activeColor = isDark ? 'text-amber-400' : 'text-amber-600';
 
           return (
