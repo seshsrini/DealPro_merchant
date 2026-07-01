@@ -480,7 +480,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         )}
 
         <button
-          onClick={openManageSubscription}
+          onClick={() => openManageSubscription(user.id)}
           className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
         >
           <CreditCard className="w-4 h-4" />

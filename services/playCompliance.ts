@@ -16,15 +16,22 @@ import { Browser } from '@capacitor/browser';
 export const PLAY_COMPLIANT =
   String((import.meta as any).env?.VITE_PLAY_COMPLIANT || '').toLowerCase() === 'true';
 
-// General account/dashboard MANAGEMENT page (deliberately NOT a direct checkout),
-// so links/CTAs read as "manage", staying clear of Google's anti-steering flags.
+// Web merchant subscription page (plan selection + status + cancel) — a
+// management page, NOT a direct in-app checkout. For DEV testing point this at
+// the test lane, e.g. https://vedicjaalam.com/merchant/subscribe?test=1
 export const MANAGE_SUBSCRIPTION_URL =
-  (import.meta as any).env?.VITE_MANAGE_SUBSCRIPTION_URL || 'https://vedicjaalam.com/dashboard';
+  (import.meta as any).env?.VITE_MANAGE_SUBSCRIPTION_URL || 'https://vedicjaalam.com/merchant/subscribe';
 
-// Opens the web management page in the system browser (Capacitor Browser).
-export async function openManageSubscription(): Promise<void> {
+// Opens the web management page in the system browser (Capacitor Browser),
+// carrying the merchant id so the page can pre-populate their account + plan.
+export async function openManageSubscription(merchantId?: string): Promise<void> {
   try {
-    await Browser.open({ url: MANAGE_SUBSCRIPTION_URL });
+    let url = MANAGE_SUBSCRIPTION_URL;
+    if (merchantId) {
+      const sep = url.includes('?') ? '&' : '?';
+      url = `${url}${sep}merchant_id=${encodeURIComponent(merchantId)}`;
+    }
+    await Browser.open({ url });
   } catch (e) {
     console.warn('[playCompliance] Could not open manage-subscription URL:', (e as any)?.message);
   }
