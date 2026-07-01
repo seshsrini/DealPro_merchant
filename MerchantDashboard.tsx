@@ -6,6 +6,7 @@ import { merchantSubscriptionService } from './services/merchantSubscriptionServ
 import { merchantService } from './services/merchantService';
 import { mDashboardService } from './services/mDashboardService';
 import { mrpFromDiscount } from './components/campaign-wizard/StepImage';
+import { PLAY_COMPLIANT } from './services/playCompliance';
 import { resilient, peekCache } from './services/resilientData';
 import { useResumeRefetch } from './services/useResumeRefetch';
 import { perfTimer } from './services/perfLogger';
@@ -421,7 +422,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-amber-50 text-amber-700 border border-amber-200'
                 }`}
               >
-                <span>{t('m_upgrade_plan')}</span>
+                <span>{PLAY_COMPLIANT ? 'Manage plan' : t('m_upgrade_plan')}</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             )}

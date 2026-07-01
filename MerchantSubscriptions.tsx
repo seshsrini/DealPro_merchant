@@ -13,6 +13,7 @@ import { supabase } from './services/supabaseClient';
 import { resilient, peekCache } from './services/resilientData';
 import { useResumeRefetch } from './services/useResumeRefetch';
 import { toMerchantMessage } from './services/friendlyError';
+import { PLAY_COMPLIANT, openManageSubscription } from './services/playCompliance';
 import { useTranslation } from './contexts/LanguageContext';
 import {
   Loader2,
@@ -417,6 +418,80 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
       setError(toMerchantMessage(err, { action: 'open the payment page', tag: '[Subscriptions]' }));
     }
   };
+
+  // ── Google Play compliant view ─────────────────────────────────────────────
+  // No in-app selling: read-only status + "manage on the web". All plan
+  // selection, upgrade/downgrade, prices and in-app checkout are removed here;
+  // billing is handled entirely on vedicjaalam.com.
+  if (PLAY_COMPLIANT) {
+    const active = currentSubscription?.status === 'active';
+    const planName = currentTier?.tier_name || currentSubscription?.plan_name || null;
+    const periodEnd = currentSubscription?.current_period_end ? new Date(currentSubscription.current_period_end) : null;
+    return (
+      <div className="px-6 pt-6 pb-32 space-y-5">
+        <div className="flex items-center justify-between mb-1">
+          <div>
+            <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>My Subscription</h2>
+            <p className={`text-sm font-medium mt-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_manage_plan')}</p>
+          </div>
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
+            <CreditCard className="w-5 h-5 text-blue-500" />
+          </div>
+        </div>
+
+        {active && planName ? (
+          <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white border-slate-200'}`}>
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-2.5 flex items-center gap-2">
+              <Shield className="w-4 h-4 text-white" />
+              <span className="text-white text-xs font-bold tracking-wide uppercase">{t('m_active_subscription')}</span>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_plan')}</p>
+                <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{planName}</p>
+              </div>
+              {periodEnd && (
+                <div>
+                  <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Next billing date</p>
+                  <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{fmtDate(periodEnd)}</p>
+                </div>
+              )}
+              {currentTier && (
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Deals / month</p>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{(currentTier.max_campaigns_per_month ?? 0) >= 999 ? 'Unlimited' : currentTier.max_campaigns_per_month}</p>
+                  </div>
+                  <div>
+                    <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>DOTD / month</p>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{(currentTier.max_dotd_per_month ?? 0) >= 999 ? 'Unlimited' : currentTier.max_dotd_per_month}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className={`rounded-2xl border p-5 ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white border-slate-200'}`}>
+            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>No active subscription</p>
+            <p className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              Set up your subscription on our website to start posting deals, then log back in here.
+            </p>
+          </div>
+        )}
+
+        <button
+          onClick={openManageSubscription}
+          className="w-full h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+        >
+          <CreditCard className="w-4 h-4" />
+          Manage subscription on our website
+        </button>
+        <p className={`text-[11px] leading-relaxed text-center ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+          Billing, plan changes and cancellation are handled securely on vedicjaalam.com.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="px-6 pt-6 pb-32 space-y-5">

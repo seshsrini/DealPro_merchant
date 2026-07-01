@@ -5,6 +5,7 @@ import { merchantSubscriptionService } from './services/merchantSubscriptionServ
 import { encryptionService, auditLogger } from './services/encryptionService';
 import { biometricService } from './services/biometricService';
 import { signupDraftService } from './services/draftService';
+import { PLAY_COMPLIANT } from './services/playCompliance';
 import { Loader2 } from 'lucide-react';
 
 // Step components
@@ -428,10 +429,14 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       setUser({ ...updatedUser, hasActiveSubscription: actuallySubscribed });
       await biometricService.saveSession({ ...updatedUser, hasActiveSubscription: actuallySubscribed });
 
-      if (actuallySubscribed) {
-        goToStep(12); // Congrats — already subscribed, don't charge again
+      if (PLAY_COMPLIANT || actuallySubscribed) {
+        // Compliant build: never show an in-app plan picker. Go to the dashboard;
+        // the merchant activates their plan on the web and the deal-posting gate
+        // guides them there. (Non-compliant: skip the step only when already
+        // subscribed.)
+        goToStep(12); // Congrats → dashboard
       } else {
-        goToStep(10); // Subscription selection
+        goToStep(10); // Subscription selection (non-compliant only)
       }
     } catch (err: any) {
       console.error('[MerchantOnboarding] Submit error:', err);
@@ -487,6 +492,13 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
 
   // Congrats → go to dashboard
   const handleGoToDashboard = () => {
+    // Compliant build: an unsubscribed merchant activates their plan on the web,
+    // so land them on the read-only subscription screen (with the manage-on-web
+    // link) rather than a dashboard they can't post deals from yet.
+    if (PLAY_COMPLIANT && !user.hasActiveSubscription) {
+      setView('merchant_subscriptions');
+      return;
+    }
     setView('merchant_dashboard');
   };
 

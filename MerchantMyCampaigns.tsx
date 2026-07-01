@@ -6,6 +6,7 @@ import { mDashboardService } from './services/mDashboardService';
 import { merchantService } from './services/merchantService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { mrpFromDiscount } from './components/campaign-wizard/StepImage';
+import { PLAY_COMPLIANT } from './services/playCompliance';
 import { resilient, peekCache } from './services/resilientData';
 import { useResumeRefetch } from './services/useResumeRefetch';
 import { useTranslation } from './contexts/LanguageContext';
@@ -449,7 +450,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                   <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-200'}`}>
                     <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
                     <p className={`text-xs ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>
-                      {t('m_campaign_limit_reached')} ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan, {waitMsg}.
+                      {t('m_campaign_limit_reached')} ({campaignUsage.campaigns_used}/{campaignUsage.campaigns_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">{PLAY_COMPLIANT ? 'Manage' : 'Upgrade'}</button> your plan, {waitMsg}.
                     </p>
                   </div>
                 )}
@@ -457,7 +458,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                   <div className={`flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
                     <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                     <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                      {t('m_dotd_limit_reached')} ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">Upgrade</button> your plan, {waitMsg}.
+                      {t('m_dotd_limit_reached')} ({campaignUsage.dotd_used}/{campaignUsage.dotd_limit}). <button onClick={() => setView('merchant_subscriptions')} className="underline font-medium">{PLAY_COMPLIANT ? 'Manage' : 'Upgrade'}</button> your plan, {waitMsg}.
                     </p>
                   </div>
                 )}
