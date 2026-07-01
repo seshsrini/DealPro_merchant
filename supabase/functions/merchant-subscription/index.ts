@@ -138,13 +138,35 @@ Deno.serve(async (req) => {
 
     // 3. Handle different actions
     if (action === 'check') {
+      const nowIso = new Date().toISOString();
+
+      // Safety net (webhook-independent): if the merchant CANCELLED and the paid
+      // period has since ended, flip the row to 'cancelled' here — so a missed
+      // subscription.cancelled webhook can't leave a stale 'active' status. Only
+      // rows the merchant explicitly cancelled (cancel_at_period_end = true) are
+      // touched: a non-cancelled expired row could be a renewal the charged
+      // webhook simply hasn't synced yet, so we must NOT cancel those. (Gating
+      // already excludes it via current_period_end >= now; this fixes the status
+      // field for records/analytics and any status-only checks.) Best-effort.
+      try {
+        await supabaseAdmin
+          .from('merchant_subscriptions')
+          .update({ status: 'cancelled', cancelled_at: nowIso })
+          .eq('merchant_id', user.id)
+          .eq('status', 'active')
+          .eq('cancel_at_period_end', true)
+          .lt('current_period_end', nowIso);
+      } catch (e) {
+        console.warn('[merchant-subscription] cancel self-heal skipped:', (e as any)?.message);
+      }
+
       // Check if merchant has active subscription
       const { data, error } = await supabaseAdmin
         .from('merchant_subscriptions')
         .select('status, plan_name, current_period_end')
         .eq('merchant_id', user.id)
         .eq('status', 'active')
-        .gte('current_period_end', new Date().toISOString())
+        .gte('current_period_end', nowIso)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
