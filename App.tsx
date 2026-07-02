@@ -621,7 +621,13 @@ const AppContent: React.FC = () => {
           <img src={`${import.meta.env.BASE_URL}assets/vedicjaalam.svg?v=2`} alt="Vedic Jaalam" className="mt-2 h-6 w-auto" />
         </div>
       ) : view === 'welcome' ? (
-        <div className="h-screen bg-white flex flex-col px-8 pt-16 pb-10">
+        // h-full + overflow-y-auto so short/edge-to-edge devices (e.g. Samsung M53)
+        // can scroll to the buttons instead of them being clipped; safe-area bottom
+        // padding keeps SIGN IN / JOIN clear of the Android gesture/nav bar.
+        <div
+          className="h-full overflow-y-auto hide-scrollbar bg-white flex flex-col px-8 pt-16"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 2.5rem)' }}
+        >
           {/* Logo + DealPro branding */}
           <div className="flex items-center gap-3 mb-6 animate-float-in float-in-delay-1">
             <DealProLogo className="w-10 h-10 rounded-2xl overflow-hidden shrink-0 object-contain" />
@@ -671,7 +677,7 @@ const AppContent: React.FC = () => {
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-3 mt-8 animate-float-in float-in-delay-7">
+          <div className="flex gap-3 mt-8 shrink-0 animate-float-in float-in-delay-7">
             <button
               onClick={() => { setPendingAuthView('login'); navigateTo('language_selection'); }}
               className="flex-1 h-12 rounded-xl border-2 border-slate-900 text-slate-900 text-sm font-semibold tracking-wide active:scale-[0.98] transition-all"
