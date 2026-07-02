@@ -170,14 +170,21 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
   const getDealImage = (deal: Deal) => (deal as any).image_url || deal.thumbnail || '';
 
+  // All live deals (unsliced) — drives the top "pulse" totals. Plan limits keep this
+  // count small, so fetching stats for every one stays cheap.
+  const allActiveDeals = useMemo(
+    () => deals.filter(d => d.status === 'active' || d.status === 'approved'),
+    [deals]
+  );
+
+  // Top 5 (most recent) for the carousel.
   const activeDeals = useMemo(() => {
-    return deals
-      .filter(d => d.status === 'active' || d.status === 'approved')
+    return [...allActiveDeals]
       .sort((a, b) => (b.campaign_id || '').localeCompare(a.campaign_id || ''))
       .slice(0, 5);
-  }, [deals]);
+  }, [allActiveDeals]);
 
-  const totalActiveDeals = useMemo(() => deals.filter(d => d.status === 'active' || d.status === 'approved').length, [deals]);
+  const totalActiveDeals = allActiveDeals.length;
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
@@ -223,10 +230,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     return () => clearInterval(id);
   }, [refreshDeals, loadCampaignUsage]);
 
-  // Per-deal clicks & redemptions for active deals.
+  // Per-deal clicks & redemptions across ALL live deals — powers both the carousel
+  // cards (a subset) and the top "pulse" totals (the full sum).
   const loadCampaignStats = useCallback(async () => {
-    if (!activeDeals.length || !user?.id) return;
-    const ids = activeDeals.map(d => d.campaign_id);
+    if (!allActiveDeals.length || !user?.id) return;
+    const ids = allActiveDeals.map(d => d.campaign_id);
     try {
       const [clicksData, redemptions] = await Promise.all([
         resilient(() => mDashboardService.getCampaignSpecificClicks(ids), { cacheKey: `dash_clicks_${user.id}` }),
@@ -238,7 +246,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
     } catch {
       /* keep previous counts */
     }
-  }, [activeDeals, user?.id]);
+  }, [allActiveDeals, user?.id]);
 
   useEffect(() => { loadCampaignStats(); }, [loadCampaignStats]);
 
@@ -281,6 +289,18 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
 
   const greeting = t(getGreetingKey());
 
+  // ── Top "pulse" strip: live totals across all active deals ──
+  const totalViews = useMemo(() => Object.values(clickCounts).reduce((a, b) => a + b, 0), [clickCounts]);
+  const totalClaims = useMemo(() => Object.values(claimClickCounts).reduce((a, b) => a + b, 0), [claimClickCounts]);
+  const totalRedeemed = useMemo(() => Object.values(redeemCounts).reduce((a, b) => a + b, 0), [redeemCounts]);
+
+  // Primary store location (City, State) shown next to the live-deals count in the hero.
+  const primaryLocation = useMemo(() => {
+    const s = merchantStores[0];
+    if (!s) return '';
+    return [s.city, s.state].filter(Boolean).join(', ');
+  }, [merchantStores]);
+
   // Float-in helper
   const fi = (delay: number): React.CSSProperties => ({
     opacity: visible ? 1 : 0,
@@ -312,7 +332,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
             <h1 className={`text-2xl font-bold mt-0.5 leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
               {user.full_name || user.store_name || 'Merchant'}
             </h1>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2">
               <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${
                 isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
               }`}>
@@ -326,6 +346,12 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                   <>{totalActiveDeals} {t('m_live_deals')}</>
                 )}
               </div>
+              {primaryLocation && (
+                <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  {primaryLocation}
+                </span>
+              )}
               {user.store_name && (
                 <span className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
                   {user.store_name}
@@ -342,6 +368,42 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
       </div>
 
       <div className="px-5 space-y-4 mt-4">
+
+        {/* ─── Today's pulse: live totals across all active deals ─── */}
+        {allActiveDeals.length > 0 && (
+          <div style={fi(60)} className="grid grid-cols-3 gap-2.5">
+            {/* Views */}
+            <div className={`rounded-2xl p-3 border ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <div className="flex items-center gap-1.5">
+                <MousePointer2 className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                <span className={`text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_views')}</span>
+              </div>
+              <p className={`text-xl font-black mt-1 leading-none ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {totalViews.toLocaleString('en-IN')}
+              </p>
+            </div>
+            {/* Claims */}
+            <div className={`rounded-2xl p-3 border ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <div className="flex items-center gap-1.5">
+                <Megaphone className="w-3.5 h-3.5 text-blue-500" />
+                <span className={`text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_claims')}</span>
+              </div>
+              <p className={`text-xl font-black mt-1 leading-none ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                {totalClaims.toLocaleString('en-IN')}
+              </p>
+            </div>
+            {/* Redeemed */}
+            <div className={`rounded-2xl p-3 border ${isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <div className="flex items-center gap-1.5">
+                <TicketCheck className="w-3.5 h-3.5 text-emerald-500" />
+                <span className={`text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_redeemed')}</span>
+              </div>
+              <p className={`text-xl font-black mt-1 leading-none ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                {totalRedeemed.toLocaleString('en-IN')}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ─── Campaign Usage (glass cards with rings) ─── */}
         {campaignUsage.has_subscription && (
