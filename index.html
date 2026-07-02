@@ -4,7 +4,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- viewport-fit=cover is REQUIRED for env(safe-area-inset-*) to report real
+         insets on Android (edge-to-edge devices, e.g. Samsung One UI gesture bar).
+         Without it those insets are 0, so bottom buttons/nav slide under the bar. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>DealPro | Premium Local Discovery</title>
     
     <!-- PWA & Mobile Install Tags -->
