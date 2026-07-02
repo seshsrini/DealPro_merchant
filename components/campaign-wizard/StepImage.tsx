@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { ImageIcon, Upload, Check, X, Loader2, Film, Plus, GripVertical, Tag, Percent } from 'lucide-react';
+import { ImageIcon, Upload, Check, X, Loader2, Film, Plus, GripVertical, Tag, Percent, Camera } from 'lucide-react';
 import { floatIn } from './floatIn';
 import { addCampaignService } from '../../services/addCampaignService';
 import { useTranslation } from '../../contexts/LanguageContext';
@@ -1015,7 +1015,10 @@ export const StepImage: React.FC<StepImageProps> = ({
   const isDark = theme === 'dark';
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  // Source picker for a deal photo — camera (live) vs gallery, same as the catalogue.
+  const [photoSourceOpen, setPhotoSourceOpen] = useState(false);
   const [editingOverlayIdx, setEditingOverlayIdx] = useState<number | null>(null);
   const overlays = imagePriceOverlays || {};
   const [visible, setVisible] = useState(false);
@@ -1417,10 +1420,11 @@ export const StepImage: React.FC<StepImageProps> = ({
             );
           })}
 
-          {/* Add more button */}
+          {/* Add more button — opens a camera/gallery picker (applies to every
+              photo, cover and additional alike) */}
           {canAddMore && (
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setPhotoSourceOpen(true)}
               className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95 ${
                 isDark
                   ? 'border-slate-700 hover:border-slate-500 text-slate-400'
@@ -1516,6 +1520,16 @@ export const StepImage: React.FC<StepImageProps> = ({
         type="file"
         accept="image/*"
         multiple
+        onChange={handleFileChange}
+        className="hidden"
+      />
+      {/* Live camera capture — single shot; same handler as the gallery input.
+          Used for EVERY deal photo (cover + additional), not just the cover. */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
         onChange={handleFileChange}
         className="hidden"
       />
@@ -1647,6 +1661,50 @@ export const StepImage: React.FC<StepImageProps> = ({
         </button>
       </div>
     </div>
+
+    {/* Action sheet: camera (live) or gallery — applies to EVERY deal photo
+        (cover + additional), for both regular deals and DOTD (shared StepImage). */}
+    {photoSourceOpen && (
+      <div className="fixed inset-0 z-50 flex items-end" onClick={() => setPhotoSourceOpen(false)}>
+        <div className="absolute inset-0 bg-black/50" />
+        <div
+          className={`relative w-full rounded-t-2xl p-4 pb-8 space-y-2 ${isDark ? 'bg-slate-900 border-t border-slate-800' : 'bg-white'}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Add a photo</p>
+          <button
+            onClick={() => { setPhotoSourceOpen(false); cameraInputRef.current?.click(); }}
+            className={`w-full p-4 rounded-xl flex items-center gap-3 active:scale-[0.98] transition-all ${isDark ? 'bg-emerald-500/10 hover:bg-emerald-500/15' : 'bg-emerald-50 hover:bg-emerald-100'}`}
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDark ? 'bg-emerald-500/20' : 'bg-emerald-100'}`}>
+              <Camera className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div className="text-left">
+              <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Take Photo</p>
+              <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Use your camera</p>
+            </div>
+          </button>
+          <button
+            onClick={() => { setPhotoSourceOpen(false); fileInputRef.current?.click(); }}
+            className={`w-full p-4 rounded-xl flex items-center gap-3 active:scale-[0.98] transition-all ${isDark ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-50 hover:bg-slate-100'}`}
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}>
+              <Upload className={`w-5 h-5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`} />
+            </div>
+            <div className="text-left">
+              <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Choose from Gallery</p>
+              <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Pick existing photos</p>
+            </div>
+          </button>
+          <button
+            onClick={() => setPhotoSourceOpen(false)}
+            className={`w-full h-11 rounded-xl text-sm font-semibold mt-1 ${isDark ? 'bg-slate-800/60 text-slate-300' : 'bg-slate-100 text-slate-600'}`}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )}
     </>
   );
 };
