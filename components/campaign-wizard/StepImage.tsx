@@ -1143,6 +1143,26 @@ export const StepImage: React.FC<StepImageProps> = ({
   };
 
   const removeImage = (index: number) => {
+    // A photo's tag (price overlay) is keyed by its position. When a photo is
+    // deleted the remaining photos shift down, so we must drop the deleted photo's
+    // tag and shift every higher tag down by one — otherwise each tag "moves" onto
+    // the next photo (the reported bug), including when the cover photo is removed.
+    if (onPriceOverlayChange) {
+      const nextOverlays: Record<number, ImagePriceOverlay> = {};
+      Object.entries(overlays).forEach(([k, v]) => {
+        const i = Number(k);
+        if (i === index) return;                    // this photo's tag is deleted with it
+        nextOverlays[i > index ? i - 1 : i] = v;    // higher tags shift down one slot
+      });
+      onPriceOverlayChange(nextOverlays);
+    }
+    // Keep any open tag editor pointed at the right (reindexed) photo.
+    setEditingOverlayIdx(prev => {
+      if (prev === null) return prev;
+      if (prev === index) return null;
+      return prev > index ? prev - 1 : prev;
+    });
+
     if (index === 0) {
       // Removing primary image
       onFileSelected(null);
