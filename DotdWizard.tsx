@@ -358,12 +358,21 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
 
   // When true, "Continue" on any step jumps back to Review instead of next step
   const [returnToReview, setReturnToReview] = useState(false);
+  // Buy & Get Free only: chain the photo edit through the Gifts screen
+  // (main photos → gifts → back to Review) so one "edit photos" tap covers both.
+  const [returnToReviewAfterGifts, setReturnToReviewAfterGifts] = useState(false);
 
   const handleNext = () => {
     setModerationAlert(null);
     saveDraft();
     if (returnToReview) {
       setReturnToReview(false);
+      goToStep(totalSteps - 1);
+      return;
+    }
+    // 2-step photo edit chain (Buy & Get Free): return to Review after the Gifts screen.
+    if (returnToReviewAfterGifts && steps[currentStep] === 'freeGifts') {
+      setReturnToReviewAfterGifts(false);
       goToStep(totalSteps - 1);
       return;
     }
@@ -377,6 +386,16 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
       goToStep(totalSteps - 1);
       return;
     }
+    // In the 2-step photo edit chain: Back on Gifts returns to photos; Back on photos cancels to Review.
+    if (returnToReviewAfterGifts) {
+      if (steps[currentStep] === 'freeGifts') {
+        goToStep(currentStep - 1);
+        return;
+      }
+      setReturnToReviewAfterGifts(false);
+      goToStep(totalSteps - 1);
+      return;
+    }
     if (currentStep === 0) {
       setView('merchant_dashboard');
       return;
@@ -385,6 +404,14 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   };
 
   const handleEditFromReview = (stepIndex: number) => {
+    // Buy & Get Free: editing main photos chains into the Gifts screen too.
+    if (isBuyGetFreeMode && stepIndex === steps.indexOf('image') && steps.includes('freeGifts')) {
+      setReturnToReview(false);
+      setReturnToReviewAfterGifts(true);
+      goToStep(stepIndex);
+      return;
+    }
+    setReturnToReviewAfterGifts(false);
     setReturnToReview(true);
     goToStep(stepIndex);
   };
@@ -473,6 +500,8 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
     } catch { /* best-effort */ }
     dispatch({ type: 'RESET' });
     setIsBuyGetFreeMode(false);
+    setReturnToReview(false);
+    setReturnToReviewAfterGifts(false);
     setCurrentStep(0);
     setShowDiscardConfirm(false);
   };

@@ -101,6 +101,56 @@ Be strict about inappropriate content but reasonable about normal commercial ima
     }
   },
 
+  // Identify a free-gift item from its photo — returns a short, GENERIC product noun
+  // (e.g. "Wallet", "Sunglasses", "Water Bottle") in Title Case, with NO brand names.
+  // Used to pre-populate the gift-name field in the Buy & Get Free step. Best-effort:
+  // returns '' on any failure or when the item can't be confidently identified.
+  identifyGiftName: async (imageFile: File): Promise<string> => {
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(imageFile);
+      });
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { inlineData: { mimeType: imageFile.type || 'image/jpeg', data: base64 } },
+              {
+                text: `Identify the single main product/object in this photo as a short, generic name a shopper would instantly recognise.
+Rules:
+- 1 to 3 words, Title Case. Examples: "Wallet", "Sunglasses", "Water Bottle", "Bluetooth Earphones", "Coffee Mug".
+- Use the GENERIC item type ONLY. NEVER include brand names, model numbers, colours, sizes, or marketing words.
+- If you cannot confidently identify a single clear product, return an empty string.
+Return JSON: { "name": "<name or empty string>" }`,
+              },
+            ],
+          },
+        ],
+        config: {
+          temperature: 0,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: { name: { type: Type.STRING } },
+            required: ['name'],
+          },
+        },
+      });
+      const parsed = JSON.parse(response.text || '{"name":""}');
+      const name = (parsed?.name || '').toString().trim();
+      return name.slice(0, 40); // matches MAX_NAME_LENGTH in StepBuyGetFree
+    } catch (e) {
+      console.error('[identifyGiftName] AI gift identification failed:', e);
+      return ''; // never block gift entry on AI failure
+    }
+  },
+
   // AI-powered copyright check using Gemini Vision — detects watermarks, screenshots, scraped images.
   // Memoized by file SHA-256 so the same image always returns the same verdict in a session.
   checkImageCopyright: async (imageFile: File): Promise<{ flagged: boolean; reason: string }> => {

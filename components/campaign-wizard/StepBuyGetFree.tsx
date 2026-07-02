@@ -7,8 +7,9 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, X, Gift, ArrowRight } from 'lucide-react';
+import { Plus, X, Gift, ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { floatIn } from './floatIn';
+import { addCampaignService } from '../../services/addCampaignService';
 
 const MAX_GIFTS = 3;
 const MAX_NAME_LENGTH = 40;
@@ -37,6 +38,8 @@ export const StepBuyGetFree: React.FC<StepBuyGetFreeProps> = ({
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  // Which gift slot (if any) is currently being auto-identified from its photo.
+  const [identifyingIdx, setIdentifyingIdx] = useState<number | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
@@ -46,16 +49,46 @@ export const StepBuyGetFree: React.FC<StepBuyGetFreeProps> = ({
   // Ensure at least 1 slot
   const items = gifts.length > 0 ? gifts : [emptyGift()];
 
+  // Always-fresh mirror of the gift list so async auto-identify never clobbers a name
+  // the merchant typed (or another slot they edited) while the AI call was in flight.
+  const giftsRef = useRef(items);
+  useEffect(() => { giftsRef.current = items; }, [items]);
+
   const updateGift = (index: number, updates: Partial<FreeGiftItem>) => {
     const updated = items.map((g, i) => i === index ? { ...g, ...updates } : g);
     onChange(updated);
   };
 
-  const handleImage = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImage = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
-    updateGift(index, { imageFile: file, imageUrl: URL.createObjectURL(file) });
+
+    // Commit the image immediately so the preview shows without waiting on AI.
+    const withImage = items.map((g, i) =>
+      i === index ? { ...g, imageFile: file, imageUrl: URL.createObjectURL(file) } : g
+    );
+    onChange(withImage);
+
+    // Auto-identify the gift and pre-fill its name — but only when the merchant hasn't
+    // already typed one. We never overwrite their input.
+    if (withImage[index].name.trim()) return;
+    setIdentifyingIdx(index);
+    let guess = '';
+    try {
+      guess = await addCampaignService.identifyGiftName(file);
+    } catch {
+      guess = '';
+    }
+    setIdentifyingIdx(prev => (prev === index ? null : prev));
+    if (!guess) return;
+
+    // Re-check the LATEST state: apply the guess only if this slot is still empty
+    // (the merchant may have started typing, or removed the gift, during the call).
+    const latest = giftsRef.current;
+    if (latest[index] && (latest[index].imageFile || latest[index].imageUrl) && !latest[index].name.trim()) {
+      onChange(latest.map((g, i) => i === index ? { ...g, name: guess } : g));
+    }
   };
 
   const addGift = () => {
@@ -121,6 +154,11 @@ export const StepBuyGetFree: React.FC<StepBuyGetFreeProps> = ({
                     className={`w-20 h-20 rounded-xl overflow-hidden relative border ${isDark ? 'border-slate-600' : 'border-slate-300'}`}
                   >
                     <img src={gift.imageUrl} alt="Gift" className="w-full h-full object-cover" />
+                    {identifyingIdx === idx && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <Loader2 className="w-5 h-5 text-white animate-spin" />
+                      </div>
+                    )}
                   </button>
                 ) : (
                   <button
@@ -152,9 +190,15 @@ export const StepBuyGetFree: React.FC<StepBuyGetFreeProps> = ({
                       : 'bg-white text-slate-900 placeholder-slate-400 border-slate-200 focus:border-slate-500'
                   }`}
                 />
-                <p className={`text-[10px] mt-1 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-                  Shown below the gift image to consumers
-                </p>
+                {identifyingIdx === idx ? (
+                  <p className="text-[10px] mt-1 flex items-center gap-1 text-pink-500">
+                    <Sparkles className="w-3 h-3" /> Identifying gift from photo…
+                  </p>
+                ) : (
+                  <p className={`text-[10px] mt-1 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                    Shown below the gift image to consumers
+                  </p>
+                )}
               </div>
             </div>
           </div>

@@ -149,6 +149,10 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
   const [isTransitioning, setIsTransitioning] = useState(false);
   // When true, "Continue" on any step jumps back to Review instead of next step
   const [returnToReview, setReturnToReview] = useState(false);
+  // Buy & Get Free only: when editing the main photos from Review, chain through the
+  // Gifts screen too (main photos → gifts → back to Review) so one "edit photos" tap
+  // covers both. "Continue" returns to Review only after the Gifts screen.
+  const [returnToReviewAfterGifts, setReturnToReviewAfterGifts] = useState(false);
 
   // "Buy & Get Free Gift" special template mode
   const [isBuyGetFreeMode, setIsBuyGetFreeMode] = useState(false);
@@ -448,6 +452,13 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
       goToStep(totalSteps - 1); // Review is always the last step
       return;
     }
+    // 2-step photo edit chain (Buy & Get Free): after the Gifts screen, return to Review.
+    // On the Image step the flag is left set so "Continue" advances naturally into Gifts.
+    if (returnToReviewAfterGifts && steps[currentStep] === 'freeGifts') {
+      setReturnToReviewAfterGifts(false);
+      goToStep(totalSteps - 1);
+      return;
+    }
     // In edit mode, skip Template step (step 1) going forward from Store (step 0)
     const nextStep = (editDealId && currentStep === 0) ? 2 : currentStep + 1;
     goToStep(nextStep);
@@ -457,6 +468,17 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     // If we jumped here from Review, cancel the edit and go back to Review
     if (returnToReview) {
       setReturnToReview(false);
+      goToStep(totalSteps - 1);
+      return;
+    }
+    // In the 2-step photo edit chain: Back on Gifts returns to the photos screen;
+    // Back on the photos screen cancels the edit and returns to Review.
+    if (returnToReviewAfterGifts) {
+      if (steps[currentStep] === 'freeGifts') {
+        goToStep(currentStep - 1);
+        return;
+      }
+      setReturnToReviewAfterGifts(false);
       goToStep(totalSteps - 1);
       return;
     }
@@ -471,6 +493,15 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
 
   // Called from Review page edit pencils — jump to a specific step, then return
   const handleEditFromReview = (stepIndex: number) => {
+    // Buy & Get Free: editing the main photos should also let the merchant review/edit
+    // the gifts screen, so chain image → gifts → Review instead of a single-step jump.
+    if (isBuyGetFreeMode && stepIndex === steps.indexOf('image') && steps.includes('freeGifts')) {
+      setReturnToReview(false);
+      setReturnToReviewAfterGifts(true);
+      goToStep(stepIndex);
+      return;
+    }
+    setReturnToReviewAfterGifts(false);
     setReturnToReview(true);
     goToStep(stepIndex);
   };
@@ -562,6 +593,8 @@ export const CampaignWizard: React.FC<CampaignWizardProps> = ({
     }
     dispatch({ type: 'RESET' });
     setIsBuyGetFreeMode(false);
+    setReturnToReview(false);
+    setReturnToReviewAfterGifts(false);
     setCurrentStep(0);
     setShowDiscardConfirm(false);
   };
