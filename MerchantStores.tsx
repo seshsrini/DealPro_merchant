@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ArrowLeft, MapPin, Plus, Edit2, X, Loader2, CheckCircle2,
   Clock, Navigation, ChevronDown, Store, Trash2, AlertTriangle, Phone, Truck,
@@ -94,6 +94,11 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pincodeLoading, setPincodeLoading] = useState(false);
+  // Pincode autocomplete — suggestions from the pincode_directory table (>=3 digits),
+  // same UX as the signup wizard's store-address step.
+  const [pincodeResults, setPincodeResults] = useState<Array<{ pincode: string; locality: string; city: string | null; state: string | null }>>([]);
+  const [showPincodeDropdown, setShowPincodeDropdown] = useState(false);
+  const pincodeSuggestRef = useRef<number | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [storeCategories, setStoreCategories] = useState<string[]>(FALLBACK_CATEGORIES);
   const [deletingStoreId, setDeletingStoreId] = useState<string | null>(null);
@@ -210,6 +215,21 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
   // Also silently auto-resolves coordinates so merchant doesn't need to click GPS button
   const handlePincodeChange = useCallback(async (pincode: string) => {
     setForm(f => ({ ...f, pincode }));
+
+    // Autocomplete: once 3+ digits are typed, suggest matching pincodes + areas.
+    // Debounced; a no-op if the pincode_directory table has no matches.
+    if (pincode.length >= 3) {
+      if (pincodeSuggestRef.current) clearTimeout(pincodeSuggestRef.current);
+      pincodeSuggestRef.current = setTimeout(async () => {
+        const rows = await locationsearchService.searchPincodePrefix(pincode);
+        setPincodeResults(rows);
+        setShowPincodeDropdown(rows.length > 0);
+      }, 250) as unknown as number;
+    } else {
+      setPincodeResults([]);
+      setShowPincodeDropdown(false);
+    }
+
     if (pincode.length === 6) {
       setPincodeLoading(true);
       try {
@@ -287,6 +307,29 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
       }
       setPincodeLoading(false);
     }
+  }, []);
+
+  // Merchant picked a pincode suggestion — fill pincode/locality/city/state directly
+  // (we already have them, so no lookup round-trip) and resolve coords in the
+  // background, since the directory table carries no lat/long.
+  const selectPincode = useCallback((row: { pincode: string; locality: string; city: string | null; state: string | null }) => {
+    if (pincodeSuggestRef.current) clearTimeout(pincodeSuggestRef.current);
+    setShowPincodeDropdown(false);
+    setPincodeResults([]);
+    setForm(f => ({
+      ...f,
+      pincode: row.pincode,
+      city: row.city || f.city,
+      state: row.state || f.state,
+      locality: row.locality || f.locality,
+    }));
+    setPincodeLoading(true);
+    locationsearchService.geocodePincode(row.pincode)
+      .then((coords) => {
+        if (coords) setForm(f => ({ ...f, latitude: coords.latitude, longitude: coords.longitude }));
+      })
+      .catch(() => {})
+      .finally(() => setPincodeLoading(false));
   }, []);
 
   // Resolve GPS coordinates from store address (pincode/city/locality) or device GPS as fallback
@@ -415,6 +458,25 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
   }`;
 
   const labelClass = `block text-xs font-medium mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`;
+
+  // Mandatory-field gate — mirrors the signup wizard's store-address step (StepStoreAddress)
+  // so the required fields are identical wherever a merchant adds a store. The Save/Add
+  // button stays disabled until every asterisked field is valid.
+  const phoneDigits = (form.store_phone || '').replace(/\D/g, '');
+  const phoneAltDigits = (form.store_phone_alt || '').replace(/\D/g, '');
+  const isPhoneValid = phoneDigits.length === 10;
+  const isPhoneAltValid = !form.store_phone_alt?.trim() || phoneAltDigits.length === 10;
+  const canSave = !!(
+    form.store_name?.trim() &&
+    form.store_category &&
+    form.address?.trim() &&
+    form.pincode?.length === 6 &&
+    form.city?.trim() &&
+    form.state?.trim() &&
+    isPhoneValid &&
+    isPhoneAltValid &&
+    (form.is24hrs || (form.shift1 && form.shift2))
+  );
 
   const activeStores = stores.filter(s => s.active_status !== 'disabled');
   const disabledStores = stores.filter(s => s.active_status === 'disabled');
@@ -752,7 +814,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
 
                 {/* Store Phone */}
                 <div>
-                  <label className={labelClass}>Store Phone Number</label>
+                  <label className={labelClass}>Store Phone Number <span className="text-red-500">*</span></label>
                   <input
                     value={form.store_phone}
                     onChange={e => setForm(f => ({ ...f, store_phone: e.target.value.replace(/[^0-9]/g, '').slice(0, 10) }))}
@@ -839,17 +901,44 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
 
                 {/* Pincode */}
                 <div>
-                  <label className={labelClass}>Pincode</label>
+                  <label className={labelClass}>Pincode <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <input
                       value={form.pincode}
                       onChange={e => handlePincodeChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      onFocus={() => { if (pincodeResults.length > 0) setShowPincodeDropdown(true); }}
+                      onBlur={() => setTimeout(() => setShowPincodeDropdown(false), 150)}
                       placeholder="6-digit pincode"
                       maxLength={6}
                       inputMode="numeric"
+                      autoComplete="off"
                       className={inputClass}
                     />
                     {pincodeLoading && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-slate-400" />}
+
+                    {/* Pincode suggestions — "pincode (locality, city)" */}
+                    {showPincodeDropdown && pincodeResults.length > 0 && (
+                      <div className={`absolute top-full left-0 right-0 z-30 mt-1 rounded-xl border max-h-56 overflow-y-auto shadow-lg ${
+                        isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
+                      }`}>
+                        {pincodeResults.map((row, i) => (
+                          <button
+                            key={`${row.pincode}-${i}`}
+                            type="button"
+                            // onMouseDown (not onClick) so it fires before the input's onBlur hides the list.
+                            onMouseDown={(e) => { e.preventDefault(); selectPincode(row); }}
+                            className={`w-full text-left px-4 py-2.5 text-sm border-b last:border-b-0 ${
+                              isDark ? 'border-slate-700/60 hover:bg-slate-700' : 'border-slate-100 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className={`font-semibold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{row.pincode}</span>
+                            <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>
+                              {'  '}({[row.locality, row.city].filter(Boolean).join(', ')})
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -909,7 +998,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
 
                 {/* Store Hours */}
                 <div>
-                  <label className={labelClass}>Store Hours</label>
+                  <label className={labelClass}>Store Hours <span className="text-red-500">*</span></label>
                   <div className={`p-4 rounded-xl border space-y-3 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
                     {/* 24hrs toggle */}
                     <div className="flex items-center justify-between">
@@ -967,7 +1056,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                 )}
                 <button
                   onClick={handleSave}
-                  disabled={saving}
+                  disabled={saving || !canSave}
                   className={`${forceAddMode ? 'w-full' : 'flex-1'} h-12 rounded-xl text-sm font-semibold text-white bg-slate-900 disabled:opacity-40 flex items-center justify-center gap-2`}
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : editingStoreId ? t('m_save_changes') : t('m_add_store')}
