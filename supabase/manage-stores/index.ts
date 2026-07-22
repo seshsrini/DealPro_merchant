@@ -161,6 +161,38 @@ Deno.serve(async (req) => {
 
       if (insertErr) throw insertErr;
 
+      // Crowd-source the pincode directory: contribute a merchant-typed locality
+      // (e.g. a colony/neighbourhood not in the India Post list) so future signups
+      // and consumers see it as an autocomplete option. Best-effort — never fails
+      // the add. (Mirrors complete-merchant-profile.)
+      try {
+        const pincode = String(store.pincode || '').trim();
+        const locality = String(store.locality || '').trim();
+        if (/^\d{6}$/.test(pincode) && locality.length >= 2) {
+          const { data: existing } = await admin
+            .from('pincode_directory')
+            .select('id')
+            .eq('pincode', pincode)
+            .ilike('locality', locality)
+            .limit(1)
+            .maybeSingle();
+          if (!existing) {
+            const { error: dirErr } = await admin.from('pincode_directory').insert({
+              pincode,
+              locality,
+              city: store.city || null,
+              state: store.state || null,
+              source: 'merchant',
+              merchant_id: merchantId,
+            });
+            if (dirErr) console.warn('[manage-stores] directory contribute failed:', dirErr.message);
+            else console.log(`[manage-stores] Contributed locality to directory: ${pincode} / ${locality}`);
+          }
+        }
+      } catch (e: any) {
+        console.warn('[manage-stores] directory contribute skipped (non-blocking):', e?.message);
+      }
+
       return new Response(JSON.stringify({ store: inserted }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 201,

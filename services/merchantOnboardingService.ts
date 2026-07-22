@@ -84,7 +84,16 @@ export const merchantOnboardingService = {
 
     if (error) {
       console.error('[merchantOnboardingService] Edge Function error:', error);
-      throw new Error('Unable to save your profile. Please check your connection and try again.');
+      // A non-2xx response carries the server's { error } body on error.context.
+      // Surface it so a real failure isn't hidden behind a generic "check your
+      // connection" message that misdirects debugging (this is a 500, not a network
+      // problem). Fall back to the generic text if the body can't be read.
+      let serverMessage = '';
+      try {
+        const body = await (error as any)?.context?.json?.();
+        serverMessage = body?.error || '';
+      } catch { /* body unreadable — use fallback below */ }
+      throw new Error(serverMessage || 'Unable to save your profile. Please check your connection and try again.');
     }
 
     if (data?.error) {

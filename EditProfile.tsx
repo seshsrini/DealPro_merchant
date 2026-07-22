@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   User as UserIcon,
   Mail,
@@ -13,7 +13,9 @@ import {
   Briefcase,
   Bell,
   Globe,
+  MapPin,
 } from 'lucide-react';
+import { Geolocation } from '@capacitor/geolocation';
 import { biometricService } from './services/biometricService';
 import { fcmService } from './services/fcmService';
 import { AppView } from './types';
@@ -48,8 +50,9 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Personal
-  const [fullName, setFullName] = useState(user.full_name || '');
+  // Personal. Full name is display-only — changed via support, like store name
+  // and the verification fields — so it has no setter and isn't sent on save.
+  const [fullName] = useState(user.full_name || '');
   const [email, setEmail] = useState(user.email || '');
   const [phone] = useState(user.phone || '');
   const [countryCode] = useState(user.country_code || '');
@@ -70,6 +73,34 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
   const [pushNotification, setPushNotification] = useState(user.push_notification ?? true);
   const [emailNotification, setEmailNotification] = useState(user.email_notification ?? false);
   const [textNotification, setTextNotification] = useState(user.text_notification ?? false);
+
+  // Location permission (OS-level, not a DB field). Reflects the current grant so
+  // the merchant can enable it here — important for nearby deals + mapping the store.
+  const [locationEnabled, setLocationEnabled] = useState(false);
+  useEffect(() => {
+    Geolocation.checkPermissions()
+      .then(p => setLocationEnabled(p.location === 'granted' || (p as any).coarseLocation === 'granted'))
+      .catch(() => { /* web / unavailable */ });
+  }, []);
+  const handleLocationToggle = async (next: boolean) => {
+    setError(null);
+    if (next) {
+      try {
+        let perm = await Geolocation.checkPermissions();
+        if (perm.location !== 'granted' && (perm as any).coarseLocation !== 'granted') {
+          perm = await Geolocation.requestPermissions();
+        }
+        const granted = perm.location === 'granted' || (perm as any).coarseLocation === 'granted';
+        setLocationEnabled(granted);
+        if (!granted) setError(t('m_location_denied')); // OS denied — guide to Settings
+      } catch {
+        setLocationEnabled(false);
+      }
+    } else {
+      // The app can't revoke an OS permission programmatically — send them to Settings.
+      setError(t('m_location_disable_hint'));
+    }
+  };
 
   // Email-capture prompt when enabling email notifications without an email on file.
   const [showEmailPrompt, setShowEmailPrompt] = useState(false);
@@ -120,7 +151,6 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
 
     try {
       const updateData: any = {
-        full_name: fullName,
         email: email,
       };
 
@@ -175,6 +205,15 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
       {icon}
       <span className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{label}</span>
     </div>
+  );
+
+  // Per-field caption. The inputs previously carried only placeholders, which
+  // disappear once a field has a value — so a merchant with a saved name/store
+  // saw unlabelled boxes and reported the fields as "not showing up".
+  const fieldLabel = (text: string) => (
+    <label className={`block text-xs font-medium mb-1.5 px-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+      {text}
+    </label>
   );
 
   const toggleSwitch = (value: boolean, onChange: (v: boolean) => void, label: string) => (
@@ -246,33 +285,40 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
             t('m_personal_info')
           )}
 
-          <input
-            value={fullName}
-            onChange={e => setFullName(e.target.value.slice(0, 40))}
-            placeholder={t('m_full_name')}
-            className={inputClass}
-            maxLength={40}
-            required
-          />
-
-          <div className="relative">
-            <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
+          <div>
+            {fieldLabel(t('m_full_name'))}
             <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder={t('m_email_address')}
-              className={`${inputClass} pl-11`}
+              value={fullName}
+              placeholder={t('m_full_name')}
+              className={readOnlyClass}
+              readOnly
             />
           </div>
 
-          <div className="relative">
-            <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
-            <input
-              value={`${countryCode ? countryCode + ' ' : ''}${phone}`}
-              className={`${readOnlyClass} pl-11`}
-              readOnly
-            />
+          <div>
+            {fieldLabel(t('m_email_address'))}
+            <div className="relative">
+              <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder={t('m_email_address')}
+                className={`${inputClass} pl-11`}
+              />
+            </div>
+          </div>
+
+          <div>
+            {fieldLabel(t('m_phone'))}
+            <div className="relative">
+              <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
+              <input
+                value={`${countryCode ? countryCode + ' ' : ''}${phone}`}
+                className={`${readOnlyClass} pl-11`}
+                readOnly
+              />
+            </div>
           </div>
         </div>
 
@@ -284,11 +330,15 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
               t('m_store_info')
             )}
 
-            <input
-              value={storeName}
-              className={readOnlyClass}
-              readOnly
-            />
+            <div>
+              {fieldLabel(t('m_store_name'))}
+              <input
+                value={storeName}
+                placeholder={t('m_store_name')}
+                className={readOnlyClass}
+                readOnly
+              />
+            </div>
           </div>
         )}
 
@@ -363,6 +413,18 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
               <option key={l.code} value={l.code}>{l.label}</option>
             ))}
           </select>
+        </div>
+
+        {/* Location */}
+        <div className="space-y-3">
+          {sectionHeader(
+            <MapPin className={`w-3.5 h-3.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />,
+            t('m_location')
+          )}
+          <div className={`p-4 rounded-xl border ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+            {toggleSwitch(locationEnabled, handleLocationToggle, t('m_location_enable'))}
+            <p className={`text-xs mt-2 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{t('m_location_hint')}</p>
+          </div>
         </div>
 
         {/* Notification Preferences */}

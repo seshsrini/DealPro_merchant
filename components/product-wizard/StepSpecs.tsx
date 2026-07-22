@@ -84,19 +84,39 @@ export const StepSpecs: React.FC<StepSpecsProps> = ({
           const val = specs[field.key] ?? '';
 
           if (field.type === 'select') {
+            const options = field.options ?? [];
+            const supportsOther = options.includes('Other');
+            // "Other" is active when the stored value is literally 'Other' (just
+            // picked, nothing typed yet) OR a custom string the merchant typed —
+            // which by definition isn't one of the preset options. Storing the typed
+            // text in the SAME key keeps the data clean: the product ends up with
+            // material="Titanium" rather than a separate "_other" companion field.
+            const isOther = supportsOther && val !== '' && !options.filter(o => o !== 'Other').includes(val);
             return (
               <div key={field.key}>
                 <label className={`block text-xs font-semibold mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   {field.label}
                 </label>
                 <select
-                  value={val}
+                  value={isOther ? 'Other' : val}
                   onChange={e => onSpecChange(field.key, e.target.value)}
                   className={inputClass}
                 >
                   <option value="">-- Select --</option>
-                  {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
+                  {options.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
+                {isOther && (
+                  <input
+                    type="text"
+                    value={val === 'Other' ? '' : val}
+                    // Falling back to 'Other' when cleared keeps this box on screen
+                    // instead of collapsing the select back to "-- Select --".
+                    onChange={e => onSpecChange(field.key, e.target.value || 'Other')}
+                    placeholder={`Enter ${field.label.toLowerCase()} (max 25 characters)`}
+                    maxLength={25}
+                    className={`${inputClass} mt-2`}
+                  />
+                )}
               </div>
             );
           }

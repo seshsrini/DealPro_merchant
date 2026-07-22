@@ -35,11 +35,24 @@ DECLARE
   edge_function_url TEXT;
   service_role_key TEXT;
 BEGIN
-  -- Hardcoded project URL and service role key
-  -- IMPORTANT: Replace YOUR_SERVICE_ROLE_KEY below with your actual key from
-  -- Supabase Dashboard → Settings → API → Service Role Key
-  edge_function_url := 'https://gkulyxglzqlhpqxlwjqw.supabase.co/functions/v1/send-trial-email';
-  service_role_key := 'YOUR_SERVICE_ROLE_KEY';
+  -- Project ref and service key come from per-database settings, so this migration
+  -- runs unchanged on dev and prod and no secret is committed. Set both ONCE per
+  -- database (values from Dashboard → Settings → API):
+  --   ALTER DATABASE postgres SET app.settings.project_ref      = '<your-project-ref>';
+  --   ALTER DATABASE postgres SET app.settings.service_role_key = '<your-service-role-key>';
+  --
+  -- This replaces the old hardcoded URL + literal 'YOUR_SERVICE_ROLE_KEY' placeholder.
+  -- A placeholder that runs is worse than one that fails: it silently produces dead
+  -- requests. This is a scheduled job, not user-facing, so an unconfigured database
+  -- fails LOUDLY here — you want that visible in the cron logs, not silently skipped.
+  edge_function_url := format('https://%s.supabase.co/functions/v1/send-trial-email',
+                              current_setting('app.settings.project_ref', true));
+  service_role_key  := current_setting('app.settings.service_role_key', true);
+
+  IF coalesce(current_setting('app.settings.project_ref', true), '') = ''
+     OR coalesce(service_role_key, '') = '' THEN
+    RAISE EXCEPTION 'notify_upcoming_trial_ends: app.settings.project_ref and/or app.settings.service_role_key are not set on this database. Set them before enabling the trial-expiry cron.';
+  END IF;
 
   -- Select merchants whose trial ends in exactly 3 days
   -- Window: 2.5 – 3.5 days to handle timing edge cases around the 10 AM run

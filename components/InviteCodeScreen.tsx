@@ -144,8 +144,9 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
         </div>
       </div>
 
-      {/* Buttons */}
-      <div className="shrink-0 px-6 py-6">
+      {/* Buttons — lift the CTA off the very bottom edge (safe-area aware), matching
+          the consumer invite screen and the rest of merchant onboarding. */}
+      <div className="shrink-0 px-6 pt-6 pb-safe-bottom">
         <button
           onClick={handleVerify}
           disabled={verifying || code.trim().length < 4}

@@ -6,7 +6,8 @@
   "scripts": {
     "postinstall": "patch-package",
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && npx cap copy android",
+    "build:web": "vite build",
     "preview": "vite preview",
     "cap:sync": "npx cap sync",
     "cap:sync:android": "npx cap sync android",

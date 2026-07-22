@@ -43,6 +43,7 @@ interface WizardState {
 type WizardAction =
   | { type: 'SET_FIELD'; field: keyof WizardState; value: any }
   | { type: 'ADD_STORE'; brandName?: string }
+  | { type: 'REMOVE_STORE'; index: number }
   | { type: 'UPDATE_STORE'; index: number; field: keyof StoreLocation; value: any }
   | { type: 'RESTORE_DRAFT'; draft: WizardState };
 
@@ -53,6 +54,11 @@ const createEmptyStore = (): StoreLocation => ({
   shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false, isPincodeSearching: false,
   delivers: false, delivery_radius_km: null,
 });
+
+// Has the merchant actually put anything into this store? Same test isStepComplete
+// uses for the Address step, so "counts as filled in" means one thing everywhere.
+const storeHasData = (s: StoreLocation | undefined): boolean =>
+  !!(s && (s.city || s.street || s.pincode));
 
 const initialState: WizardState = {
   fullName: '', storeName: '', category: '',
@@ -68,6 +74,13 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, [action.field]: action.value };
     case 'ADD_STORE':
       return { ...state, stores: [...state.stores, { ...createEmptyStore(), store_name: action.brandName || '' }] };
+    case 'REMOVE_STORE': {
+      const stores = state.stores.filter((_, i) => i !== action.index);
+      // Never leave the wizard with zero stores — the address step reads
+      // stores[editingStoreIndex] and would fall back to a throwaway object whose
+      // edits go nowhere. Callers also guard against deleting the last store.
+      return { ...state, stores: stores.length > 0 ? stores : [createEmptyStore()] };
+    }
     case 'UPDATE_STORE': {
       const stores = [...state.stores];
       stores[action.index] = { ...stores[action.index], [action.field]: action.value };
@@ -93,10 +106,15 @@ interface MerchantOnboardingProps {
   user: User;
   setUser: (user: User) => void;
   theme: 'light' | 'dark';
+  // Called when signup finishes but the merchant still has to subscribe on the
+  // web (Play-compliant build). App uses it to auto-redirect them to the
+  // dashboard once the subscription activates, instead of leaving them on the
+  // my-subscription page.
+  onAwaitWebSubscription?: () => void;
 }
 
 export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
-  setView, user, setUser, theme,
+  setView, user, setUser, theme, onAwaitWebSubscription,
 }) => {
   const isDark = theme === 'dark';
   const [state, dispatch] = useReducer(wizardReducer, initialState);
@@ -107,6 +125,9 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [returnToReview, setReturnToReview] = useState(false);
+  // True while the Address step is showing a store the merchant just added from
+  // the store list, so Back can mean "cancel this store" instead of "previous step".
+  const [addingNewStore, setAddingNewStore] = useState(false);
   // Set when the merchant taps "Edit legal name" on a GST mismatch — Continue/Back
   // from step 2 then returns them straight to the verification step.
   const [returnToVerification, setReturnToVerification] = useState(false);
@@ -265,6 +286,9 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     saveDraft();
     // Persist step data to DB before navigating away
     saveStepProgress(currentStep);
+    // Completing the Address step commits the new store — Back is a plain
+    // step-back again from here on.
+    if (currentStep === 4 && addingNewStore) setAddingNewStore(false);
     // Editing the legal name from the verification step → jump straight back
     // and auto re-verify GST with the corrected name.
     if (returnToVerification && currentStep === 2) {
@@ -306,6 +330,20 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       goToStep(7);
       return;
     }
+    // Backing out of a store the merchant just added = cancel it. Without this,
+    // Back left the blank store in state (it showed up in the list and got
+    // submitted) and navigated to the step before Address — not the store list (5)
+    // the merchant actually came from. Only discard when nothing was filled in, so
+    // a half-typed address isn't silently thrown away.
+    if (currentStep === 4 && addingNewStore) {
+      setAddingNewStore(false);
+      if (!storeHasData(state.stores[editingStoreIndex])) {
+        dispatch({ type: 'REMOVE_STORE', index: editingStoreIndex });
+        setEditingStoreIndex(Math.max(0, editingStoreIndex - 1));
+      }
+      goToStep(5);
+      return;
+    }
     if (currentStep <= 0) return; // Don't go before welcome
     // Skip structurally-removed steps (empty label, e.g. the old Category step
     // at index 3) so Back never lands on a screen that no longer exists.
@@ -334,7 +372,16 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   const handleAddStore = () => {
     dispatch({ type: 'ADD_STORE', brandName: state.storeName });
     setEditingStoreIndex(state.stores.length);
+    setAddingNewStore(true); // lets Back cancel this store instead of walking a step
     goToStep(4); // Go back to address step for new store
+  };
+
+  // Remove a store from the signup list. Guarded so the merchant can't delete
+  // their way down to zero stores.
+  const handleDeleteStore = (index: number) => {
+    if (state.stores.length <= 1) return;
+    dispatch({ type: 'REMOVE_STORE', index });
+    setEditingStoreIndex(prev => (prev >= index && prev > 0 ? prev - 1 : prev));
   };
 
   // Final submission
@@ -496,6 +543,10 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     // so land them on the read-only subscription screen (with the manage-on-web
     // link) rather than a dashboard they can't post deals from yet.
     if (PLAY_COMPLIANT && !user.hasActiveSubscription) {
+      // They subscribe on the web from here; arm the auto-redirect so that once
+      // the subscription activates, App carries them into the dashboard rather
+      // than leaving them parked on this read-only my-subscription page.
+      onAwaitWebSubscription?.();
       setView('merchant_subscriptions');
       return;
     }
@@ -556,6 +607,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             stores={state.stores}
             brandName={state.storeName}
             onAddStore={handleAddStore}
+            onDeleteStore={handleDeleteStore}
             onNext={handleNext}
             onBack={returnToReview ? undefined : handleBack}
             theme={theme}

@@ -13,18 +13,25 @@ import { createPortal } from 'react-dom';
 import { X, Tag, Package, ChevronLeft, ChevronRight, Edit2, Play } from 'lucide-react';
 import { CatalogueItem } from '../MerchantCatalogue';
 import { MediaLightbox, LightboxSlide } from './MediaLightbox';
+import { STOCK_OPTIONS, parseStockOption, stockCountToOption } from './product-wizard/StepPriceStock';
 
 interface Props {
   item: CatalogueItem;
   theme: 'light' | 'dark';
   onClose: () => void;
   onEdit: () => void;
+  /** Inline stock change from the preview's Availability row. Omit to hide the pencil. */
+  onStockChange?: (newStock: number | null) => void;
 }
 
-export const MerchantProductPreview: React.FC<Props> = ({ item, theme, onClose, onEdit }) => {
+export const MerchantProductPreview: React.FC<Props> = ({ item, theme, onClose, onEdit, onStockChange }) => {
   const isDark = theme === 'dark';
   const [currentIndex, setCurrentIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Availability is the one field worth changing straight from the preview —
+  // it flips daily — so it gets an inline pencil instead of a trip through the
+  // full edit wizard.
+  const [editingStock, setEditingStock] = useState(false);
 
   // Build the media carousel: cover + extras + optional video at the end.
   const slides: LightboxSlide[] = [];
@@ -217,15 +224,47 @@ export const MerchantProductPreview: React.FC<Props> = ({ item, theme, onClose, 
             </div>
           )}
 
-          {/* Stock */}
+          {/* Stock — with an inline pencil to change availability without leaving the preview */}
           <div className={`flex items-center gap-3 p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
-            <Package className={`w-4 h-4 ${inStock ? 'text-emerald-500' : 'text-red-500'}`} />
-            <div>
+            <Package className={`w-4 h-4 shrink-0 ${inStock ? 'text-emerald-500' : 'text-red-500'}`} />
+            <div className="flex-1 min-w-0">
               <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Availability</p>
-              <p className={`text-sm font-medium ${inStock ? 'text-emerald-600' : 'text-red-600'}`}>
-                {isOutOfStock ? 'Out of Stock' : isLowStock ? `Only ${stockCount} left` : 'In Stock'}
-              </p>
+              {editingStock && onStockChange ? (
+                <select
+                  autoFocus
+                  value={stockCountToOption(stockCount)}
+                  onChange={(e) => {
+                    onStockChange(parseStockOption(e.target.value));
+                    setEditingStock(false);
+                  }}
+                  onBlur={() => setEditingStock(false)}
+                  className={`w-full text-sm font-medium bg-transparent border-0 outline-none cursor-pointer ${
+                    isDark ? 'text-white' : 'text-slate-900'
+                  }`}
+                >
+                  {STOCK_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value} className={isDark ? 'bg-slate-800' : 'bg-white'}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className={`text-sm font-medium ${inStock ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {isOutOfStock ? 'Out of Stock' : isLowStock ? `Only ${stockCount} left` : 'In Stock'}
+                </p>
+              )}
             </div>
+            {onStockChange && !editingStock && (
+              <button
+                onClick={() => setEditingStock(true)}
+                aria-label="Edit availability"
+                className={`shrink-0 p-1.5 rounded-lg transition-colors ${
+                  isDark ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-200'
+                }`}
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Specifications */}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AppView, User } from './types';
 import { Send, Loader2, CheckCircle2, MessageSquareText } from 'lucide-react';
 import { useTranslation } from './contexts/LanguageContext';
+import { supabase } from './services/supabaseClient';
 
 interface HelpFeedbackProps {
   user: User;
@@ -24,15 +25,31 @@ const SUBJECT_KEYS = [
   'm_subj_other'
 ];
 
+// Phone-auth users get a SYNTHETIC address (…@internal.dealpro.app /
+// …@internal.dealpro.merchant) that no one can receive mail at. Never pre-fill
+// it — leave the field blank so the user supplies a real reply-to address.
+// Name: letters of ANY script PLUS combining marks (\p{M}) — Indic vowel signs
+// and viramas are marks, not letters, so omitting them mangles names like
+// "श्रीनिवास" -> "शरनवस". Also allows the space,
+// apostrophe, hyphen and period that occur in real names. Anything else is
+// stripped as the user types. Lengths are capped so the support email stays tidy.
+const NAME_MAX = 30;
+const EMAIL_MAX = 50;
+const sanitizeName = (value: string): string =>
+  value.replace(/[^\p{L}\p{M}\s'.-]/gu, '').slice(0, NAME_MAX);
+
+const isRealEmail = (value?: string | null): boolean =>
+  !!value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && !/@internal\.dealpro\./i.test(value);
+
 export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme = 'dark' }) => {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const isDark = theme === 'dark';
 
   const subjectOptions = SUBJECT_KEYS.map(key => ({ key, label: t(key) }));
 
   const [formData, setFormData] = useState({
     name: (user as any).full_name || (user as any).store_name || user.username || '',
-    email: (user as any).email || '',
+    email: isRealEmail((user as any).email) ? ((user as any).email as string) : '',
     subject: SUBJECT_KEYS[0],
     message: ''
   });
@@ -58,12 +75,26 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
     setErrorMessage(null);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      console.log('[HelpFeedback] Feedback submitted:', {
-        user_id: user.id,
-        ...formData
+      // Emails the support inbox (support@vedicjaalam.com) with the user's own
+      // address set as reply-to, so a reply goes straight back to them.
+      const { data, error } = await supabase.functions.invoke('send-support-email', {
+        body: {
+          name: formData.name,
+          email: formData.email.trim(),
+          subject: formData.subject,
+          message: formData.message.trim(),
+          app: 'merchant',
+          locale, // acknowledgement is sent in the user's language
+        },
       });
+      if (error || (data as any)?.error) {
+        // supabase-js only surfaces "non-2xx status" — read the function's own body
+        // (via error.context) so the real provider reason reaches the console.
+        let detail: unknown = (data as any)?.details;
+        try { detail = detail ?? await (error as any)?.context?.json?.(); } catch { /* ignore */ }
+        console.error('[HelpFeedback] send-support-email failed:', detail ?? error);
+        throw new Error((data as any)?.error || error?.message || 'Failed to send support message');
+      }
 
       setShowSuccess(true);
       setFormData(prev => ({ ...prev, message: '' }));
@@ -106,8 +137,10 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
           <input
             type="text"
             value={formData.name}
-            readOnly
-            className={`${inputClass} opacity-60 cursor-not-allowed`}
+            onChange={(e) => setFormData(prev => ({ ...prev, name: sanitizeName(e.target.value) }))}
+            maxLength={NAME_MAX}
+            placeholder={t('m_name')}
+            className={inputClass}
           />
         </div>
 
@@ -119,7 +152,8 @@ export const HelpFeedback: React.FC<HelpFeedbackProps> = ({ user, setView, theme
           <input
             type="email"
             value={formData.email}
-            onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+            onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value.slice(0, EMAIL_MAX) }))}
+            maxLength={EMAIL_MAX}
             placeholder="your@email.com"
             className={inputClass}
           />

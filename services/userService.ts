@@ -1,6 +1,36 @@
 import { supabase, supabaseUrl, supabaseAnonKey, updateSupabaseSession } from "./supabaseClient";
 import { ActivityLog } from "../types";
 
+/**
+ * Whether a merchant should SKIP the signup wizard on login/session-restore (i.e.
+ * route straight to the dashboard / subscription gate rather than onboarding).
+ *
+ * True when EITHER:
+ *   - the core wizard fields are all present (full_name, store_name, business_type,
+ *     terms_accepted, privacy_accepted), OR
+ *   - the merchant is already ESTABLISHED — has an active subscription and/or at
+ *     least one store — which means they got through signup before.
+ *
+ * The "established" fallback is what makes a reinstall safe: a real, paying merchant
+ * (or one whose legacy DB row is missing a newer-required field like business_type /
+ * terms / privacy) is never trapped back in the wizard. A brand-new / blank profile
+ * with no subscription and no store returns false → the wizard runs (and resumes
+ * from the first missing field). Decided purely from the DB profile + subscription,
+ * never from a device-local flag.
+ */
+export function isExistingMerchantProfile(
+  profile: { full_name?: unknown; store_name?: unknown; business_type?: unknown; terms_accepted?: unknown; privacy_accepted?: unknown } | null | undefined,
+  sub?: { hasActiveSubscription?: boolean; storeCount?: number } | null,
+): boolean {
+  if (!profile) return false;
+  const hasCoreProfile = !!(
+    profile.full_name && profile.store_name &&
+    profile.business_type && profile.terms_accepted && profile.privacy_accepted
+  );
+  const established = !!(sub?.hasActiveSubscription || (sub?.storeCount ?? 0) > 0);
+  return hasCoreProfile || established;
+}
+
 export const userService = {
   /**
    * OTP-based login for merchants.

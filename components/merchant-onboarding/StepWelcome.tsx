@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, User, Store, MapPin, ShieldCheck, FileText, CreditCard, ArrowRight } from 'lucide-react';
 import { floatIn } from './floatIn';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 interface StepWelcomeProps {
   onNext: () => void;
@@ -8,15 +9,16 @@ interface StepWelcomeProps {
 }
 
 const STEPS_PREVIEW = [
-  { icon: User, label: 'Your name', color: 'text-blue-500' },
-  { icon: Store, label: 'Store details', color: 'text-emerald-500' },
-  { icon: MapPin, label: 'Store address', color: 'text-purple-500' },
-  { icon: ShieldCheck, label: 'Business verification', color: 'text-amber-500' },
-  { icon: FileText, label: 'Terms & privacy', color: 'text-slate-500' },
-  { icon: CreditCard, label: 'Choose a plan', color: 'text-pink-500' },
+  { icon: User, labelKey: 'ob_welcome_step_name', color: 'text-blue-500' },
+  { icon: Store, labelKey: 'ob_welcome_step_store', color: 'text-emerald-500' },
+  { icon: MapPin, labelKey: 'ob_welcome_step_address', color: 'text-purple-500' },
+  { icon: ShieldCheck, labelKey: 'ob_welcome_step_verify', color: 'text-amber-500' },
+  { icon: FileText, labelKey: 'ob_welcome_step_terms', color: 'text-slate-500' },
+  { icon: CreditCard, labelKey: 'ob_welcome_step_plan', color: 'text-pink-500' },
 ];
 
 export const StepWelcome: React.FC<StepWelcomeProps> = ({ onNext, theme }) => {
+  const { t } = useTranslation();
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
 
@@ -38,17 +40,17 @@ export const StepWelcome: React.FC<StepWelcomeProps> = ({ onNext, theme }) => {
         style={floatIn(100, visible)}
         className={`text-2xl font-bold mb-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}
       >
-        Welcome to DealPro!
+        {t('ob_welcome_title')}
       </h2>
       <p
         style={floatIn(200, visible)}
         className={`text-sm mb-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
       >
-        Before you can start creating deals and reaching customers, we need a few details to set up your merchant account.
+        {t('ob_welcome_sub')}
       </p>
 
       <div className="space-y-2 mb-4">
-        {STEPS_PREVIEW.map(({ icon: Icon, label, color }, i) => (
+        {STEPS_PREVIEW.map(({ icon: Icon, labelKey, color }, i) => (
           <div
             key={i}
             style={floatIn(300 + i * 80, visible)}
@@ -58,7 +60,7 @@ export const StepWelcome: React.FC<StepWelcomeProps> = ({ onNext, theme }) => {
           >
             <Icon className={`w-4 h-4 ${color}`} />
             <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-              {label}
+              {t(labelKey)}
             </span>
           </div>
         ))}
@@ -68,7 +70,7 @@ export const StepWelcome: React.FC<StepWelcomeProps> = ({ onNext, theme }) => {
         style={floatIn(800, visible)}
         className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}
       >
-        Takes about 3–5 minutes. Your progress is saved automatically.
+        {t('ob_welcome_time')}
       </p>
 
       <div style={floatIn(900, visible)} className="mt-auto pb-safe-bottom">
@@ -76,8 +78,14 @@ export const StepWelcome: React.FC<StepWelcomeProps> = ({ onNext, theme }) => {
           onClick={onNext}
           className="w-full h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
-          Let's get started <ArrowRight className="w-4 h-4" />
+          {t('ob_welcome_cta')} <ArrowRight className="w-4 h-4" />
         </button>
+        {/* Build stamp — lets a tester confirm at a glance they're on the latest
+            WEB build without reaching the Profile footer. Fastest way to catch a
+            stale APK during signup. */}
+        <p className={`mt-3 text-center text-[9px] tracking-wide ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+          Build {__BUILD_ID__}
+        </p>
       </div>
     </div>
   );

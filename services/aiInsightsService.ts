@@ -21,10 +21,10 @@ export const aiInsightsService = {
    * Get AI-powered insights for a merchant
    * Calls the get-ai-insights Edge Function
    */
-  async getAIInsights(merchantId: string): Promise<AIInsight[]> {
+  async getAIInsights(merchantId: string, locale: string = 'en'): Promise<AIInsight[]> {
     try {
       const { data, error } = await supabase.functions.invoke('get-ai-insights', {
-        body: { merchantId },
+        body: { merchantId, locale },
       });
 
       if (error) throw new Error('Unable to load insights. Please try again.');

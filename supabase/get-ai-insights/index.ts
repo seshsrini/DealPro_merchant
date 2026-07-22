@@ -2,10 +2,16 @@
  * get-ai-insights Edge Function
  * Generates AI-powered recommendations for merchants
  * including pricing optimization, best launch times, and actionable insights
+ *
+ * i18n: titles, recommendations and action labels are rendered in the merchant's
+ * locale via makeT() from ../_shared/analyticsI18n.ts. The `impact` and `type`
+ * enums stay in English — the client maps `impact` to a localized badge and uses
+ * `type` for icon selection.
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { corsHeaders } from '../_shared/cors.ts';
+import { makeT } from '../_shared/analyticsI18n.ts';
 
 interface AIInsight {
   id: string;
@@ -36,8 +42,9 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { merchantId } = await req.json();
-    console.log('[GetAiInsights] Generating insights for merchant:', merchantId);
+    const { merchantId, locale } = await req.json();
+    const T = makeT(locale || 'en');
+    console.log('[GetAiInsights] Generating insights for merchant:', merchantId, 'locale:', locale || 'en');
 
     if (!merchantId) {
       return new Response(
@@ -98,11 +105,11 @@ Deno.serve(async (req) => {
       insights.push({
         id: 'pricing-optimization',
         type: 'pricing',
-        title: 'Optimal Discount Range',
-        recommendation: `For ${topCategory} products, we recommend ${recommendedDiscount - 5}% to ${recommendedDiscount + 5}% discounts. This range typically generates 3.2x more engagement while maintaining healthy margins.`,
+        title: T('ai_t_pricing'),
+        recommendation: T('ai_r_pricing', { cat: topCategory, lo: recommendedDiscount - 5, hi: recommendedDiscount + 5 }),
         impact: 'high',
         confidence: 87,
-        actionText: 'Create Deal',
+        actionText: T('ai_a_create_deal'),
         actionRoute: '/merchant/campaigns',
       });
     }
@@ -119,29 +126,29 @@ Deno.serve(async (req) => {
 
     if (dayOfWeek >= 1 && dayOfWeek <= 4) {
       // Monday-Thursday: Recommend Friday evening
-      bestDay = 'Friday';
-      bestTime = '6:00 PM - 8:00 PM';
+      bestDay = T('ai_day_friday');
+      bestTime = T('ai_time_evening');
       daysUntil = 5 - dayOfWeek;
     } else if (dayOfWeek === 5) {
       // Friday: Recommend this evening
-      bestDay = 'Today (Friday)';
-      bestTime = '6:00 PM - 8:00 PM';
+      bestDay = T('ai_day_today_friday');
+      bestTime = T('ai_time_evening');
       daysUntil = 0;
     } else {
       // Weekend: Recommend next Friday
-      bestDay = 'Next Friday';
-      bestTime = '6:00 PM - 8:00 PM';
+      bestDay = T('ai_day_next_friday');
+      bestTime = T('ai_time_evening');
       daysUntil = 5 + (7 - dayOfWeek);
     }
 
     insights.push({
       id: 'best-launch-time',
       type: 'timing',
-      title: 'Best Time to Launch Deals',
-      recommendation: `Launch your next deal on ${bestDay} between ${bestTime}. Our data shows this timing achieves 4.5x higher engagement and 2.8x more redemptions compared to off-peak times.`,
+      title: T('ai_t_timing'),
+      recommendation: T('ai_r_timing', { day: bestDay, time: bestTime }),
       impact: 'high',
       confidence: 92,
-      actionText: daysUntil === 0 ? 'Create Deal Now' : 'Schedule Deal',
+      actionText: daysUntil === 0 ? T('ai_a_create_deal_now') : T('ai_a_schedule_deal'),
       actionRoute: '/merchant/campaigns',
     });
 
@@ -157,11 +164,11 @@ Deno.serve(async (req) => {
         insights.push({
           id: 'product-refresh',
           type: 'action',
-          title: 'Refresh Your Catalogue',
-          recommendation: 'You haven\'t added products recently. Adding 3-5 new products per week increases customer engagement by 2.1x and keeps your store top-of-mind.',
+          title: T('ai_t_refresh'),
+          recommendation: T('ai_r_refresh'),
           impact: 'medium',
           confidence: 78,
-          actionText: 'Add Products',
+          actionText: T('ai_a_add_products'),
           actionRoute: '/merchant/catalogue',
         });
       }
@@ -177,11 +184,11 @@ Deno.serve(async (req) => {
         insights.push({
           id: 'deal-velocity',
           type: 'action',
-          title: 'Increase Deal Frequency',
-          recommendation: 'Merchants who post 2-3 deals per month see 5.7x more customer visits. Consider creating more regular deals to maintain engagement momentum.',
+          title: T('ai_t_velocity'),
+          recommendation: T('ai_r_velocity'),
           impact: 'high',
           confidence: 84,
-          actionText: 'Create Deal',
+          actionText: T('ai_a_create_deal'),
           actionRoute: '/merchant/campaigns',
         });
       }
@@ -189,11 +196,11 @@ Deno.serve(async (req) => {
       insights.push({
         id: 'first-deal',
         type: 'action',
-        title: 'Create Your First Deal',
-        recommendation: 'You have products but no deals yet. Creating your first deal can attract 10-15 new customers in the first week and establish your presence on the platform.',
+        title: T('ai_t_first_deal'),
+        recommendation: T('ai_r_first_deal'),
         impact: 'high',
         confidence: 95,
-        actionText: 'Create Deal',
+        actionText: T('ai_a_create_deal'),
         actionRoute: '/merchant/campaigns',
       });
     }
@@ -206,11 +213,13 @@ Deno.serve(async (req) => {
         insights.push({
           id: 'category-expansion',
           type: 'category',
-          title: 'Diversify Your Categories',
-          recommendation: `You're currently focused on ${uniqueCategories.size} categor${uniqueCategories.size === 1 ? 'y' : 'ies'}. Merchants with 3+ categories see 2.4x broader customer reach. Consider expanding to complementary product lines.`,
+          title: T('ai_t_diversify'),
+          recommendation: uniqueCategories.size === 1
+            ? T('ai_r_diversify_one')
+            : T('ai_r_diversify_many', { n: uniqueCategories.size }),
           impact: 'medium',
           confidence: 72,
-          actionText: 'Add Products',
+          actionText: T('ai_a_add_products'),
           actionRoute: '/merchant/catalogue',
         });
       }
@@ -221,11 +230,11 @@ Deno.serve(async (req) => {
       insights.push({
         id: 'weekend-prep',
         type: 'timing',
-        title: 'Weekend Opportunity',
-        recommendation: 'It\'s Friday! Weekend deals get 3.8x more views. Launch a special weekend offer this evening to maximize visibility when customers are planning their weekend activities.',
+        title: T('ai_t_weekend'),
+        recommendation: T('ai_r_weekend'),
         impact: 'high',
         confidence: 89,
-        actionText: 'Create Weekend Deal',
+        actionText: T('ai_a_create_weekend'),
         actionRoute: '/merchant/campaigns',
       });
     }

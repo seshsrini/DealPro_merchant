@@ -7,8 +7,12 @@ android {
         applicationId "com.dealpro.merchant"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Auto-bump every build so each APK is a distinct, higher version — testers
+        // reliably receive updates and can never end up "stuck" on an old install.
+        // versionCode = seconds since epoch (monotonic, unique, < Integer.MAX until 2038);
+        // versionName = a human-readable build timestamp.
+        versionCode ((System.currentTimeMillis() / 1000L) as int)
+        versionName new java.text.SimpleDateFormat('yyyy.MM.dd.HHmm').format(new Date())
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

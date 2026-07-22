@@ -10,7 +10,7 @@ import { useTranslation } from '../../contexts/LanguageContext';
 import { ensureFreshToken, supabase, recoverSessionOrSilentReauth } from '../../services/supabaseClient';
 import { biometricService } from '../../services/biometricService';
 import { userService } from '../../services/userService';
-import { generatePromoBanner, generateFreeGiftsImage, BannerPlacement } from '../campaign-wizard/StepImage';
+import { generatePromoBanner, generatePriceTagImage, generateFreeGiftsImage, mrpFromDiscount, BannerPlacement } from '../campaign-wizard/StepImage';
 import { TRUST_BADGES } from '../campaign-wizard/StepTrustBadges';
 import { FreeGiftItem } from '../campaign-wizard/StepBuyGetFree';
 import { pickBadgeCornerForImage, cornerClass, BadgeCorner } from '../../utils/badgeCornerForImage';
@@ -226,91 +226,13 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
     })();
   }, [wizardState.bannerPlacement]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-generate banners for tagged additional images (slots 1..N) — same treatment as cover,
-  // but the offer section uses the per-image tag (discount % / offer price) instead of the deal-wide offer.
-  const additionalBannersGeneratedRef = useRef(false);
-  useEffect(() => {
-    if (additionalBannersGeneratedRef.current || !onUpdateAdditional) return;
-    const overlays = wizardState.imagePriceOverlays || {};
-    const taggedSlots = Object.keys(overlays)
-      .map(Number)
-      .filter(i => i >= 1 && (overlays[i]?.discountPct || overlays[i]?.offerPrice));
-    if (taggedSlots.length === 0) return;
-    additionalBannersGeneratedRef.current = true;
-    (async () => {
-      setGeneratingBanner(true);
-      try {
-        const badgeLabels = (wizardState.trustBadgeIds || [])
-          .map(id => TRUST_BADGES.find(b => b.id === id)?.label)
-          .filter(Boolean) as string[];
-
-        const urls = wizardState.additionalImageUrls;
-        const files = wizardState.additionalImageFiles;
-        const newUrls: string[] = [];
-        const newFiles: File[] = [];
-        const newOverlays: Record<number, { discountPct: string; offerPrice: string }> = { ...overlays };
-
-        for (let i = 0; i < urls.length; i++) {
-          const slot = i + 1;
-          const ov = overlays[slot];
-          const tagged = ov && (ov.discountPct || ov.offerPrice);
-          if (tagged) {
-            try {
-              const res = await fetch(urls[i]);
-              const blob = await res.blob();
-              const srcFile = new File([blob], `existing-add-${slot}.jpg`, { type: blob.type || 'image/jpeg' });
-              const banner = await generatePromoBanner(
-                srcFile,
-                store?.store_name || user.store_name || 'Your Store',
-                wizardState.dealHeading || 'Special Deal',
-                wizardState.offerValue || 'Great Offer',
-                badgeLabels,
-                { discountPct: ov.discountPct, offerPrice: ov.offerPrice },
-              );
-              newFiles.push(banner);
-              delete newOverlays[slot];
-            } catch (err) {
-              console.warn('[StepDotdReview] Failed to bake tagged URL image, keeping original:', err);
-              newUrls.push(urls[i]);
-            }
-          } else {
-            newUrls.push(urls[i]);
-          }
-        }
-
-        for (let j = 0; j < files.length; j++) {
-          const slot = urls.length + j + 1;
-          const ov = overlays[slot];
-          const tagged = ov && (ov.discountPct || ov.offerPrice);
-          if (tagged) {
-            try {
-              const banner = await generatePromoBanner(
-                files[j],
-                store?.store_name || user.store_name || 'Your Store',
-                wizardState.dealHeading || 'Special Deal',
-                wizardState.offerValue || 'Great Offer',
-                badgeLabels,
-                { discountPct: ov.discountPct, offerPrice: ov.offerPrice },
-              );
-              newFiles.push(banner);
-              delete newOverlays[slot];
-            } catch (err) {
-              console.warn('[StepDotdReview] Failed to bake tagged file image, keeping original:', err);
-              newFiles.push(files[j]);
-            }
-          } else {
-            newFiles.push(files[j]);
-          }
-        }
-
-        onUpdateAdditional(newFiles, newUrls, newOverlays);
-      } catch (err) {
-        console.error('[StepDotdReview] Additional banner generation failed:', err);
-      } finally {
-        setGeneratingBanner(false);
-      }
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // NOTE: Additional-image price tags are NO LONGER baked here on mount (see the
+  // matching note in the regular deal wizard's StepReview). That on-mount effect
+  // raced with the cover's placement bake and cleared the tag data as it baked, so a
+  // text-free cover layout could make the additional photos' tags vanish. The tags
+  // now live in `wizardState.imagePriceOverlays` up to publish: the preview renders
+  // them as an overlay from that data, and handlePublish bakes each tag into the
+  // image pixels at upload. Cover placement and additional tags are now independent.
 
   // Run optimizer on mount
   useEffect(() => {
@@ -411,14 +333,64 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
         throw new Error('Image is required for Deal of the Day');
       }
 
-      // Upload additional images
+      // Upload additional images — BAKE each photo's price tag into the pixels here,
+      // deterministically, right before upload (see the matching logic in StepReview).
+      // Idempotent: `promo-banner-*` sources are already baked, so we never stack a
+      // second tag. Baked slots are removed from the overlay payload below so a tag
+      // can never render twice.
       const mediaUrls: string[] = [];
-      for (const url of wizardState.additionalImageUrls) {
+      const bakedOverlays: Record<string, { discountPct: string; offerPrice: string }> = {
+        ...(wizardState.imagePriceOverlays as Record<string, { discountPct: string; offerPrice: string }> || {}),
+      };
+      const addUrls = wizardState.additionalImageUrls;
+      const addFiles = wizardState.additionalImageFiles;
+      const tagOf = (slot: number) => {
+        const ov = bakedOverlays[String(slot)];
+        return ov && (ov.discountPct || ov.offerPrice) ? ov : null;
+      };
+
+      // Existing additional URLs (slots 1..addUrls.length)
+      for (let k = 0; k < addUrls.length; k++) {
+        const url = addUrls[k];
+        const slot = k + 1;
+        const ov = tagOf(slot);
+        if (ov && !/promo-banner-/.test(url)) {
+          try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const src = new File([blob], `add-${slot}.jpg`, { type: blob.type || 'image/jpeg' });
+            const baked = await generatePriceTagImage(src, { discountPct: ov.discountPct, offerPrice: ov.offerPrice });
+            const up = await dealOfDayService.uploadDealImage(user.id, baked);
+            mediaUrls.push(up.publicUrl);
+            delete bakedOverlays[String(slot)];
+            continue;
+          } catch (err) {
+            console.warn('[StepDotdReview] Failed to bake tag onto existing additional image, keeping original:', err);
+          }
+        } else if (ov) {
+          delete bakedOverlays[String(slot)]; // already baked — drop data overlay
+        }
         mediaUrls.push(url);
       }
-      for (const file of wizardState.additionalImageFiles) {
+
+      // New additional files (slots addUrls.length+1 ..)
+      for (let j = 0; j < addFiles.length; j++) {
+        const file = addFiles[j];
+        const slot = addUrls.length + j + 1;
+        const ov = tagOf(slot);
+        let toUpload = file;
+        if (ov && !file.name.startsWith('promo-banner-')) {
+          try {
+            toUpload = await generatePriceTagImage(file, { discountPct: ov.discountPct, offerPrice: ov.offerPrice });
+            delete bakedOverlays[String(slot)];
+          } catch (err) {
+            console.warn('[StepDotdReview] Failed to bake tag onto additional image, uploading original:', err);
+          }
+        } else if (ov) {
+          delete bakedOverlays[String(slot)];
+        }
         try {
-          const result = await dealOfDayService.uploadDealImage(user.id, file);
+          const result = await dealOfDayService.uploadDealImage(user.id, toUpload);
           mediaUrls.push(result.publicUrl);
         } catch {
           console.warn('[StepDotdReview] Failed to upload additional image, skipping');
@@ -493,10 +465,11 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
       if (finalVideoUrl) payload.video_url = finalVideoUrl;
       if (freeGiftsPayload.length > 0) payload.free_gifts = freeGiftsPayload;
 
-      // Image price overlays
-      if (wizardState.imagePriceOverlays) {
+      // Image price overlays — only the overlays we DIDN'T bake into the pixels
+      // (bakedOverlays has baked slots removed above), so a tag never shows twice.
+      {
         const cleaned: Record<string, { discountPct: string; offerPrice: string }> = {};
-        for (const [idx, raw] of Object.entries(wizardState.imagePriceOverlays)) {
+        for (const [idx, raw] of Object.entries(bakedOverlays)) {
           const ov = raw as { discountPct: string; offerPrice: string };
           if (ov && (ov.discountPct || ov.offerPrice)) cleaned[idx] = ov;
         }
@@ -570,7 +543,17 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
                 className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
               >
-                {allPreviews.map((item, i) => (
+                {allPreviews.map((item, i) => {
+                  // Per-photo price tag straight from the overlay data (slot i). Only
+                  // additional photos (i >= 1); the cover carries its own baked banner.
+                  // Renders regardless of the cover's layout choice, so a text-free
+                  // cover can never make the additional tags disappear.
+                  const overlay = !item.isVideo && i >= 1
+                    ? (wizardState.imagePriceOverlays as Record<number, { discountPct: string; offerPrice: string }>)?.[i]
+                    : undefined;
+                  const hasOverlay = !!(overlay && (overlay.discountPct || overlay.offerPrice));
+                  const mrp = overlay?.offerPrice ? mrpFromDiscount(parseFloat(overlay.offerPrice), overlay.discountPct) : null;
+                  return (
                   <div key={i} className="w-full flex-shrink-0 snap-center relative">
                     {item.isVideo ? (
                       <video src={item.url} className="w-full aspect-square object-cover bg-black" controls muted playsInline />
@@ -583,8 +566,18 @@ export const StepDotdReview: React.FC<StepDotdReviewProps> = ({
                         <span className="text-[10px] font-semibold text-white">{t('m_video')}</span>
                       </div>
                     )}
+                    {hasOverlay && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-8 pb-3 px-4">
+                        {overlay!.discountPct && <div className="inline-block bg-red-500 text-white text-xs font-black px-2 py-1 rounded mb-1.5">{overlay!.discountPct}% OFF</div>}
+                        <div className="flex items-baseline gap-2">
+                          {overlay!.offerPrice && <span className="text-white text-2xl font-black">₹{overlay!.offerPrice}</span>}
+                          {mrp && <span className="text-white/60 text-sm line-through">₹{mrp}</span>}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
               {/* DOTD badge — corner picked dynamically based on cover image */}
               <div className={`absolute ${cornerClass(badgeCorner)} flex items-center gap-1 bg-amber-500 text-white px-2 py-1 rounded-lg text-xs font-bold transition-all`}>

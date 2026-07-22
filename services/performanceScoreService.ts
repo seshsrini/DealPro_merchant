@@ -25,10 +25,10 @@ export const performanceScoreService = {
   /**
    * Get comprehensive performance score for a merchant
    */
-  async getScore(merchantId: string): Promise<PerformanceScore | null> {
+  async getScore(merchantId: string, locale: string = 'en'): Promise<PerformanceScore | null> {
     try {
       const { data, error } = await supabase.functions.invoke('get-performance-score', {
-        body: { merchantId },
+        body: { merchantId, locale },
       });
 
       if (error) {

@@ -89,6 +89,36 @@ export const locationsearchService = {
   },
 
   /**
+   * Pincode autocomplete — prefix search over the public pincode_directory table
+   * (seeded from the India Post directory). Type >=3 digits → suggestions of
+   * "pincode (locality, city)". Reads the table directly (public-read RLS), so no
+   * edge function / round-trip through the EF layer. Returns [] on any error so
+   * the field degrades gracefully to plain manual entry.
+   */
+  searchPincodePrefix: async (
+    prefix: string,
+  ): Promise<Array<{ pincode: string; locality: string; city: string | null; state: string | null }>> => {
+    const p = (prefix || '').replace(/\D/g, '').slice(0, 6);
+    if (p.length < 3) return [];
+    try {
+      const { data, error } = await supabase
+        .from('pincode_directory')
+        .select('pincode, locality, city, state')
+        .like('pincode', `${p}%`)
+        .order('pincode', { ascending: true })
+        .limit(15);
+      if (error) {
+        console.warn('[searchPincodePrefix] query failed:', error.message);
+        return [];
+      }
+      return (data as any) || [];
+    } catch (e) {
+      console.warn('[searchPincodePrefix] exception:', (e as any)?.message);
+      return [];
+    }
+  },
+
+  /**
    * Performs pincode lookup via an Edge Function to get structured locality, city, and state information.
    * This is used for populating dropdowns and map coordinates.
    */
@@ -187,6 +217,36 @@ export const locationsearchService = {
       console.error(`[reverseGeocodeCoordinates] Nominatim fallback also failed:`, e);
     }
     return null;
+  },
+
+  /**
+   * Full reverse geocode — street/locality/city/state/pincode from coords. Used to
+   * PRE-FILL the add-store address form from the merchant's GPS (they can edit any
+   * field afterwards). Nominatim's reverse response carries road + postcode that the
+   * lighter reverseGeocodeCoordinates drops. Returns null on failure (form stays blank).
+   */
+  reverseGeocodeFull: async (
+    latitude: number,
+    longitude: number,
+  ): Promise<{ street: string; locality: string; city: string; state: string; pincode: string } | null> => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1&zoom=18&accept-language=en`;
+      const res = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(6000) });
+      const data = await res.json();
+      const a = data?.address;
+      if (!a) return null;
+      const street = [a.house_number, a.road].filter(Boolean).join(' ')
+        || a.pedestrian || a.residential || a.neighbourhood || '';
+      const locality = a.suburb || a.neighbourhood || a.village || a.hamlet || a.quarter || '';
+      const city = a.city || a.town || a.municipality || a.county || a.state_district || '';
+      const state = a.state || '';
+      const pincode = /^\d{6}$/.test(a.postcode || '') ? a.postcode : '';
+      if (!city && !pincode && !locality) return null;
+      return { street, locality, city, state, pincode };
+    } catch (e) {
+      console.warn('[reverseGeocodeFull] failed:', (e as any)?.message);
+      return null;
+    }
   },
 
   // Remains client-side (Capacitor Geolocation)

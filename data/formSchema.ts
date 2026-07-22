@@ -220,7 +220,7 @@ export const CATEGORY_SCHEMAS: CategorySchema[] = [
     fields: [
       { key: 'brand',       label: 'Brand',        type: 'text',   placeholder: 'e.g. IKEA, Godrej, Pepperfry' },
       { key: 'category',    label: 'Category',     type: 'select', options: ['Sofa & Seating', 'Bed', 'Wardrobe', 'Table', 'Chair', 'Storage', 'Outdoor', 'Office', 'Other'] },
-      { key: 'material',    label: 'Material',     type: 'select', options: ['Solid Wood', 'Engineered Wood', 'Metal', 'Plastic', 'Glass', 'Fabric', 'Leather', 'Mixed'] },
+      { key: 'material',    label: 'Material',     type: 'select', options: ['Solid Wood', 'Engineered Wood', 'Metal', 'Plastic', 'Glass', 'Fabric', 'Leather', 'Mixed', 'Other'] },
       { key: 'dimensions',  label: 'Dimensions',   type: 'text',   placeholder: 'L × W × H in cm or inches' },
       { key: 'color',       label: 'Color / Finish', type: 'text', placeholder: 'e.g. Walnut Brown, Matte Black' },
       { key: 'assembly',    label: 'Assembly Required', type: 'boolean' },

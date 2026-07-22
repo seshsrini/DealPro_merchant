@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layout, Loader2, Check } from 'lucide-react';
+import { Layout, Loader2, Check, AlertTriangle } from 'lucide-react';
 import { floatIn } from './floatIn';
 import {
   generatePromoBanner,
@@ -8,6 +8,7 @@ import {
   BannerPlacement,
 } from './StepImage';
 import { TRUST_BADGES } from './StepTrustBadges';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 interface StepBannerPlacementProps {
   /** Preserved original photo (set on upload). Required to bake the previews cleanly. */
@@ -30,12 +31,16 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
   trustBadgeIds, value, onChange, onNext, onBack, theme,
 }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const [previews, setPreviews] = useState<Record<BannerPlacement, string | null>>({
     auto: null, left: null, right: null, top: null, bottom: null, none: null,
   });
   const [generating, setGenerating] = useState(true);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  // The chosen layout is baked into the image, so committing is one-way. Confirm
+  // before proceeding so the merchant knows changing it means starting over.
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 50);
@@ -49,9 +54,17 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
     [trustBadgeIds],
   );
 
-  // Bake all 5 placement variants in parallel and stash the resulting blob URLs.
+  // Bake the placement variants and stash the resulting blob URLs.
   // We only re-bake when the merchant returns to this step (mount), not on every render —
   // they would only get here after upload + heading/offer/badges are settled.
+  //
+  // IMPORTANT: bake ONE AT A TIME, not in parallel. Each bake allocates a canvas
+  // sized to the source photo (up to ~4000×4000 → ~64 MB) plus a decoded bitmap.
+  // Baking all five at once spiked peak memory to ~300–500 MB, which OOM-killed
+  // the Android WebView renderer — the app "suddenly refreshed" mid-wizard and,
+  // because the draft auto-saves, reopening then prompted to finish the deal.
+  // Sequential baking keeps only one canvas live at a time; previews also fill in
+  // progressively, which reads as more responsive.
   useEffect(() => {
     let cancelled = false;
     const objectUrls: string[] = [];
@@ -59,6 +72,8 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
     (async () => {
       setGenerating(true);
       setGenerationError(null);
+      // Reset so a re-bake never shows now-revoked URLs from a previous run.
+      setPreviews({ auto: null, left: null, right: null, top: null, bottom: null, none: null });
       try {
         // Resolve a single source File for all bakes.
         let source = originalImageFile;
@@ -71,29 +86,34 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
           setGenerationError('No cover image found. Go back and upload an image first.');
           return;
         }
-        // Bake all 5 in parallel for snappy UI.
-        const results = await Promise.all(
-          ALL_BANNER_PLACEMENTS.map(placement =>
-            generatePromoBanner(
-              source!,
+        let anySucceeded = false;
+        for (const placement of ALL_BANNER_PLACEMENTS) {
+          if (cancelled) return;
+          try {
+            const file = await generatePromoBanner(
+              source,
               storeName || 'Your Store',
               dealHeading || 'Special Deal',
               offerValue || 'Great Offer',
               badgeLabels,
               undefined,
               placement,
-            ).then(file => URL.createObjectURL(file)),
-          ),
-        );
-        if (cancelled) {
-          results.forEach(u => URL.revokeObjectURL(u));
-          return;
+            );
+            if (cancelled) return;
+            const url = URL.createObjectURL(file);
+            objectUrls.push(url);
+            anySucceeded = true;
+            setPreviews(prev => ({ ...prev, [placement]: url }));
+          } catch (err) {
+            console.error('[StepBannerPlacement] Failed to generate preview for', placement, err);
+          }
+          // Yield to the event loop between bakes so the UI can paint and the
+          // WebView can reclaim the previous canvas before the next allocates.
+          await new Promise(r => setTimeout(r, 0));
         }
-        const next: Record<BannerPlacement, string | null> = {
-          auto: results[0], left: results[1], right: results[2], top: results[3], bottom: results[4], none: results[5],
-        };
-        results.forEach(u => objectUrls.push(u));
-        setPreviews(next);
+        if (!cancelled && !anySucceeded) {
+          setGenerationError('Could not generate banner previews. Tap Next to continue with the auto layout.');
+        }
       } catch (err) {
         console.error('[StepBannerPlacement] Failed to generate previews:', err);
         if (!cancelled) setGenerationError('Could not generate banner previews. Tap Next to continue with the auto layout.');
@@ -189,12 +209,46 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
           Back
         </button>
         <button
-          onClick={onNext}
+          onClick={() => setShowConfirm(true)}
           className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center"
         >
           Continue
         </button>
       </div>
+
+      {/* Final-choice warning — the layout is baked into the image, so changing it
+          later means starting the deal over. Confirm before committing. */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-[600] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className={`w-full max-w-sm rounded-2xl p-6 text-center ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-white border border-slate-200'}`}>
+            <div className={`w-12 h-12 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-amber-500/15' : 'bg-amber-100'}`}>
+              <AlertTriangle className={`w-6 h-6 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
+            </div>
+            <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              {t('m_banner_final_title')}
+            </h3>
+            <p className={`text-sm mb-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              {t('m_banner_final_msg').replace('{layout}', BANNER_PLACEMENT_LABELS[value])}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirm(false)}
+                className={`flex-1 h-12 rounded-xl text-sm font-semibold active:scale-[0.98] transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {t('m_banner_go_back')}
+              </button>
+              <button
+                onClick={() => { setShowConfirm(false); onNext(); }}
+                className="flex-1 h-12 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all"
+              >
+                {t('m_continue')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

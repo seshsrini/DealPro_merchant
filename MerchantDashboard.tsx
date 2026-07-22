@@ -133,7 +133,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
   setPreSelectedTab
 }) => {
   const isDark = theme === 'dark';
-  const { t } = useTranslation();
+  const { t, getLocalizedText } = useTranslation();
   const [visible, setVisible] = useState(false);
 
   // Seed from cache so the New Deal / DOTD gates reflect the LAST-KNOWN usage on
@@ -788,8 +788,18 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
           return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
         };
 
-        const plainDesc = (deal.longDescription || (deal as any).long_description || '')
-          .replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+        // Preserve the line breaks the merchant typed: block tags / <br> become
+        // newlines (the <p> below uses whitespace-pre-line to render them),
+        // instead of stripping every tag and collapsing to one line.
+        const plainDesc = getLocalizedText(deal.localized_description, deal.longDescription || (deal as any).long_description || '')
+          .replace(/<\s*br\s*\/?>/gi, '\n')
+          .replace(/<\/(?:p|div|li|h[1-6]|ul|ol)\s*>/gi, '\n')
+          .replace(/<[^>]*>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/[^\S\n]+/g, ' ')
+          .replace(/[^\S\n]*\n[^\S\n]*/g, '\n')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
 
         return (
           <div className="fixed inset-0 z-[300] overflow-y-auto" style={{ background: isDark ? '#0f172a' : '#ffffff' }}>
@@ -981,7 +991,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                     <span className={`text-sm font-normal ${isDark ? 'text-white' : 'text-slate-900'}`}>Details</span>
                   </div>
                   <div className={`px-4 py-4 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
-                    <p className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{plainDesc}</p>
+                    <p className={`whitespace-pre-line text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{plainDesc}</p>
                   </div>
                 </div>
               )}

@@ -5,6 +5,7 @@ import { locationsearchService } from '../../services/locationsearchService';
 import { addCampaignService } from '../../services/addCampaignService';
 import { Geolocation } from '@capacitor/geolocation';
 import { floatIn } from './floatIn';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 const FALLBACK_CATEGORIES = [
   'Grocery', 'Restaurant', 'Electronics', 'Fashion', 'Beauty',
@@ -33,15 +34,22 @@ interface StepStoreAddressProps {
 export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
   store, storeIndex, totalStores, brandName, onChange, onNext, onBack, theme
 }) => {
+  const { t } = useTranslation();
   const isDark = theme === 'dark';
   const [localityResults, setLocalityResults] = useState<any[]>([]);
   const [showLocalityDropdown, setShowLocalityDropdown] = useState(false);
   const [visible, setVisible] = useState(false);
   const [storeCategories, setStoreCategories] = useState<string[]>(FALLBACK_CATEGORIES);
+  // Pincode autocomplete — suggestions from the pincode_directory table (>=3 digits).
+  const [pincodeResults, setPincodeResults] = useState<Array<{ pincode: string; locality: string; city: string | null; state: string | null }>>([]);
+  const [showPincodeDropdown, setShowPincodeDropdown] = useState(false);
+  // "Find my store location" opt-in — GPS auto-fill only when the merchant ticks it.
+  const [useMyLocation, setUseMyLocation] = useState(false);
+  const [findingLocation, setFindingLocation] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setVisible(true), 50);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setVisible(true), 50);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -59,6 +67,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
   const [localitySearch, setLocalitySearch] = useState(store.locality || '');
   const localityDebounceRef = useRef<number | null>(null);
   const pincodeDebounceRef = useRef<number | null>(null);
+  const pincodeSuggestRef = useRef<number | null>(null);
 
   const inputClass = `w-full h-12 px-4 rounded-xl text-sm font-medium outline-none transition-all border ${
     isDark
@@ -75,6 +84,20 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
     onChange('city', '');
     onChange('state', '');
     onChange('coords', null);
+
+    // Autocomplete: once 3+ digits are typed, suggest matching pincodes + areas
+    // (like the reference UX). Debounced; graceful no-op if the table is empty.
+    if (digits.length >= 3) {
+      if (pincodeSuggestRef.current) clearTimeout(pincodeSuggestRef.current);
+      pincodeSuggestRef.current = setTimeout(async () => {
+        const rows = await locationsearchService.searchPincodePrefix(digits);
+        setPincodeResults(rows);
+        setShowPincodeDropdown(rows.length > 0);
+      }, 250) as unknown as number;
+    } else {
+      setPincodeResults([]);
+      setShowPincodeDropdown(false);
+    }
 
     if (digits.length === 6) {
       if (pincodeDebounceRef.current) clearTimeout(pincodeDebounceRef.current);
@@ -149,6 +172,28 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
     }
   }, [onChange]);
 
+  // User picked a pincode suggestion — fill pincode/locality/city/state directly
+  // (no lookup round-trip needed, we already have them) and resolve coords in the
+  // background so the map/geo still works.
+  const selectPincode = useCallback((row: { pincode: string; locality: string; city: string | null; state: string | null }) => {
+    if (pincodeSuggestRef.current) clearTimeout(pincodeSuggestRef.current);
+    if (pincodeDebounceRef.current) clearTimeout(pincodeDebounceRef.current);
+    setShowPincodeDropdown(false);
+    setPincodeResults([]);
+    onChange('pincode', row.pincode);
+    onChange('city', row.city || '');
+    onChange('state', row.state || '');
+    onChange('locality', row.locality || '');
+    setLocalitySearch(row.locality || '');
+    onChange('coords', null);
+    // Background geocode for coordinates (directory has no lat/long).
+    onChange('isPincodeSearching', true);
+    locationsearchService.geocodePincode(row.pincode)
+      .then((coords) => { if (coords) onChange('coords', coords); })
+      .catch(() => {})
+      .finally(() => onChange('isPincodeSearching', false));
+  }, [onChange]);
+
   // Locality autocomplete
   const handleLocalitySearch = useCallback((val: string) => {
     setLocalitySearch(val);
@@ -177,6 +222,45 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
     onChange('locality', name);
     setShowLocalityDropdown(false);
   };
+
+  // Fill EMPTY address fields from a coordinate (reverse geocode). Never
+  // overwrites anything the merchant has already typed — it's a starting point.
+  const applyReverseGeocode = useCallback(async (coords: { latitude: number; longitude: number }) => {
+    const full = await locationsearchService.reverseGeocodeFull(coords.latitude, coords.longitude);
+    if (!full) return;
+    onChange('coords', coords);
+    if (!store.street && full.street) onChange('street', full.street.slice(0, 80));
+    if (!store.city && full.city) onChange('city', full.city);
+    if (!store.state && full.state) onChange('state', full.state);
+    if (!store.locality && full.locality) { onChange('locality', full.locality); setLocalitySearch(full.locality); }
+    if ((!store.pincode || store.pincode.length < 6) && full.pincode) onChange('pincode', full.pincode);
+  }, [onChange, store.street, store.city, store.state, store.locality, store.pincode]);
+
+  // "Find my store location" — opt-in GPS auto-fill. Only runs when the merchant
+  // ticks the checkbox, so we never fetch (or prompt for) location without a clear
+  // action. Unchecked = they type the address manually. Requests permission on
+  // demand; on denial/failure it unticks and the form stays manual.
+  const handleFindMyLocation = useCallback(async () => {
+    setFindingLocation(true);
+    onChange('isGeocoding', true);
+    try {
+      let perm = await Geolocation.checkPermissions();
+      if (perm.location !== 'granted' && (perm as any).coarseLocation !== 'granted') {
+        perm = await Geolocation.requestPermissions();
+      }
+      if (perm.location !== 'granted' && (perm as any).coarseLocation !== 'granted') {
+        setUseMyLocation(false); // denied — fall back to manual entry
+        return;
+      }
+      const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 } as any);
+      await applyReverseGeocode({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+    } catch {
+      setUseMyLocation(false);
+    } finally {
+      setFindingLocation(false);
+      onChange('isGeocoding', false);
+    }
+  }, [applyReverseGeocode, onChange]);
 
   // Resolve coordinates from store address fields, fallback to device GPS
   const handleGetLocation = async () => {
@@ -209,9 +293,15 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
         }
       }
 
-      // Last resort: use device GPS
+      // Last resort: use device GPS. On an empty form this also reverse-geocodes
+      // to PRE-FILL the address (street/locality/city/state/pincode); on a filled
+      // form it just records the coordinate.
       const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
-      onChange('coords', { latitude: position.coords.latitude, longitude: position.coords.longitude });
+      const gps = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+      onChange('coords', gps);
+      if (!store.street && !store.pincode && !store.city && !store.locality) {
+        await applyReverseGeocode(gps);
+      }
     } catch (e) {
       console.error('[StoreAddress] GPS/geocoding error:', e);
     } finally {
@@ -259,35 +349,64 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
         </div>
         <div>
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Store address
+            {t('ob_addr_title')}
           </h2>
           <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Store {storeIndex + 1}{totalStores > 1 ? ` of ${totalStores}` : ''}
+            {totalStores > 1
+              ? t('ob_addr_store_multi').replace('{n}', String(storeIndex + 1)).replace('{total}', String(totalStores))
+              : t('ob_addr_store_single').replace('{n}', String(storeIndex + 1))}
           </p>
         </div>
       </div>
 
       <div style={floatIn(150, visible)} className="space-y-4 pb-4">
+        {/* Find my store location — opt-in GPS auto-fill */}
+        <label className={`flex items-start gap-2.5 cursor-pointer p-3 rounded-xl border ${
+          isDark ? 'bg-blue-500/5 border-blue-500/20' : 'bg-blue-50/60 border-blue-200'
+        }`}>
+          <input
+            type="checkbox"
+            checked={useMyLocation}
+            disabled={findingLocation}
+            onChange={(e) => {
+              setUseMyLocation(e.target.checked);
+              if (e.target.checked) handleFindMyLocation();
+            }}
+            className="w-4 h-4 rounded accent-blue-600 mt-0.5 shrink-0"
+          />
+          <div className="min-w-0">
+            <span className={`text-sm font-semibold flex items-center gap-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              {findingLocation
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                : <Navigation className="w-3.5 h-3.5 text-blue-500" />}
+              {t('ob_addr_find_location')}
+            </span>
+            <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              {t('ob_addr_find_location_hint')}
+            </span>
+          </div>
+        </label>
+
         {/* Branch Name */}
         <div>
-          <label className={labelClass}>Branch / Location Name <span className="text-red-500">*</span></label>
+          <label className={labelClass}>{t('ob_addr_branch_label')} <span className="text-red-500">*</span></label>
           <input
             value={store.store_name}
             onChange={(e) => onChange('store_name', e.target.value)}
-            placeholder={brandName || 'e.g. Main Branch'}
+            placeholder={brandName || t('ob_addr_branch_ph')}
             className={inputClass}
           />
         </div>
 
         {/* Store Category */}
         <div>
-          <label className={labelClass}>Store Category <span className="text-red-500">*</span></label>
+          <label className={labelClass}>{t('ob_addr_cat_label')} <span className="text-red-500">*</span></label>
           <select
             value={store.store_category}
             onChange={(e) => onChange('store_category', e.target.value)}
             className={`${inputClass} ${!store.store_category ? (isDark ? 'text-slate-500' : 'text-slate-400') : ''}`}
           >
-            <option value="">Select category</option>
+            <option value="">{t('ob_addr_cat_select')}</option>
             {storeCategories.map((cat) => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
@@ -296,28 +415,31 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
 
         {/* Street */}
         <div>
-          <label className={labelClass}>Street Address <span className="text-red-500">*</span></label>
+          <label className={labelClass}>{t('ob_addr_street_label')} <span className="text-red-500">*</span></label>
           <input
             value={store.street}
             // Max 80 chars (free-form address — special characters allowed).
             onChange={(e) => onChange('street', e.target.value.slice(0, 80))}
             maxLength={80}
-            placeholder="Street address, building, floor"
+            placeholder={t('ob_addr_street_ph')}
             className={inputClass}
           />
         </div>
 
         {/* Pincode */}
         <div>
-          <label className={labelClass}>Pincode <span className="text-red-500">*</span></label>
+          <label className={labelClass}>{t('ob_addr_pincode_label')} <span className="text-red-500">*</span></label>
           <div className="relative">
             <input
               value={store.pincode}
               onChange={(e) => handlePincodeChange(e.target.value)}
-              placeholder="6-digit pincode"
+              onFocus={() => { if (pincodeResults.length > 0) setShowPincodeDropdown(true); }}
+              onBlur={() => setTimeout(() => setShowPincodeDropdown(false), 150)}
+              placeholder={t('ob_addr_pincode_ph')}
               inputMode="numeric"
               maxLength={6}
               className={inputClass}
+              autoComplete="off"
             />
             {store.isPincodeSearching && (
               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-blue-500" />
@@ -325,9 +447,33 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
             {store.city && !store.isPincodeSearching && (
               <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
             )}
+
+            {/* Pincode suggestions — "pincode (locality, city)" */}
+            {showPincodeDropdown && pincodeResults.length > 0 && (
+              <div className={`absolute top-full left-0 right-0 z-30 mt-1 rounded-xl border max-h-56 overflow-y-auto shadow-lg ${
+                isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
+              }`}>
+                {pincodeResults.map((row, i) => (
+                  <button
+                    key={`${row.pincode}-${i}`}
+                    type="button"
+                    // onMouseDown (not onClick) so it fires before the input's onBlur hides the list.
+                    onMouseDown={(e) => { e.preventDefault(); selectPincode(row); }}
+                    className={`w-full text-left px-4 py-2.5 text-sm border-b last:border-b-0 ${
+                      isDark ? 'border-slate-700/60 hover:bg-slate-700' : 'border-slate-100 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className={`font-semibold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{row.pincode}</span>
+                    <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>
+                      {'  '}({[row.locality, row.city].filter(Boolean).join(', ')})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           {store.pincode && store.pincode.length > 0 && store.pincode.length < 6 && (
-            <p className="text-xs text-amber-500 mt-1">Enter all 6 digits to continue</p>
+            <p className="text-xs text-amber-500 mt-1">{t('ob_addr_pincode_incomplete')}</p>
           )}
         </div>
 
@@ -335,11 +481,11 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
         {store.city && (
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelClass}>City</label>
+              <label className={labelClass}>{t('ob_addr_city')}</label>
               <input value={store.city} readOnly className={`${inputClass} opacity-60`} />
             </div>
             <div>
-              <label className={labelClass}>State</label>
+              <label className={labelClass}>{t('ob_addr_state')}</label>
               <input value={store.state} readOnly className={`${inputClass} opacity-60`} />
             </div>
           </div>
@@ -347,7 +493,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
 
         {/* Locality */}
         <div className="relative">
-          <label className={labelClass}>Locality / Area</label>
+          <label className={labelClass}>{t('ob_addr_locality_label')}</label>
           <input
             value={localitySearch}
             // Max 40 chars; letters/numbers/spaces only (no special characters).
@@ -357,7 +503,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
               onChange('locality', v);
             }}
             maxLength={40}
-            placeholder="Auto-filled from pincode or type manually"
+            placeholder={t('ob_addr_locality_ph')}
             className={inputClass}
           />
           {showLocalityDropdown && (
@@ -381,11 +527,11 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
 
         {/* Landmark */}
         <div>
-          <label className={labelClass}>Landmark (optional)</label>
+          <label className={labelClass}>{t('ob_addr_landmark_label')}</label>
           <input
             value={store.landmark}
             onChange={(e) => onChange('landmark', e.target.value)}
-            placeholder="Near famous place, etc."
+            placeholder={t('ob_addr_landmark_ph')}
             className={inputClass}
           />
         </div>
@@ -393,42 +539,42 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
         {/* Store Phone Numbers */}
         <div>
           <label className={`${labelClass} flex items-center gap-2`}>
-            <Phone className="w-3.5 h-3.5" /> Store Phone Number <span className="text-red-500">*</span>
+            <Phone className="w-3.5 h-3.5" /> {t('ob_addr_phone_label')} <span className="text-red-500">*</span>
           </label>
           <input
             value={store.store_phone || ''}
             onChange={(e) => onChange('store_phone', e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
-            placeholder="e.g. 9876543210"
+            placeholder={t('ob_addr_phone_ph')}
             type="tel"
             inputMode="numeric"
             maxLength={10}
             className={inputClass}
           />
           {store.store_phone && !isPhoneValid && (
-            <p className="text-[11px] text-red-500 mt-1">Phone number must be 10 digits</p>
+            <p className="text-[11px] text-red-500 mt-1">{t('ob_addr_phone_invalid')}</p>
           )}
         </div>
         <div>
-          <label className={labelClass}>Alternate Phone Number (optional)</label>
+          <label className={labelClass}>{t('ob_addr_phone_alt_label')}</label>
           <input
             value={store.store_phone_alt || ''}
             onChange={(e) => onChange('store_phone_alt', e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
-            placeholder="e.g. 9876543210 (optional)"
+            placeholder={t('ob_addr_phone_alt_ph')}
             type="tel"
             inputMode="numeric"
             maxLength={10}
             className={inputClass}
           />
           {store.store_phone_alt && !isPhoneAltValid && (
-            <p className="text-[11px] text-red-500 mt-1">Phone number must be 10 digits</p>
+            <p className="text-[11px] text-red-500 mt-1">{t('ob_addr_phone_invalid')}</p>
           )}
         </div>
 
         {/* Delivery Option (optional) */}
         <div>
           <label className={`${labelClass} flex items-center gap-2`}>
-            <Truck className="w-3.5 h-3.5" /> Delivery
-            <span className={`text-[10px] font-normal ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>(optional)</span>
+            <Truck className="w-3.5 h-3.5" /> {t('ob_addr_delivery')}
+            <span className={`text-[10px] font-normal ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('ob_addr_optional')}</span>
           </label>
           <label className={`flex items-center gap-2 mb-3 cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
             <input
@@ -440,26 +586,26 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
               }}
               className="w-4 h-4 rounded accent-slate-900"
             />
-            <span className="text-sm">We deliver to customers</span>
+            <span className="text-sm">{t('ob_addr_delivery_check')}</span>
           </label>
           {store.delivers && (
             <div>
               <label className={labelClass}>
-                Delivery Range
-                <span className={`ml-1.5 text-[10px] font-normal ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>(optional)</span>
+                {t('ob_addr_delivery_range')}
+                <span className={`ml-1.5 text-[10px] font-normal ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('ob_addr_optional')}</span>
               </label>
               <select
                 value={store.delivery_radius_km ?? ''}
                 onChange={(e) => onChange('delivery_radius_km', e.target.value ? Number(e.target.value) : null)}
                 className={inputClass}
               >
-                <option value="">Select range (optional)</option>
-                <option value="1">1 km</option>
-                <option value="2">2 km</option>
-                <option value="3">3 km</option>
-                <option value="4">4 km</option>
-                <option value="5">5 km</option>
-                <option value="10">Anywhere within city limits</option>
+                <option value="">{t('ob_addr_range_select')}</option>
+                <option value="1">{t('ob_addr_range_km').replace('{n}', '1')}</option>
+                <option value="2">{t('ob_addr_range_km').replace('{n}', '2')}</option>
+                <option value="3">{t('ob_addr_range_km').replace('{n}', '3')}</option>
+                <option value="4">{t('ob_addr_range_km').replace('{n}', '4')}</option>
+                <option value="5">{t('ob_addr_range_km').replace('{n}', '5')}</option>
+                <option value="10">{t('ob_addr_range_city')}</option>
               </select>
               <div className={`mt-3 flex items-start gap-2.5 p-2.5 rounded-lg border ${
                 isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50/60 border-emerald-200'
@@ -471,10 +617,10 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className={`text-xs font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
-                    Customers will see "Delivery available" on your deals
+                    {t('ob_addr_delivery_badge')}
                   </p>
                   <p className={`text-[10px] mt-0.5 leading-snug ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Delivered by you or your delivery partner; DealPro is not liable.
+                    {t('ob_addr_delivery_note')}
                   </p>
                 </div>
               </div>
@@ -496,7 +642,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
             ) : (
               <Navigation className="w-4 h-4" />
             )}
-            {store.city || store.pincode ? 'Resolve from Address' : 'Use My Location'}
+            {store.city || store.pincode ? t('ob_addr_resolve') : t('ob_addr_use_location')}
           </button>
           {store.coords && (
             <span className="text-xs text-emerald-500 flex items-center gap-1">
@@ -508,7 +654,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
         {/* Store Hours */}
         <div>
           <label className={`${labelClass} flex items-center gap-2`}>
-            <Clock className="w-3.5 h-3.5" /> Store Hours <span className="text-red-500">*</span>
+            <Clock className="w-3.5 h-3.5" /> {t('ob_addr_hours_label')} <span className="text-red-500">*</span>
           </label>
           <label className={`flex items-center gap-2 mb-3 cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
             <input
@@ -517,28 +663,28 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
               onChange={(e) => onChange('is24hrs', e.target.checked)}
               className="w-4 h-4 rounded accent-slate-900"
             />
-            <span className="text-sm">Open 24 Hours</span>
+            <span className="text-sm">{t('ob_addr_open24')}</span>
           </label>
           {!store.is24hrs && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelClass}>Opens at</label>
+                <label className={labelClass}>{t('ob_addr_opens')}</label>
                 <select
                   value={store.shift1}
                   onChange={(e) => onChange('shift1', e.target.value)}
                   className={inputClass}
                 >
-                  {SHIFT1_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  {SHIFT1_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Closes at</label>
+                <label className={labelClass}>{t('ob_addr_closes')}</label>
                 <select
                   value={store.shift2}
                   onChange={(e) => onChange('shift2', e.target.value)}
                   className={inputClass}
                 >
-                  {SHIFT2_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  {SHIFT2_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
             </div>
@@ -554,7 +700,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
               isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
             }`}
           >
-            Back
+            {t('ob_back')}
           </button>
         )}
         <button
@@ -562,7 +708,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
           disabled={!isValid}
           className="flex-1 h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Continue
+          {t('ob_continue')}
         </button>
       </div>
     </div>

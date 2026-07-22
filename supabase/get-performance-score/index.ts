@@ -2,10 +2,16 @@
  * get-performance-score Edge Function
  * Calculates comprehensive merchant performance score (0-100)
  * Based on: Product Portfolio, Campaign Activity, Launch Timing, Pricing, Engagement, Category Coverage
+ *
+ * i18n: display prose (factor names, messages, tips, quick-win tips) is rendered
+ * in the merchant's locale via makeT() from ../_shared/analyticsI18n.ts. The
+ * `grade` and factor `status` enums stay in English on purpose — the client uses
+ * them for styling/logic and maps `grade` to a localized label itself.
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { corsHeaders } from '../_shared/cors.ts';
+import { makeT } from '../_shared/analyticsI18n.ts';
 
 interface ScoreFactor {
   name: string;
@@ -33,8 +39,9 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { merchantId } = await req.json();
-    console.log('[GetPerformanceScore] Calculating score for merchant:', merchantId);
+    const { merchantId, locale } = await req.json();
+    const T = makeT(locale || 'en');
+    console.log('[GetPerformanceScore] Calculating score for merchant:', merchantId, 'locale:', locale || 'en');
 
     if (!merchantId) {
       return new Response(
@@ -70,26 +77,26 @@ Deno.serve(async (req) => {
     let productMessage = '';
 
     if (productCount === 0) {
-      productMessage = 'No products yet - add products to get started!';
-      quickWins.push({ tip: 'Add your first 5 products', points: 10 });
+      productMessage = T('ps_prod_none');
+      quickWins.push({ tip: T('ps_qw_first5'), points: 10 });
     } else if (productCount < 5) {
       productScore = 5;
       productStatus = 'needs-improvement';
-      productMessage = `${productCount} products - add more for better reach`;
-      quickWins.push({ tip: `Add ${10 - productCount} more products to reach 10`, points: 10 });
+      productMessage = T('ps_prod_few', { n: productCount });
+      quickWins.push({ tip: T('ps_qw_reach10', { n: 10 - productCount }), points: 10 });
     } else if (productCount < 10) {
       productScore = 10;
       productStatus = 'good';
-      productMessage = `${productCount} products - good start!`;
-      quickWins.push({ tip: `Add ${10 - productCount} more products`, points: 5 });
+      productMessage = T('ps_prod_good', { n: productCount });
+      quickWins.push({ tip: T('ps_qw_addmore', { n: 10 - productCount }), points: 5 });
     } else if (productCount < 20) {
       productScore = 15;
       productStatus = 'good';
-      productMessage = `${productCount} products - solid portfolio`;
+      productMessage = T('ps_prod_solid', { n: productCount });
     } else {
       productScore = 20;
       productStatus = 'excellent';
-      productMessage = `${productCount} products - excellent portfolio!`;
+      productMessage = T('ps_prod_excellent', { n: productCount });
     }
 
     // Category diversity bonus
@@ -97,12 +104,12 @@ Deno.serve(async (req) => {
     const categoryCount = categories.size;
 
     factors.push({
-      name: 'Product Portfolio',
+      name: T('ps_name_portfolio'),
       score: productScore,
       maxScore: 20,
       status: productStatus,
       message: productMessage,
-      tips: categoryCount < 3 ? [`Expand to ${3 - categoryCount} more categories for broader appeal`] : undefined,
+      tips: categoryCount < 3 ? [T('ps_tip_categories', { n: 3 - categoryCount })] : undefined,
     });
 
     // ============ FACTOR 2: Campaign Activity (0-20 points) ============
@@ -111,8 +118,8 @@ Deno.serve(async (req) => {
     let campaignMessage = '';
 
     if (campaignCount === 0) {
-      campaignMessage = 'No campaigns yet - create your first deal!';
-      quickWins.push({ tip: 'Launch your first campaign', points: 10 });
+      campaignMessage = T('ps_camp_none');
+      quickWins.push({ tip: T('ps_qw_first_campaign'), points: 10 });
     } else {
       // Calculate average deals per month
       const oldestCampaign = campaigns?.reduce((oldest, c) => {
@@ -129,38 +136,38 @@ Deno.serve(async (req) => {
       if (dealsPerMonth < 1) {
         campaignScore = 8;
         campaignStatus = 'needs-improvement';
-        campaignMessage = `${campaignCount} total deals - increase frequency`;
-        quickWins.push({ tip: 'Create 2-3 deals per month for optimal results', points: 8 });
+        campaignMessage = T('ps_camp_low', { n: campaignCount });
+        quickWins.push({ tip: T('ps_qw_23month'), points: 8 });
       } else if (dealsPerMonth < 2) {
         campaignScore = 12;
         campaignStatus = 'good';
-        campaignMessage = `~${dealsPerMonth.toFixed(1)} deals/month - good pace`;
-        quickWins.push({ tip: 'Aim for 2-3 deals per month', points: 5 });
+        campaignMessage = T('ps_camp_good', { n: dealsPerMonth.toFixed(1) });
+        quickWins.push({ tip: T('ps_qw_aim23'), points: 5 });
       } else if (dealsPerMonth <= 3) {
         campaignScore = 18;
         campaignStatus = 'excellent';
-        campaignMessage = `~${dealsPerMonth.toFixed(1)} deals/month - excellent frequency!`;
+        campaignMessage = T('ps_camp_excellent', { n: dealsPerMonth.toFixed(1) });
       } else {
         campaignScore = 20;
         campaignStatus = 'excellent';
-        campaignMessage = `${dealsPerMonth.toFixed(1)} deals/month - very active!`;
+        campaignMessage = T('ps_camp_veryactive', { n: dealsPerMonth.toFixed(1) });
       }
 
       // Active campaigns bonus
       if (activeCampaigns > 0) {
         campaignScore = Math.min(20, campaignScore + 2);
       } else if (campaignCount > 0) {
-        quickWins.push({ tip: 'Launch a new active campaign', points: 5 });
+        quickWins.push({ tip: T('ps_qw_new_active'), points: 5 });
       }
     }
 
     factors.push({
-      name: 'Campaign Activity',
+      name: T('ps_name_activity'),
       score: campaignScore,
       maxScore: 20,
       status: campaignStatus,
       message: campaignMessage,
-      tips: activeCampaigns === 0 && campaignCount > 0 ? ['No active campaigns - launch a new deal'] : undefined,
+      tips: activeCampaigns === 0 && campaignCount > 0 ? [T('ps_tip_no_active')] : undefined,
     });
 
     // ============ FACTOR 3: Launch Timing (0-15 points) ============
@@ -169,7 +176,7 @@ Deno.serve(async (req) => {
     let timingMessage = '';
 
     if (campaignCount === 0) {
-      timingMessage = 'No campaigns to analyze';
+      timingMessage = T('ps_no_campaigns');
     } else {
       // Check how many campaigns launched on Friday
       const fridayLaunches = campaigns?.filter(c => {
@@ -182,31 +189,31 @@ Deno.serve(async (req) => {
       if (fridayPercent === 0) {
         timingScore = 5;
         timingStatus = 'needs-improvement';
-        timingMessage = 'No Friday launches - try optimal timing';
-        quickWins.push({ tip: 'Launch next campaign on Friday evening (6-8 PM)', points: 8 });
+        timingMessage = T('ps_time_none');
+        quickWins.push({ tip: T('ps_qw_friday_eve'), points: 8 });
       } else if (fridayPercent < 30) {
         timingScore = 8;
         timingStatus = 'needs-improvement';
-        timingMessage = `${fridayPercent.toFixed(0)}% Friday launches - improve timing`;
-        quickWins.push({ tip: 'Launch more campaigns on Friday evenings', points: 5 });
+        timingMessage = T('ps_time_low', { n: fridayPercent.toFixed(0) });
+        quickWins.push({ tip: T('ps_qw_more_friday'), points: 5 });
       } else if (fridayPercent < 60) {
         timingScore = 11;
         timingStatus = 'good';
-        timingMessage = `${fridayPercent.toFixed(0)}% Friday launches - good timing`;
+        timingMessage = T('ps_time_good', { n: fridayPercent.toFixed(0) });
       } else {
         timingScore = 15;
         timingStatus = 'excellent';
-        timingMessage = `${fridayPercent.toFixed(0)}% Friday launches - excellent timing!`;
+        timingMessage = T('ps_time_excellent', { n: fridayPercent.toFixed(0) });
       }
     }
 
     factors.push({
-      name: 'Launch Timing',
+      name: T('ps_name_timing'),
       score: timingScore,
       maxScore: 15,
       status: timingStatus,
       message: timingMessage,
-      tips: timingScore < 10 ? ['Launch deals on Friday evenings (6-8 PM) for 4.5x better engagement'] : undefined,
+      tips: timingScore < 10 ? [T('ps_tip_friday')] : undefined,
     });
 
     // ============ FACTOR 4: Pricing Strategy (0-15 points) ============
@@ -215,7 +222,7 @@ Deno.serve(async (req) => {
     let pricingMessage = '';
 
     if (campaignCount === 0) {
-      pricingMessage = 'No campaigns to analyze';
+      pricingMessage = T('ps_no_campaigns');
     } else {
       // Analyze discount ranges
       const discounts = campaigns?.map(c => c.offer_value || 0) || [];
@@ -227,30 +234,30 @@ Deno.serve(async (req) => {
       if (optimalPercent === 0) {
         pricingScore = 5;
         pricingStatus = 'needs-improvement';
-        pricingMessage = 'Discounts outside optimal range (10-30%)';
-        quickWins.push({ tip: 'Use 10-30% discounts for best engagement', points: 7 });
+        pricingMessage = T('ps_price_none');
+        quickWins.push({ tip: T('ps_qw_1030'), points: 7 });
       } else if (optimalPercent < 50) {
         pricingScore = 8;
         pricingStatus = 'needs-improvement';
-        pricingMessage = `${optimalPercent.toFixed(0)}% campaigns use optimal pricing`;
+        pricingMessage = T('ps_price_mid', { n: optimalPercent.toFixed(0) });
       } else if (optimalPercent < 80) {
         pricingScore = 11;
         pricingStatus = 'good';
-        pricingMessage = `${optimalPercent.toFixed(0)}% campaigns use optimal pricing`;
+        pricingMessage = T('ps_price_mid', { n: optimalPercent.toFixed(0) });
       } else {
         pricingScore = 15;
         pricingStatus = 'excellent';
-        pricingMessage = `${optimalPercent.toFixed(0)}% campaigns use optimal pricing!`;
+        pricingMessage = T('ps_price_excellent', { n: optimalPercent.toFixed(0) });
       }
     }
 
     factors.push({
-      name: 'Pricing Strategy',
+      name: T('ps_name_pricing'),
       score: pricingScore,
       maxScore: 15,
       status: pricingStatus,
       message: pricingMessage,
-      tips: pricingScore < 10 ? ['Offer 15-25% discounts for optimal balance of engagement and margin'] : undefined,
+      tips: pricingScore < 10 ? [T('ps_tip_discount')] : undefined,
     });
 
     // ============ FACTOR 5: Engagement (0-15 points) ============
@@ -259,7 +266,7 @@ Deno.serve(async (req) => {
     let engagementMessage = '';
 
     if (campaignCount === 0) {
-      engagementMessage = 'No campaigns to analyze';
+      engagementMessage = T('ps_no_campaigns');
     } else {
       // Approval rate
       const approvalRate = (approvedCampaigns / campaignCount) * 100;
@@ -267,29 +274,29 @@ Deno.serve(async (req) => {
       if (approvalRate < 50) {
         engagementScore = 5;
         engagementStatus = 'needs-improvement';
-        engagementMessage = `${approvalRate.toFixed(0)}% approval rate - check quality`;
+        engagementMessage = T('ps_eng_low', { n: approvalRate.toFixed(0) });
       } else if (approvalRate < 75) {
         engagementScore = 9;
         engagementStatus = 'good';
-        engagementMessage = `${approvalRate.toFixed(0)}% approval rate - good`;
+        engagementMessage = T('ps_eng_good', { n: approvalRate.toFixed(0) });
       } else if (approvalRate < 90) {
         engagementScore = 12;
         engagementStatus = 'good';
-        engagementMessage = `${approvalRate.toFixed(0)}% approval rate - excellent`;
+        engagementMessage = T('ps_eng_excellent', { n: approvalRate.toFixed(0) });
       } else {
         engagementScore = 15;
         engagementStatus = 'excellent';
-        engagementMessage = `${approvalRate.toFixed(0)}% approval rate - outstanding!`;
+        engagementMessage = T('ps_eng_outstanding', { n: approvalRate.toFixed(0) });
       }
     }
 
     factors.push({
-      name: 'Engagement',
+      name: T('ps_name_engagement'),
       score: engagementScore,
       maxScore: 15,
       status: engagementStatus,
       message: engagementMessage,
-      tips: engagementScore < 10 ? ['Review admin feedback to improve approval rate'] : undefined,
+      tips: engagementScore < 10 ? [T('ps_tip_approval')] : undefined,
     });
 
     // ============ FACTOR 6: Category Coverage (0-15 points) ============
@@ -298,38 +305,38 @@ Deno.serve(async (req) => {
     let coverageMessage = '';
 
     if (categoryCount === 0) {
-      coverageMessage = 'No products yet';
+      coverageMessage = T('ps_cov_none');
     } else if (categoryCount === 1) {
       coverageScore = 5;
       coverageStatus = 'needs-improvement';
-      coverageMessage = '1 category - expand for broader reach';
-      quickWins.push({ tip: 'Add products in 2 more categories', points: 8 });
+      coverageMessage = T('ps_cov_1');
+      quickWins.push({ tip: T('ps_qw_2cats'), points: 8 });
     } else if (categoryCount === 2) {
       coverageScore = 8;
       coverageStatus = 'needs-improvement';
-      coverageMessage = '2 categories - add one more';
-      quickWins.push({ tip: 'Add products in 1 more category', points: 5 });
+      coverageMessage = T('ps_cov_2');
+      quickWins.push({ tip: T('ps_qw_1cat'), points: 5 });
     } else if (categoryCount === 3) {
       coverageScore = 11;
       coverageStatus = 'good';
-      coverageMessage = '3 categories - good diversity';
+      coverageMessage = T('ps_cov_3');
     } else if (categoryCount === 4) {
       coverageScore = 13;
       coverageStatus = 'good';
-      coverageMessage = '4 categories - very diverse';
+      coverageMessage = T('ps_cov_4');
     } else {
       coverageScore = 15;
       coverageStatus = 'excellent';
-      coverageMessage = `${categoryCount} categories - excellent coverage!`;
+      coverageMessage = T('ps_cov_many', { n: categoryCount });
     }
 
     factors.push({
-      name: 'Category Coverage',
+      name: T('ps_name_coverage'),
       score: coverageScore,
       maxScore: 15,
       status: coverageStatus,
       message: coverageMessage,
-      tips: categoryCount < 3 ? ['Multi-category merchants see 2.1x more customer engagement'] : undefined,
+      tips: categoryCount < 3 ? [T('ps_tip_multicategory')] : undefined,
     });
 
     // ============ Calculate Total Score ============

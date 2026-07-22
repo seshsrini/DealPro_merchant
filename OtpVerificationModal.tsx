@@ -53,7 +53,7 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
     };
   }, [resendTimer]);
 
-  const TEST_NUMBERS = ['6666666666', '7777777777', '9999999999', '8888888888', '4444444444', '5555555555', '3333333333'];
+  const TEST_NUMBERS = ['6666666666', '7777777777', '9999999999', '8888888888', '4444444444', '5555555555', '3333333333', '2222222222', '1111111111'];
 
   const sendOtp = async () => {
     setOtpError(null);

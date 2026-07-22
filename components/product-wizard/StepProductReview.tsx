@@ -80,6 +80,9 @@ const ReviewSection: React.FC<{
 function describeStock(count: number | null): { label: string; color: string } {
   if (count === null) return { label: 'Available',            color: 'text-emerald-500' };
   if (count === 0)    return { label: 'Out of Stock',         color: 'text-red-500' };
+  // Above the 1..10 low-stock range means the "50+" plenty tier, not a literal
+  // count — shown as plain "Available", same as the 10+ tier.
+  if (count > 10)     return { label: 'Available',            color: 'text-emerald-500' };
   return                     { label: `Only ${count} left`,   color: 'text-red-500' };
 }
 
@@ -231,6 +234,35 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
             <span className="absolute top-2 left-2 bg-emerald-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{discountPct}% off</span>
           )}
         </div>
+
+        {/* Additional photos. These were already collected and saved with the
+            product (additional_images) — the review just never showed them, so the
+            merchant could not confirm what they had uploaded before publishing. */}
+        {wizardState.additionalImages?.length > 0 && (
+          <>
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+              {wizardState.additionalImages.map((url, i) => (
+                <div
+                  key={`${url}-${i}`}
+                  className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border ${
+                    isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50'
+                  }`}
+                >
+                  <img
+                    src={url}
+                    alt={`${wizardState.name} photo ${i + 2}`}
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className={`mt-1 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+              1 cover + {wizardState.additionalImages.length} additional photo
+              {wizardState.additionalImages.length > 1 ? 's' : ''}
+            </p>
+          </>
+        )}
       </ReviewSection>
 
       {/* Details (name + brand) */}

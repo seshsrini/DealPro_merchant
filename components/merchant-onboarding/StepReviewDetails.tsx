@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ClipboardCheck, Pencil, User, Store, MapPin, ShieldCheck, ArrowRight } from 'lucide-react';
 import { floatIn } from './floatIn';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 // Matches WizardState from MerchantOnboarding.tsx
 interface ReviewState {
@@ -43,14 +44,6 @@ const maskValue = (value: string, showFirst: number, showLast: number): string =
   return value.slice(0, showFirst) + '*'.repeat(value.length - showFirst - showLast) + value.slice(-showLast);
 };
 
-const BUSINESS_TYPE_LABELS: Record<string, string> = {
-  gstin: 'GSTIN + PAN',
-  udyam: 'Udyam (MSME)',
-  fssai: 'FSSAI',
-  trade_license: 'Trade License',
-  none: 'None / Unregistered',
-};
-
 // Reusable review card
 const ReviewCard: React.FC<{
   title: string;
@@ -90,13 +83,22 @@ const ReviewCard: React.FC<{
 export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
   state, onEditStep, onNext, onBack, theme,
 }) => {
+  const { t } = useTranslation();
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setVisible(true), 50);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setVisible(true), 50);
+    return () => clearTimeout(timer);
   }, []);
+
+  const bizTypeLabel = (bt: string): string => (({
+    gstin: t('ob_bt_gstin'),
+    udyam: t('ob_bt_udyam'),
+    fssai: t('ob_bt_fssai'),
+    trade_license: t('ob_bt_trade'),
+    none: t('ob_bt_none'),
+  } as Record<string, string>)[bt] || t('ob_review_not_selected'));
 
   const valueClass = `text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`;
   const labelClass = `text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`;
@@ -110,10 +112,10 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
         </div>
         <div>
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Review your details
+            {t('ob_review_title')}
           </h2>
           <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Please verify everything before continuing
+            {t('ob_review_sub')}
           </p>
         </div>
       </div>
@@ -122,7 +124,7 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
       <div className="space-y-3 overflow-y-auto flex-1 pb-4">
         {/* Your Name → edits step 1 */}
         <ReviewCard
-          title="Your Name"
+          title={t('ob_review_your_name')}
           icon={<User className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
           onEdit={() => onEditStep(1)}
           isDark={isDark}
@@ -133,7 +135,7 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
 
         {/* Store Name → edits step 2 */}
         <ReviewCard
-          title="Store Name"
+          title={t('ob_review_store_name')}
           icon={<Store className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
           onEdit={() => onEditStep(2)}
           isDark={isDark}
@@ -144,7 +146,7 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
 
         {/* Stores → edits step 5 (Add More Stores) */}
         <ReviewCard
-          title={`Store${state.stores.length > 1 ? 's' : ''} (${state.stores.length})`}
+          title={(state.stores.length > 1 ? t('ob_review_stores_many') : t('ob_review_stores_one')).replace('{n}', String(state.stores.length))}
           icon={<MapPin className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
           onEdit={() => onEditStep(5)}
           isDark={isDark}
@@ -156,14 +158,14 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                      {s.store_name || state.storeName || `Store ${i + 1}`}
+                      {s.store_name || state.storeName || t('ob_store_fallback').replace('{n}', String(i + 1))}
                     </p>
                     <p className={labelClass}>
                       {[s.street, s.locality, s.city, s.state, s.pincode].filter(Boolean).join(', ')}
                     </p>
-                    {s.landmark && <p className={labelClass}>Near {s.landmark}</p>}
+                    {s.landmark && <p className={labelClass}>{t('ob_review_near').replace('{landmark}', s.landmark)}</p>}
                     <p className={labelClass}>
-                      {s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`}
+                      {s.is24hrs ? t('ob_addr_open24') : `${s.shift1} - ${s.shift2}`}
                     </p>
                     {s.store_category && (
                       <p className="text-xs font-semibold text-amber-500 mt-0.5">{s.store_category}</p>
@@ -186,14 +188,14 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
 
         {/* Business Verification → edits step 6 */}
         <ReviewCard
-          title="Business Verification"
+          title={t('ob_review_biz')}
           icon={<ShieldCheck className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />}
           onEdit={() => onEditStep(6)}
           isDark={isDark}
           style={floatIn(400, visible)}
         >
           <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            {BUSINESS_TYPE_LABELS[state.businessType] || 'Not selected'}
+            {bizTypeLabel(state.businessType)}
           </p>
           {state.businessType === 'gstin' && (
             <>
@@ -221,13 +223,13 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
             isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
           }`}
         >
-          Back
+          {t('ob_back')}
         </button>
         <button
           onClick={onNext}
           className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
-          Looks Good <ArrowRight className="w-4 h-4" />
+          {t('ob_review_looks_good')} <ArrowRight className="w-4 h-4" />
         </button>
       </div>
     </div>

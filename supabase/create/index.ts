@@ -177,6 +177,25 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Subscription gate — deal creation REQUIRES an active subscription (or active
+    // staff who inherit the owner's access). This legacy endpoint historically
+    // skipped it; enforce it server-side via the same RPC create-campaign uses, so
+    // it can't be abused to create deals without subscribing. (Defense in depth —
+    // the current client calls create-campaign, but this endpoint may still be live.)
+    const { data: gateRows, error: gateErr } = await supabase.rpc('campaign_create_gate', {
+      p_user_id: user.id,
+      p_merchant_id: merchant_id,
+      p_store_id: store_id,
+    });
+    if (gateErr) {
+      console.error('[campaigns/create EF] subscription gate RPC error:', gateErr.message);
+      return new Response(JSON.stringify({ error: 'Unable to verify your account right now. Please try again.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
+    }
+    const gate = Array.isArray(gateRows) ? gateRows[0] : gateRows;
+    if (!gate?.has_access) {
+      return new Response(JSON.stringify({ error: 'An active subscription is required to create deals.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 });
+    }
+
     const campaignPayload = {
       merchant_id,
       shop_name,

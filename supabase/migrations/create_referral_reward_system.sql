@@ -148,9 +148,18 @@ BEGIN
       WHERE merchant_id = referrer_merchant_id
         AND reward_month = date_trunc('month', now())::DATE
     ) THEN
-      -- Call the edge function via pg_net to defer Google Play billing + update DB
+      -- Call the edge function via pg_net to defer Google Play billing + update DB.
+      -- Target project comes from app.settings.project_ref (same convention as
+      -- app.settings.service_role_key) so this runs unchanged on dev and prod:
+      --   ALTER DATABASE postgres SET app.settings.project_ref = '<your-project-ref>';
+      -- Unset → skip with a warning, never raise: a bad outbound call must not fail
+      -- the signup that triggered it.
+      IF coalesce(current_setting('app.settings.project_ref', true), '') = '' THEN
+        RAISE WARNING '[referral-reward] app.settings.project_ref not set — skipping reward call for merchant %', referrer_merchant_id;
+      ELSE
       PERFORM net.http_post(
-        url := 'https://gkulyxglzqlhpqxlwjqw.supabase.co/functions/v1/process-referral-reward',
+        url := format('https://%s.supabase.co/functions/v1/process-referral-reward',
+                      current_setting('app.settings.project_ref', true)),
         headers := jsonb_build_object(
           'Content-Type', 'application/json',
           'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)
@@ -164,6 +173,7 @@ BEGIN
           )
         )
       );
+      END IF;
     END IF;
   END IF;
 

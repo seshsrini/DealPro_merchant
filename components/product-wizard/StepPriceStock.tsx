@@ -5,15 +5,20 @@ import { floatIn } from './floatIn';
 /**
  * Stock count encoding (matches the products.stock_count column):
  *   null  → "10+" / Available (default — plenty)
+ *   50    → "50+" / Available (a larger "plenty" tier)
  *   0     → Out of Stock
  *   1..10 → exact remaining count (low-stock)
+ *
+ * 50 is safe as the "50+" sentinel because exact counts are only ever offered
+ * for 1..10 — nothing stores a real count above 10.
  */
 export type StockCount = number | null;
 
 // Dropdown <option value="..."> ↔ stock_count value mapping.
 // We use string values because <select> only stores strings; the parent
 // converts back to number | null via parseStockOption().
-const STOCK_OPTIONS: { value: string; label: string }[] = [
+export const STOCK_OPTIONS: { value: string; label: string }[] = [
+  { value: 'PLENTY_50',    label: '50+ (Available)' },
   { value: 'PLENTY',       label: '10+ (Available)' },
   { value: '10',           label: '10 left' },
   { value: '9',            label: '9 left' },
@@ -30,6 +35,7 @@ const STOCK_OPTIONS: { value: string; label: string }[] = [
 
 export function parseStockOption(value: string): StockCount {
   if (value === 'PLENTY') return null;
+  if (value === 'PLENTY_50') return 50;
   if (value === 'OUT_OF_STOCK') return 0;
   return parseInt(value, 10);
 }
@@ -37,6 +43,7 @@ export function parseStockOption(value: string): StockCount {
 export function stockCountToOption(count: StockCount): string {
   if (count === null || count === undefined) return 'PLENTY';
   if (count === 0) return 'OUT_OF_STOCK';
+  if (count > 10) return 'PLENTY_50'; // 50+ tier (anything above the 1..10 range)
   return String(count);
 }
 

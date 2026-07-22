@@ -63,11 +63,17 @@ const formatCountdown = (ms: number): string => {
   return `${seconds}s`;
 };
 
-const EditCountdown: React.FC<{ createdAt: string | undefined; isDark: boolean }> = ({ createdAt, isDark }) => {
+// Full-width strip that sits ON TOP of a deal card, flush against it, for as long
+// as the 2-hour edit window is open. Replaces the old inline 10px pill that sat
+// below the stats row — testers were scrolling straight past it and missing the
+// window entirely. Rendered only while the window is open, so the card looks
+// normal once it closes.
+const EditWindowBanner: React.FC<{ createdAt: string | undefined; isDark: boolean }> = ({ createdAt, isDark }) => {
+  const { t } = useTranslation();
   const [remaining, setRemaining] = useState(() => getTimeRemaining(createdAt));
 
   useEffect(() => {
-    if (remaining <= 0) return;
+    if (getTimeRemaining(createdAt) <= 0) return;
     const interval = setInterval(() => {
       const r = getTimeRemaining(createdAt);
       setRemaining(r);
@@ -81,13 +87,13 @@ const EditCountdown: React.FC<{ createdAt: string | undefined; isDark: boolean }
   const isUrgent = remaining < 15 * 60 * 1000; // Less than 15 min
 
   return (
-    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium ${
+    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-xl border border-b-0 text-[11px] font-semibold ${
       isUrgent
-        ? isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-600'
-        : isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'
+        ? isDark ? 'bg-red-500/20 border-red-500/40 text-red-300' : 'bg-red-100 border-red-300 text-red-700'
+        : isDark ? 'bg-amber-400/90 border-amber-500/50 text-slate-900' : 'bg-amber-100 border-amber-300 text-slate-900'
     }`}>
-      <Timer className="w-3 h-3" />
-      Edit: {formatCountdown(remaining)}
+      <Timer className={`w-3.5 h-3.5 shrink-0 ${isUrgent ? 'animate-pulse' : ''}`} />
+      <span className="truncate">{t('m_edit_window_open').replace('{time}', formatCountdown(remaining))}</span>
     </div>
   );
 };
@@ -577,11 +583,20 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
               const claims = perCampaignClaimClicks[deal.campaign_id] || 0;
               const redemptions = perCampaignRedemptionCounts[deal.campaign_id] || 0;
 
+              // Drives the banner AND the card's top corners, so the two read as
+              // one unit while the edit window is open.
+              const editWindowOpen = getTimeRemaining(deal.created_at) > 0;
+
               return (
                 <div key={deal.campaign_id}>
+                  {editWindowOpen && (
+                    <EditWindowBanner createdAt={deal.created_at} isDark={isDark} />
+                  )}
                   <div
                     onClick={() => { setSelectedDeal(deal); setDetailCarouselIndex(0); }}
-                    className={`flex gap-3 p-3 rounded-xl border cursor-pointer active:scale-[0.99] transition-all ${
+                    className={`flex gap-3 p-3 border cursor-pointer active:scale-[0.99] transition-all ${
+                    editWindowOpen ? 'rounded-b-xl' : 'rounded-xl'
+                  } ${
                     deal.is_deal_of_the_day
                       ? isDark ? 'bg-amber-500/5 border-amber-500/30 ring-1 ring-amber-500/20' : 'bg-amber-50/50 border-amber-300 ring-1 ring-amber-200'
                       : isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
@@ -649,12 +664,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                         </div>
                       </div>
 
-                      {/* Edit Countdown Timer */}
-                      {deal.created_at && getTimeRemaining(deal.created_at) > 0 && (
-                        <div className="mt-1.5">
-                          <EditCountdown createdAt={deal.created_at} isDark={isDark} />
-                        </div>
-                      )}
+                      {/* Edit countdown now lives in EditWindowBanner on top of the card */}
 
                       {/* Actions — wrap to the next row instead of overflowing the
                           card edge when Edit + Renew + ROI don't all fit on one line. */}
@@ -792,8 +802,18 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
           return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
         };
 
-        const plainDesc = (deal.longDescription || (deal as any).long_description || '')
-          .replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+        // Preserve the line breaks the merchant typed: block tags / <br> become
+        // newlines (the <p> below uses whitespace-pre-line to render them),
+        // instead of stripping every tag and collapsing to one line.
+        const plainDesc = getLocalizedText(deal.localized_description, deal.longDescription || (deal as any).long_description || '')
+          .replace(/<\s*br\s*\/?>/gi, '\n')
+          .replace(/<\/(?:p|div|li|h[1-6]|ul|ol)\s*>/gi, '\n')
+          .replace(/<[^>]*>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/[^\S\n]+/g, ' ')
+          .replace(/[^\S\n]*\n[^\S\n]*/g, '\n')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
 
         return (
           <div className="fixed inset-0 z-[300] overflow-y-auto" style={{ background: isDark ? '#0f172a' : '#ffffff' }}>
@@ -994,7 +1014,7 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                     </div>
                   </button>
                   <div className={`px-4 py-4 ${isDark ? 'bg-slate-900' : 'bg-slate-50'}`}>
-                    <p className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{plainDesc}</p>
+                    <p className={`whitespace-pre-line text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{plainDesc}</p>
                   </div>
                 </div>
               )}

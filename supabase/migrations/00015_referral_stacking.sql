@@ -53,8 +53,20 @@ BEGIN
   -- threshold (10 → 1st, 20 → 2nd, …). The trigger fires once per qualified
   -- referral, so the modulo hits exactly once per multiple — each = one grant.
   IF ref_count > 0 AND (ref_count % threshold) = 0 THEN
+    -- The target project comes from app.settings.project_ref (same convention as
+    -- app.settings.service_role_key below) so this migration is project-agnostic —
+    -- run it unchanged on dev and prod. Set it once per database:
+    --   ALTER DATABASE postgres SET app.settings.project_ref = '<your-project-ref>';
+    --
+    -- If it isn't configured we SKIP the call with a warning instead of raising:
+    -- a misconfigured outbound HTTP call must never fail the signup that triggered
+    -- it. (A hardcoded/placeholder URL doing exactly that took down deal creation.)
+    IF coalesce(current_setting('app.settings.project_ref', true), '') = '' THEN
+      RAISE WARNING '[referral-stacking] app.settings.project_ref not set — skipping reward call for merchant %', referrer_merchant_id;
+    ELSE
     PERFORM net.http_post(
-      url := 'https://gkulyxglzqlhpqxlwjqw.supabase.co/functions/v1/process-referral-reward',
+      url := format('https://%s.supabase.co/functions/v1/process-referral-reward',
+                    current_setting('app.settings.project_ref', true)),
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
         'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)
@@ -69,6 +81,7 @@ BEGIN
         )
       )
     );
+    END IF;
   END IF;
 
   RETURN NEW;

@@ -61,7 +61,17 @@ const formatDate = (dateStr?: string): string => {
 
 const plainText = (html?: string): string => {
   if (!html) return '';
-  return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  return html
+    // Turn line-break markup into real newlines BEFORE stripping tags, so the
+    // line breaks the merchant typed survive into the printed poster.
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|li|h[1-6]|ul|ol)\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/[^\S\n]+/g, ' ')            // collapse spaces/tabs, keep newlines
+    .replace(/[^\S\n]*\n[^\S\n]*/g, '\n') // trim spaces around newlines
+    .replace(/\n{3,}/g, '\n\n')           // cap consecutive blank lines
+    .trim();
 };
 
 /** Truncate at the nearest word boundary so the poster never ends mid-word. */
@@ -440,7 +450,7 @@ const sharedCss = `
   .page-bold-promo .bp-discount-pill { background: #dc2626; color: white; font-weight: 900; font-size: 18pt; padding: 2mm 4mm; border-radius: 3mm; }
   .page-bold-promo .bp-offer { font-size: 26pt; font-weight: 800; color: #b45309; line-height: 1; }
   .page-bold-promo .bp-heading { font-size: 22pt; font-weight: 700; line-height: 1.1; margin: 0 0 4mm 0; color: #0f172a; }
-  .page-bold-promo .bp-description { font-size: 11pt; line-height: 1.5; color: #475569; margin: 0 0 6mm 0; }
+  .page-bold-promo .bp-description { white-space: pre-line; font-size: 11pt; line-height: 1.5; color: #475569; margin: 0 0 6mm 0; }
   .page-bold-promo .bp-store-info { padding: 5mm; background: #f8fafc; border: 0.3mm solid #e2e8f0; border-radius: 3mm; }
 
   /* ===== TEMPLATE 2 — Discount Splash ===== */
@@ -475,7 +485,7 @@ const sharedCss = `
   .page-discount-splash .ds-heading { font-size: 24pt; font-weight: 800; margin: 0 0 4mm 0; line-height: 1.1; }
   .page-discount-splash .ds-price { font-size: 12pt; color: #475569; margin-bottom: 4mm; }
   .page-discount-splash .ds-price-big { font-size: 28pt; font-weight: 900; color: #0f172a; }
-  .page-discount-splash .ds-description { font-size: 11pt; line-height: 1.5; color: #475569; margin: 0 0 5mm 0; }
+  .page-discount-splash .ds-description { white-space: pre-line; font-size: 11pt; line-height: 1.5; color: #475569; margin: 0 0 5mm 0; }
   .page-discount-splash .ds-store-strip { background: #0f172a; color: white; padding: 5mm 6mm; border-radius: 3mm; font-size: 10pt; line-height: 1.5; }
   .page-discount-splash .ds-store-row { display: flex; gap: 6mm; margin-top: 2mm; font-size: 10pt; }
 
@@ -494,7 +504,7 @@ const sharedCss = `
   .page-classic-frame .cf-category { text-align: center; margin-top: 8mm; font-size: 10pt; letter-spacing: 0.25em; text-transform: uppercase; color: #92400e; font-weight: 700; }
   .page-classic-frame .cf-heading { text-align: center; font-size: 28pt; font-weight: 800; color: #1c1917; margin: 4mm 0 4mm 0; line-height: 1.1; font-family: Georgia, 'Times New Roman', serif; }
   .page-classic-frame .cf-offer { text-align: center; font-size: 36pt; font-weight: 900; color: #b45309; line-height: 1; margin-bottom: 5mm; font-family: Georgia, 'Times New Roman', serif; }
-  .page-classic-frame .cf-description { text-align: center; font-size: 11pt; line-height: 1.6; color: #57534e; max-width: 140mm; margin: 0 auto 8mm; font-style: italic; }
+  .page-classic-frame .cf-description { white-space: pre-line; text-align: center; font-size: 11pt; line-height: 1.6; color: #57534e; max-width: 140mm; margin: 0 auto 8mm; font-style: italic; }
   .page-classic-frame .cf-divider { width: 30mm; height: 0.5mm; background: #92400e; margin: 0 auto 6mm; }
   .page-classic-frame .cf-footer { text-align: center; margin-top: auto; padding-top: 4mm; }
   .page-classic-frame .cf-store-name { font-size: 16pt; font-weight: 800; color: #1c1917; margin-bottom: 2mm; }
@@ -516,7 +526,7 @@ const sharedCss = `
   .page-side-by-side .sbs-discount { display: inline-block; background: #dc2626; color: white; font-weight: 900; font-size: 14pt; padding: 1.5mm 3mm; border-radius: 2mm; margin-bottom: 2mm; }
   .page-side-by-side .sbs-offer { font-size: 20pt; font-weight: 800; color: #b45309; line-height: 1.2; }
   .page-side-by-side .sbs-price { font-size: 24pt; font-weight: 900; color: #0f172a; margin-top: 2mm; }
-  .page-side-by-side .sbs-description { font-size: 11pt; line-height: 1.5; color: #475569; margin: 0 0 6mm 0; }
+  .page-side-by-side .sbs-description { white-space: pre-line; font-size: 11pt; line-height: 1.5; color: #475569; margin: 0 0 6mm 0; }
   .page-side-by-side .sbs-store { margin-bottom: 6mm; }
   .page-side-by-side .sbs-row { display: flex; align-items: center; gap: 3mm; font-size: 10.5pt; line-height: 1.5; color: #334155; margin: 1.5mm 0; }
   .page-side-by-side .sbs-icon { width: 4mm; height: 4mm; color: #64748b; flex-shrink: 0; display: flex; align-items: center; }

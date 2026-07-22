@@ -4,6 +4,7 @@ import { userService } from '../../services/userService';
 import { kycVerificationService, KycDocType } from '../../services/kycVerificationService';
 import { toMerchantMessage } from '../../services/friendlyError';
 import { floatIn } from './floatIn';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 // Validation regex — same as memberJoin.tsx
 const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[A-Z0-9]{1}$/;
@@ -44,12 +45,13 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   businessType, legalName, gstinValue, panValue, udyamValue, fssaiValue, tradeLicenseValue,
   onChangeType, onChangeField, onNext, onBack, onEditLegalName, reverifyTrigger, theme,
 }) => {
+  const { t } = useTranslation();
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setVisible(true), 50);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setVisible(true), 50);
+    return () => clearTimeout(timer);
   }, []);
 
   // Duplicate checking state
@@ -161,15 +163,15 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
       // continue with GST flagged unverified for later review.
       const unreachable = r.unreachable === true && r.legalNameMatch !== false;
       const failMsg = r.legalNameMatch === false
-        ? `Name doesn't match this GST${registered ? ` — it's registered as ${registered}` : ''}`
+        ? (registered ? t('ob_verify_name_mismatch_as').replace('{names}', registered) : t('ob_verify_name_mismatch'))
         : unreachable
-          ? "Couldn't reach the GST registry — you can continue; we'll verify this later."
+          ? t('ob_verify_unreachable')
           // Safety net: a clear provider message (e.g. "GSTIN not found") shows as
           // is; anything cryptic/internal becomes a friendly fallback, never raw.
           : toMerchantMessage(r.error, { action: 'verify this number', tag: '[KYC]' });
       setVerifyResult((prev) => ({
         ...prev,
-        [docType]: { ok: r.verified, value, msg: r.verified ? (r.mock ? 'Verified ✓ (test mode)' : 'Verified ✓') : failMsg, nameMismatch: r.legalNameMatch === false, unreachable },
+        [docType]: { ok: r.verified, value, msg: r.verified ? (r.mock ? t('ob_verify_ok_test') : t('ob_verify_ok')) : failMsg, nameMismatch: r.legalNameMatch === false, unreachable },
       }));
     } finally {
       setVerifying(null);
@@ -198,7 +200,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
           disabled={!valid || isV}
           className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {isV ? 'Verifying…' : show && res.ok ? 'Re-verify' : 'Verify'}
+          {isV ? t('ob_verify_btn_ing') : show && res.ok ? t('ob_verify_btn_re') : t('ob_verify_btn')}
         </button>
         {show && (
           <span className={`text-xs font-medium ${res.ok ? 'text-emerald-600' : res.unreachable ? 'text-amber-600' : 'text-red-500'}`}>
@@ -209,7 +211,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
                 onClick={onEditLegalName}
                 className="ml-1 underline font-semibold text-blue-600"
               >
-                Edit legal name
+                {t('ob_verify_edit_name')}
               </button>
             )}
           </span>
@@ -250,11 +252,11 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   })();
 
   const BUSINESS_TYPES = [
-    { key: 'gstin' as BusinessType, label: 'GSTIN + PAN', desc: 'GST registered business' },
-    { key: 'udyam' as BusinessType, label: 'Udyam (MSME)', desc: 'Micro/Small/Medium enterprise' },
-    { key: 'fssai' as BusinessType, label: 'FSSAI', desc: 'Food license' },
-    { key: 'trade_license' as BusinessType, label: 'Trade License', desc: 'Shop & establishment' },
-    { key: 'none' as BusinessType, label: 'None / Unregistered', desc: 'No formal registration yet' },
+    { key: 'gstin' as BusinessType, label: t('ob_bt_gstin'), desc: t('ob_bt_gstin_desc') },
+    { key: 'udyam' as BusinessType, label: t('ob_bt_udyam'), desc: t('ob_bt_udyam_desc') },
+    { key: 'fssai' as BusinessType, label: t('ob_bt_fssai'), desc: t('ob_bt_fssai_desc') },
+    { key: 'trade_license' as BusinessType, label: t('ob_bt_trade'), desc: t('ob_bt_trade_desc') },
+    { key: 'none' as BusinessType, label: t('ob_bt_none'), desc: t('ob_bt_none_desc') },
   ];
 
   return (
@@ -265,10 +267,10 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
         </div>
         <div>
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Business verification
+            {t('ob_verify_title')}
           </h2>
           <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Select your business registration type <span className="text-red-500">*</span>
+            {t('ob_verify_sub')} <span className="text-red-500">*</span>
           </p>
         </div>
       </div>
@@ -298,70 +300,70 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
         {businessType === 'gstin' && (
           <>
             <div>
-              <label className={labelClass}>GSTIN Number <span className="text-red-500">*</span></label>
+              <label className={labelClass}>{t('ob_verify_gstin_label')} <span className="text-red-500">*</span></label>
               <div className="relative">
                 <input value={gstinValue} onChange={(e) => handleGstinChange(e.target.value)} placeholder="27AAAPA1234A1Z5" className={inputClass} maxLength={15} />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                   <StatusIcon taken={gstinTaken} checking={checking === 'gstin'} fieldName="gstin" />
                 </div>
               </div>
-              {gstinValue && !isGstValid(gstinValue) && <p className="text-xs text-red-500 mt-1">Invalid GSTIN format</p>}
-              {gstinTaken === true && <p className="text-xs text-red-500 mt-1">This GSTIN is already registered</p>}
+              {gstinValue && !isGstValid(gstinValue) && <p className="text-xs text-red-500 mt-1">{t('ob_verify_gstin_invalid')}</p>}
+              {gstinTaken === true && <p className="text-xs text-red-500 mt-1">{t('ob_verify_gstin_taken')}</p>}
               <VerifyButton docType="gstin" value={gstinValue} valid={isGstValid(gstinValue)} />
             </div>
             <div>
-              <label className={labelClass}>PAN Number <span className="text-red-500">*</span></label>
+              <label className={labelClass}>{t('ob_verify_pan_label')} <span className="text-red-500">*</span></label>
               <div className="relative">
                 <input value={panValue} onChange={(e) => handlePanChange(e.target.value)} placeholder="AFZPK7190K" className={inputClass} maxLength={10} />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                   <StatusIcon taken={panTaken} checking={checking === 'pan'} fieldName="pan" />
                 </div>
               </div>
-              {panValue && !isPanValid(panValue) && <p className="text-xs text-red-500 mt-1">Invalid PAN format (allowed: C, F, P, B types)</p>}
-              {panTaken === true && <p className="text-xs text-red-500 mt-1">This PAN is already registered</p>}
+              {panValue && !isPanValid(panValue) && <p className="text-xs text-red-500 mt-1">{t('ob_verify_pan_invalid')}</p>}
+              {panTaken === true && <p className="text-xs text-red-500 mt-1">{t('ob_verify_pan_taken')}</p>}
             </div>
           </>
         )}
 
         {businessType === 'udyam' && (
           <div>
-            <label className={labelClass}>Udyam Registration Number <span className="text-red-500">*</span></label>
+            <label className={labelClass}>{t('ob_verify_udyam_label')} <span className="text-red-500">*</span></label>
             <div className="relative">
               <input value={udyamValue} onChange={(e) => handleUdyamChange(e.target.value)} placeholder="UDYAM-KA-01-0000001" className={inputClass} />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 <StatusIcon taken={udyamTaken} checking={checking === 'udyam_no'} fieldName="udyam" />
               </div>
             </div>
-            {udyamValue && !isUdyamValid(udyamValue) && <p className="text-xs text-red-500 mt-1">Format: UDYAM-XX-00-0000000</p>}
-            {udyamTaken === true && <p className="text-xs text-red-500 mt-1">This Udyam number is already registered</p>}
+            {udyamValue && !isUdyamValid(udyamValue) && <p className="text-xs text-red-500 mt-1">{t('ob_verify_udyam_invalid')}</p>}
+            {udyamTaken === true && <p className="text-xs text-red-500 mt-1">{t('ob_verify_udyam_taken')}</p>}
           </div>
         )}
 
         {businessType === 'fssai' && (
           <div>
-            <label className={labelClass}>FSSAI License Number <span className="text-red-500">*</span></label>
+            <label className={labelClass}>{t('ob_verify_fssai_label')} <span className="text-red-500">*</span></label>
             <div className="relative">
-              <input value={fssaiValue} onChange={(e) => handleFssaiChange(e.target.value)} placeholder="14-digit license number" inputMode="numeric" className={inputClass} maxLength={14} />
+              <input value={fssaiValue} onChange={(e) => handleFssaiChange(e.target.value)} placeholder={t('ob_verify_fssai_ph')} inputMode="numeric" className={inputClass} maxLength={14} />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 <StatusIcon taken={fssaiTaken} checking={checking === 'fssai_no'} fieldName="fssai" />
               </div>
             </div>
-            {fssaiValue && !isFssaiValid(fssaiValue) && <p className="text-xs text-red-500 mt-1">Must be exactly 14 digits</p>}
-            {fssaiTaken === true && <p className="text-xs text-red-500 mt-1">This FSSAI number is already registered</p>}
+            {fssaiValue && !isFssaiValid(fssaiValue) && <p className="text-xs text-red-500 mt-1">{t('ob_verify_fssai_invalid')}</p>}
+            {fssaiTaken === true && <p className="text-xs text-red-500 mt-1">{t('ob_verify_fssai_taken')}</p>}
           </div>
         )}
 
         {businessType === 'trade_license' && (
           <div>
-            <label className={labelClass}>Trade License Number <span className="text-red-500">*</span></label>
+            <label className={labelClass}>{t('ob_verify_trade_label')} <span className="text-red-500">*</span></label>
             <div className="relative">
               <input value={tradeLicenseValue} onChange={(e) => handleTradeLicenseChange(e.target.value)} placeholder="KA/2024/123456" className={inputClass} />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 <StatusIcon taken={tradeLicenseTaken} checking={checking === 'trade_license_no'} fieldName="trade_license" />
               </div>
             </div>
-            {tradeLicenseValue && !isTradeLicenseValid(tradeLicenseValue) && <p className="text-xs text-red-500 mt-1">Format: XX/YYYY/NNNNNN</p>}
-            {tradeLicenseTaken === true && <p className="text-xs text-red-500 mt-1">This trade license is already registered</p>}
+            {tradeLicenseValue && !isTradeLicenseValid(tradeLicenseValue) && <p className="text-xs text-red-500 mt-1">{t('ob_verify_trade_invalid')}</p>}
+            {tradeLicenseTaken === true && <p className="text-xs text-red-500 mt-1">{t('ob_verify_trade_taken')}</p>}
           </div>
         )}
       </div>
@@ -374,7 +376,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
               isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
             }`}
           >
-            Back
+            {t('ob_back')}
           </button>
         )}
         <button
@@ -382,7 +384,7 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
           disabled={!isValid}
           className="flex-1 h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Continue
+          {t('ob_continue')}
         </button>
       </div>
     </div>

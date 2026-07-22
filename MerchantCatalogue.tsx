@@ -103,11 +103,15 @@ function rowToItem(row: Record<string, unknown>): CatalogueItem {
 function describeStock(count: number | null): { label: string; tw: string } {
   if (count === null)  return { label: 'Available',          tw: 'text-emerald-500' };
   if (count === 0)     return { label: 'Out of Stock',       tw: 'text-red-500' };
+  // Above the 1..10 low-stock range means the "50+" plenty tier, not a literal
+  // count — shown to shoppers as plain "Available", same as the 10+ tier.
+  if (count > 10)      return { label: 'Available',          tw: 'text-emerald-500' };
   return                      { label: `Only ${count} left`, tw: 'text-red-500' };
 }
 
 // Inline-edit dropdown options (must mirror StepPriceStock).
 const STOCK_DROPDOWN_OPTIONS: { value: string; label: string }[] = [
+  { value: 'PLENTY_50',    label: '50+ (Available)' },
   { value: 'PLENTY',       label: '10+ (Available)' },
   { value: '10',           label: '10 left' },
   { value: '9',            label: '9 left' },
@@ -125,11 +129,13 @@ const STOCK_DROPDOWN_OPTIONS: { value: string; label: string }[] = [
 function stockToDropdown(count: number | null): string {
   if (count === null || count === undefined) return 'PLENTY';
   if (count === 0) return 'OUT_OF_STOCK';
+  if (count > 10) return 'PLENTY_50'; // 50+ tier (anything above the 1..10 range)
   return String(count);
 }
 
 function dropdownToStock(value: string): number | null {
   if (value === 'PLENTY') return null;
+  if (value === 'PLENTY_50') return 50;
   if (value === 'OUT_OF_STOCK') return 0;
   return parseInt(value, 10);
 }
@@ -443,6 +449,12 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
           item={previewItem}
           theme={theme}
           onClose={() => setPreviewItem(null)}
+          onStockChange={(newStock) => {
+            // Persist via the same handler the catalogue cards use, and keep the
+            // open preview in sync so the new availability shows immediately.
+            handleStockChange(previewItem.id, newStock);
+            setPreviewItem(prev => (prev ? { ...prev, stockCount: newStock } : prev));
+          }}
           onEdit={() => {
             const item = previewItem;
             setPreviewItem(null);

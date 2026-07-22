@@ -24,16 +24,32 @@ BEGIN
   IF NEW.status = 'active' AND (OLD.status IS NULL OR OLD.status != 'active') THEN
     RAISE NOTICE 'Campaign approved and activated: %', NEW.campaign_id;
 
-    -- Call the Supabase Edge Function asynchronously
-    PERFORM extensions.http_post(
-      'https://YOUR_PROJECT_REF.supabase.co/functions/v1/send-new-deal-notification',
-      json_build_object('record', row_to_json(NEW))::text,
-      'application/json',
-      ARRAY[
-        extensions.http_header('Content-Type', 'application/json'),
-        extensions.http_header('Authorization', 'Bearer YOUR_SERVICE_ROLE_KEY')
-      ]
-    );
+    -- Target project + key come from per-database settings — NEVER hardcode them
+    -- here. Set once per database:
+    --   ALTER DATABASE postgres SET app.settings.project_ref      = '<your-project-ref>';
+    --   ALTER DATABASE postgres SET app.settings.service_role_key = '<your-service-role-key>';
+    --
+    -- WARNING: this uses extensions.http_post, which is SYNCHRONOUS — a failing or
+    -- unreachable URL fails the campaign UPDATE itself. A placeholder URL left in a
+    -- campaigns trigger is exactly what took deal creation down (libcurl error 21).
+    -- So if the settings are missing we skip the call with a warning rather than
+    -- attempt a doomed request. Consider migrating this to net.http_post (async),
+    -- as the referral triggers do, so notification failures can never block writes.
+    IF coalesce(current_setting('app.settings.project_ref', true), '') = ''
+       OR coalesce(current_setting('app.settings.service_role_key', true), '') = '' THEN
+      RAISE WARNING '[campaign-approved] app.settings.project_ref/service_role_key not set — skipping notification for campaign %', NEW.campaign_id;
+    ELSE
+      PERFORM extensions.http_post(
+        format('https://%s.supabase.co/functions/v1/send-new-deal-notification',
+               current_setting('app.settings.project_ref', true)),
+        json_build_object('record', row_to_json(NEW))::text,
+        'application/json',
+        ARRAY[
+          extensions.http_header('Content-Type', 'application/json'),
+          extensions.http_header('Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true))
+        ]
+      );
+    END IF;
   ELSE
     RAISE NOTICE 'Campaign update but not approved yet: % (status: %)', NEW.campaign_id, NEW.status;
   END IF;
@@ -60,8 +76,8 @@ WHERE trigger_name = 'trigger_campaign_approved_notification';
 -- ============================================================================
 -- USAGE INSTRUCTIONS
 -- ============================================================================
--- 1. Replace YOUR_PROJECT_REF with your Supabase project reference
--- 2. Replace YOUR_SERVICE_ROLE_KEY with your service role key
+-- 1. Set app.settings.project_ref on the database (see the function body)
+-- 2. Set app.settings.service_role_key on the database — never hardcode it here
 -- 3. Run this SQL in Supabase SQL Editor
 -- 4. Test by updating a campaign status from 'review' to 'active'
 

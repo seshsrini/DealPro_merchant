@@ -188,15 +188,16 @@ const MERCHANT_VIEW_TO_TAB: Record<string, AppView> = {
 export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view: AppView) => void; theme: 'light' | 'dark' }> = ({ currentView, setView, theme }) => {
   const isDark = theme === 'dark';
   const { can } = usePermissions();
+  const { t } = useTranslation();
 
-  // Map tab IDs to required permissions
+  // Map tab IDs to required permissions. `label` is a translation key (see t() below).
   const allTabs = [
-    { id: 'merchant_dashboard', label: 'Console', icon: LayoutDashboard, tourId: 'tour-nav-console', permission: null }, // always visible
-    { id: 'merchant_deals', label: 'Campaigns', icon: List, tourId: 'tour-nav-campaigns', permission: 'campaign.create' },
-    { id: 'merchant_catalogue', label: 'Catalogue', icon: LayoutGrid, tourId: 'tour-nav-catalogue', permission: 'catalogue.manage' },
-    { id: 'merchant_deal_of_day', label: 'Deal of Day', icon: Zap, tourId: 'tour-nav-dotd', permission: 'dotd.create' },
-    { id: 'merchant_analytics', label: 'Intel', icon: BarChart3, tourId: 'tour-nav-intel', permission: 'analytics.view' },
-    { id: 'profile', label: 'Hub', icon: User, tourId: 'tour-nav-hub', permission: null }, // always visible
+    { id: 'merchant_dashboard', label: 'mnav_console', icon: LayoutDashboard, tourId: 'tour-nav-console', permission: null }, // always visible
+    { id: 'merchant_deals', label: 'mnav_campaigns', icon: List, tourId: 'tour-nav-campaigns', permission: 'campaign.create' },
+    { id: 'merchant_catalogue', label: 'mnav_catalogue', icon: LayoutGrid, tourId: 'tour-nav-catalogue', permission: 'catalogue.manage' },
+    { id: 'merchant_deal_of_day', label: 'mnav_dotd', icon: Zap, tourId: 'tour-nav-dotd', permission: 'dotd.create' },
+    { id: 'merchant_analytics', label: 'mnav_intel', icon: BarChart3, tourId: 'tour-nav-intel', permission: 'analytics.view' },
+    { id: 'profile', label: 'mnav_hub', icon: User, tourId: 'tour-nav-hub', permission: null }, // always visible
   ];
 
   const tabs = allTabs.filter(tab => !tab.permission || can(tab.permission));
@@ -241,7 +242,7 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
                 <span aria-hidden className={`absolute inset-x-1.5 top-1.5 bottom-1 rounded-xl ${isDark ? 'bg-amber-400/15' : 'bg-amber-500/15'}`} />
               )}
               <Icon className="relative w-[21px] h-[21px]" strokeWidth={isActive ? 2.4 : 1.9} />
-              <span className={`relative text-[9px] leading-none truncate max-w-full ${isActive ? 'font-bold' : `font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}`}>{tab.label}</span>
+              <span className={`relative text-[9px] leading-none truncate max-w-full ${isActive ? 'font-bold' : `font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}`}>{t(tab.label)}</span>
             </button>
           );
         })}

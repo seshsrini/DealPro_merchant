@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DealPro · Merchant Dashboard — Enhanced Concept</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+  body { background: #0b1120; }
+  .stage { background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(59,130,246,.18), transparent 60%),
+      radial-gradient(1000px 500px at 90% 10%, rgba(244,63,94,.12), transparent 55%),
+      #0b1120; }
+  .phone { width: 390px; height: 844px; border-radius: 46px; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Entrance */
+  @keyframes floatIn { from { opacity:0; transform: translateY(16px);} to {opacity:1; transform:none;} }
+  .fi { animation: floatIn .6s cubic-bezier(.22,1,.36,1) both; }
+
+  /* Mesh hero */
+  .hero-mesh-light {
+    background:
+      radial-gradient(120% 120% at 0% 0%, #eef2ff 0%, transparent 45%),
+      radial-gradient(120% 140% at 100% 0%, #fff1f2 0%, transparent 50%),
+      linear-gradient(180deg,#ffffff, #f8fafc);
+  }
+  .hero-mesh-dark {
+    background:
+      radial-gradient(120% 120% at 0% 0%, rgba(59,130,246,.20) 0%, transparent 45%),
+      radial-gradient(120% 140% at 100% 0%, rgba(244,63,94,.16) 0%, transparent 50%),
+      linear-gradient(180deg,#0f172a,#020617);
+  }
+  .glass-l { background: rgba(255,255,255,.75); backdrop-filter: blur(12px); }
+  .glass-d { background: rgba(15,23,42,.6); backdrop-filter: blur(12px); }
+
+  .ring-spin { transition: stroke-dashoffset 1.2s cubic-bezier(.22,1,.36,1); }
+
+  /* shimmer accent on primary CTA */
+  @keyframes sheen { 0%{transform:translateX(-120%);} 60%,100%{transform:translateX(220%);} }
+  .sheen::after{ content:''; position:absolute; top:0; left:0; width:40%; height:100%;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
+    transform:translateX(-120%); animation: sheen 3.2s ease-in-out infinite; }
+
+  .pulse-dot{ box-shadow:0 0 0 0 rgba(16,185,129,.6); animation:pulse 2s infinite; }
+  @keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(16,185,129,.5);} 70%{box-shadow:0 0 0 7px rgba(16,185,129,0);} 100%{box-shadow:0 0 0 0 rgba(16,185,129,0);} }
+</style>
+</head>
+<body class="stage min-h-screen flex flex-col items-center py-10 px-4">
+
+  <!-- Header / controls -->
+  <div class="w-full max-w-5xl flex items-center justify-between mb-8">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+        <i data-lucide="sparkles" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <p class="text-white font-bold leading-tight">Merchant Dashboard — Enhanced Concept</p>
+        <p class="text-slate-400 text-xs">Design exploration · not wired into the app</p>
+      </div>
+    </div>
+    <button id="themeBtn" onclick="toggleTheme()" class="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-white text-sm font-semibold hover:bg-white/15 transition">
+      <i data-lucide="moon" class="w-4 h-4"></i><span id="themeLbl">Dark</span>
+    </button>
+  </div>
+
+  <!-- PHONE -->
+  <div id="phone" class="phone relative overflow-hidden shadow-2xl ring-1 ring-white/10 bg-white">
+    <!-- status bar -->
+    <div id="statusbar" class="absolute top-0 inset-x-0 h-11 z-40 flex items-center justify-between px-7 text-[13px] font-semibold text-slate-900">
+      <span>9:41</span>
+      <div class="flex items-center gap-1.5">
+        <i data-lucide="signal" class="w-4 h-4"></i>
+        <i data-lucide="wifi" class="w-4 h-4"></i>
+        <i data-lucide="battery-full" class="w-5 h-5"></i>
+      </div>
+    </div>
+
+    <!-- scroll area -->
+    <div id="screen" class="absolute inset-0 pt-11 overflow-y-auto no-scrollbar bg-slate-50">
+
+      <!-- ── HERO ── -->
+      <div id="hero" class="hero-mesh-light relative px-5 pt-5 pb-16 overflow-hidden">
+        <div class="flex items-start justify-between">
+          <div class="flex items-center gap-3">
+            <!-- store avatar -->
+            <div class="relative">
+              <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white font-black text-lg shadow-lg shadow-blue-500/30">SB</div>
+              <span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white pulse-dot"></span>
+            </div>
+            <div>
+              <p class="text-[11px] font-semibold tracking-wide uppercase text-slate-500">Good morning 👋</p>
+              <h1 class="hero-title text-[19px] font-extrabold text-slate-900 leading-tight">Sri Balaji Electronics</h1>
+              <div class="flex items-center gap-1.5 mt-1">
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> 6 live deals
+                </span>
+                <span class="hero-sub text-[10px] font-medium text-slate-400">Koramangala, BLR</span>
+              </div>
+            </div>
+          </div>
+          <button class="relative w-10 h-10 rounded-full bg-white/70 border border-slate-200 flex items-center justify-center shadow-sm">
+            <i data-lucide="bell" class="w-5 h-5 text-slate-700"></i>
+            <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
+          </button>
+        </div>
+
+        <!-- Today's pulse strip (NEW) -->
+        <div class="fi mt-5 grid grid-cols-3 gap-2" style="animation-delay:.05s">
+          <div class="pulse-card rounded-2xl px-3 py-2.5 glass-l border border-white/60 shadow-sm">
+            <div class="flex items-center gap-1 text-slate-500"><i data-lucide="eye" class="w-3.5 h-3.5"></i><span class="text-[10px] font-semibold">Views</span></div>
+            <div class="flex items-end gap-1 mt-0.5">
+              <span class="pulse-num text-[20px] font-black text-slate-900 leading-none">1,248</span>
+              <span class="text-[10px] font-bold text-emerald-500 mb-0.5">▲12%</span>
+            </div>
+          </div>
+          <div class="pulse-card rounded-2xl px-3 py-2.5 glass-l border border-white/60 shadow-sm">
+            <div class="flex items-center gap-1 text-slate-500"><i data-lucide="megaphone" class="w-3.5 h-3.5"></i><span class="text-[10px] font-semibold">Claims</span></div>
+            <div class="flex items-end gap-1 mt-0.5">
+              <span class="pulse-num text-[20px] font-black text-blue-600 leading-none">327</span>
+              <span class="text-[10px] font-bold text-emerald-500 mb-0.5">▲8%</span>
+            </div>
+          </div>
+          <div class="pulse-card rounded-2xl px-3 py-2.5 glass-l border border-white/60 shadow-sm">
+            <div class="flex items-center gap-1 text-slate-500"><i data-lucide="ticket-check" class="w-3.5 h-3.5"></i><span class="text-[10px] font-semibold">Redeemed</span></div>
+            <div class="flex items-end gap-1 mt-0.5">
+              <span class="pulse-num text-[20px] font-black text-emerald-600 leading-none">86</span>
+              <span class="text-[10px] font-bold text-emerald-500 mb-0.5">▲5%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- content pulled up over hero -->
+      <div class="px-4 -mt-10 space-y-4 pb-32 relative z-10">
+
+        <!-- ── PLAN USAGE ── -->
+        <div class="fi" style="animation-delay:.1s">
+          <div class="grid grid-cols-2 gap-3">
+            <!-- Campaigns -->
+            <div class="usage-card rounded-3xl p-4 bg-white border border-slate-200 shadow-sm relative overflow-hidden">
+              <div class="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-blue-500/5"></div>
+              <div class="flex items-center gap-3">
+                <div class="relative w-14 h-14">
+                  <svg width="56" height="56" class="-rotate-90">
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="#eef2f7" stroke-width="6"/>
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="url(#gblue)" stroke-width="6" stroke-linecap="round"
+                      stroke-dasharray="150.8" stroke-dashoffset="94" class="ring-spin"/>
+                    <defs><linearGradient id="gblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#2563eb"/></linearGradient></defs>
+                  </svg>
+                  <div class="absolute inset-0 flex items-center justify-center"><i data-lucide="megaphone" class="w-4.5 h-4.5 text-blue-500"></i></div>
+                </div>
+                <div>
+                  <p class="usage-label text-[10px] font-semibold text-slate-500">Campaigns</p>
+                  <p class="text-[22px] font-black text-slate-900 leading-none">3<span class="text-sm text-slate-400 font-bold">/8</span></p>
+                  <p class="text-[9px] font-semibold text-emerald-500 mt-1">5 left this cycle</p>
+                </div>
+              </div>
+            </div>
+            <!-- DOTD -->
+            <div class="usage-card rounded-3xl p-4 bg-white border border-slate-200 shadow-sm relative overflow-hidden">
+              <div class="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-amber-500/5"></div>
+              <div class="flex items-center gap-3">
+                <div class="relative w-14 h-14">
+                  <svg width="56" height="56" class="-rotate-90">
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="#eef2f7" stroke-width="6"/>
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="url(#gamber)" stroke-width="6" stroke-linecap="round"
+                      stroke-dasharray="150.8" stroke-dashoffset="60" class="ring-spin"/>
+                    <defs><linearGradient id="gamber" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#f59e0b"/></linearGradient></defs>
+                  </svg>
+                  <div class="absolute inset-0 flex items-center justify-center"><i data-lucide="zap" class="w-4.5 h-4.5 text-amber-500"></i></div>
+                </div>
+                <div>
+                  <p class="usage-label text-[10px] font-semibold text-slate-500">Deal of the Day</p>
+                  <p class="text-[22px] font-black text-slate-900 leading-none">2<span class="text-sm text-slate-400 font-bold">/5</span></p>
+                  <p class="text-[9px] font-semibold text-emerald-500 mt-1">3 left this cycle</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- plan chip -->
+          <button class="plan-chip mt-2.5 w-full flex items-center justify-between px-4 py-2.5 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white active:scale-[.98] transition">
+            <span class="flex items-center gap-2 text-xs font-semibold"><i data-lucide="crown" class="w-4 h-4 text-amber-400"></i> Growth Plan · ₹199/mo</span>
+            <span class="flex items-center gap-1 text-[11px] font-bold text-amber-300">Renews Jul 18 <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></span>
+          </button>
+        </div>
+
+        <!-- ── QUICK ACTIONS ── -->
+        <div class="fi grid grid-cols-2 gap-3" style="animation-delay:.15s">
+          <button class="sheen relative rounded-3xl p-4 flex flex-col gap-3 text-left overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 shadow-xl shadow-blue-500/30 active:scale-[.96] transition">
+            <div class="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10"></div>
+            <div class="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center"><i data-lucide="plus" class="w-6 h-6 text-white"></i></div>
+            <div>
+              <p class="text-[15px] font-extrabold text-white">New Deal</p>
+              <p class="text-[10px] text-blue-100 mt-0.5">Launch a campaign in minutes</p>
+            </div>
+          </button>
+          <button class="relative rounded-3xl p-4 flex flex-col gap-3 text-left overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 shadow-xl shadow-slate-900/25 active:scale-[.96] transition">
+            <div class="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/5"></div>
+            <div class="w-11 h-11 rounded-2xl bg-white/10 flex items-center justify-center"><i data-lucide="qr-code" class="w-6 h-6 text-white"></i></div>
+            <div>
+              <p class="text-[15px] font-extrabold text-white">Scan &amp; Verify</p>
+              <p class="text-[10px] text-slate-300 mt-0.5">Redeem a customer voucher</p>
+            </div>
+          </button>
+        </div>
+
+        <!-- ── LIVE DEALS ── -->
+        <div class="fi" style="animation-delay:.2s">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="section-title text-[15px] font-extrabold text-slate-900">Your live deals</h2>
+            <button class="flex items-center gap-1 text-[11px] font-bold text-blue-600">View all <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button>
+          </div>
+          <div class="flex gap-3 overflow-x-auto no-scrollbar -mx-4 px-4 pb-1">
+            <!-- card 1 (DOTD) -->
+            <div class="deal-card shrink-0 w-60 rounded-3xl overflow-hidden bg-white border border-slate-200 shadow-sm">
+              <div class="relative h-32">
+                <img class="w-full h-full object-cover" src="https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&q=60" alt="">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent"></div>
+                <span class="absolute top-2.5 left-2.5 flex items-center gap-1 bg-amber-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full"><i data-lucide="zap" class="w-2.5 h-2.5"></i> DOTD</span>
+                <span class="absolute bottom-2.5 right-2.5 flex items-center gap-1 bg-white/85 text-slate-800 text-[9px] font-bold px-2 py-0.5 rounded-full"><i data-lucide="clock" class="w-2.5 h-2.5"></i> Last day</span>
+                <p class="absolute bottom-2.5 left-3 text-white text-[13px] font-extrabold drop-shadow">Bluetooth Earbuds</p>
+              </div>
+              <div class="p-3">
+                <p class="text-[11px] font-bold text-blue-600">Flat 40% OFF</p>
+                <div class="flex items-center gap-3 mt-2 pt-2 border-t border-slate-100">
+                  <span class="flex items-center gap-1 text-[10px] font-bold text-slate-500"><i data-lucide="eye" class="w-3.5 h-3.5"></i> 412</span>
+                  <span class="flex items-center gap-1 text-[10px] font-bold text-blue-600"><i data-lucide="megaphone" class="w-3.5 h-3.5"></i> 96</span>
+                  <span class="flex items-center gap-1 text-[10px] font-bold text-emerald-600"><i data-lucide="ticket-check" class="w-3.5 h-3.5"></i> 31</span>
+                </div>
+              </div>
+            </div>
+            <!-- card 2 -->
+            <div class="deal-card shrink-0 w-60 rounded-3xl overflow-hidden bg-white border border-slate-200 shadow-sm">
+              <div class="relative h-32">
+                <img class="w-full h-full object-cover" src="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&q=60" alt="">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent"></div>
+                <span class="absolute top-2.5 left-2.5 flex items-center gap-1 bg-pink-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full"><i data-lucide="gift" class="w-2.5 h-2.5"></i> FREE GIFT</span>
+                <p class="absolute bottom-2.5 left-3 text-white text-[13px] font-extrabold drop-shadow">Smart Watch Pro</p>
+              </div>
+              <div class="p-3">
+                <p class="text-[11px] font-bold text-blue-600">Buy 1 Get Strap Free</p>
+                <div class="flex items-center gap-3 mt-2 pt-2 border-t border-slate-100">
+                  <span class="flex items-center gap-1 text-[10px] font-bold text-slate-500"><i data-lucide="eye" class="w-3.5 h-3.5"></i> 289</span>
+                  <span class="flex items-center gap-1 text-[10px] font-bold text-blue-600"><i data-lucide="megaphone" class="w-3.5 h-3.5"></i> 74</span>
+                  <span class="flex items-center gap-1 text-[10px] font-bold text-emerald-600"><i data-lucide="ticket-check" class="w-3.5 h-3.5"></i> 22</span>
+                </div>
+              </div>
+            </div>
+            <div class="shrink-0 w-4"></div>
+          </div>
+        </div>
+
+        <!-- ── SHORTCUTS ── -->
+        <div class="fi grid grid-cols-4 gap-2.5" style="animation-delay:.25s">
+          <button class="shortcut flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white border border-slate-200 active:scale-95 transition">
+            <div class="w-10 h-10 rounded-2xl bg-violet-50 flex items-center justify-center"><i data-lucide="bar-chart-3" class="w-4.5 h-4.5 text-violet-500"></i></div>
+            <span class="text-[10px] font-bold text-slate-700">Intel</span>
+          </button>
+          <button class="shortcut flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white border border-slate-200 active:scale-95 transition">
+            <div class="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center"><i data-lucide="package" class="w-4.5 h-4.5 text-emerald-500"></i></div>
+            <span class="text-[10px] font-bold text-slate-700">Catalogue</span>
+          </button>
+          <button class="shortcut flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white border border-slate-200 active:scale-95 transition">
+            <div class="w-10 h-10 rounded-2xl bg-sky-50 flex items-center justify-center"><i data-lucide="store" class="w-4.5 h-4.5 text-sky-500"></i></div>
+            <span class="text-[10px] font-bold text-slate-700">Stores</span>
+          </button>
+          <button class="shortcut flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-white border border-slate-200 active:scale-95 transition">
+            <div class="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center"><i data-lucide="sparkles" class="w-4.5 h-4.5 text-amber-500"></i></div>
+            <span class="text-[10px] font-bold text-slate-700">AI Hub</span>
+          </button>
+        </div>
+
+        <!-- ── UPCOMING EVENT ── -->
+        <div class="fi" style="animation-delay:.3s">
+          <h2 class="section-title text-[15px] font-extrabold text-slate-900 mb-2.5">Upcoming events</h2>
+          <button class="event-card w-full p-3.5 rounded-3xl flex items-center gap-3 text-left border relative overflow-hidden"
+            style="background:linear-gradient(120deg,#fff7ed,#ffedd5);border-color:#fed7aa">
+            <div class="w-11 h-11 rounded-2xl bg-white/70 flex items-center justify-center text-xl shrink-0">🪔</div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="text-[13px] font-extrabold text-slate-900">Diwali</p>
+                <span class="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-600">6d away</span>
+              </div>
+              <p class="text-[11px] text-slate-600 mt-0.5">Run a festive combo — gifting sells big this week</p>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 shrink-0"></i>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- bottom nav -->
+      <div id="bottomnav" class="sticky bottom-0 inset-x-0 h-[74px] px-6 flex items-center justify-around bg-white/90 backdrop-blur-xl border-t border-slate-200">
+        <button class="flex flex-col items-center gap-1 text-blue-600"><i data-lucide="layout-dashboard" class="w-5 h-5"></i><span class="text-[10px] font-bold">Home</span></button>
+        <button class="flex flex-col items-center gap-1 text-slate-400"><i data-lucide="megaphone" class="w-5 h-5"></i><span class="text-[10px] font-semibold">Deals</span></button>
+        <button class="-mt-6 w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/40"><i data-lucide="plus" class="w-7 h-7 text-white"></i></button>
+        <button class="flex flex-col items-center gap-1 text-slate-400"><i data-lucide="bar-chart-3" class="w-5 h-5"></i><span class="text-[10px] font-semibold">Intel</span></button>
+        <button class="flex flex-col items-center gap-1 text-slate-400"><i data-lucide="user" class="w-5 h-5"></i><span class="text-[10px] font-semibold">Profile</span></button>
+      </div>
+
+    </div>
+  </div>
+
+  <p class="text-slate-500 text-xs mt-6">Tip: toggle Dark to preview both themes. Sample data is illustrative.</p>
+
+<script>
+  lucide.createIcons();
+  let dark = false;
+  function toggleTheme(){
+    dark = !dark;
+    const screen = document.getElementById('screen');
+    const hero = document.getElementById('hero');
+    const phone = document.getElementById('phone');
+    const statusbar = document.getElementById('statusbar');
+    const bottomnav = document.getElementById('bottomnav');
+    document.getElementById('themeLbl').textContent = dark ? 'Light' : 'Dark';
+
+    if(dark){
+      phone.classList.replace('bg-white','bg-slate-950');
+      screen.classList.replace('bg-slate-50','bg-slate-950');
+      hero.classList.replace('hero-mesh-light','hero-mesh-dark');
+      statusbar.classList.replace('text-slate-900','text-white');
+      bottomnav.className = bottomnav.className.replace('bg-white/90','bg-slate-900/90').replace('border-slate-200','border-slate-800');
+      document.querySelectorAll('.hero-title').forEach(e=>{e.classList.remove('text-slate-900');e.classList.add('text-white');});
+      document.querySelectorAll('.pulse-card').forEach(e=>{e.classList.remove('glass-l','border-white/60');e.classList.add('glass-d','border-slate-800');});
+      document.querySelectorAll('.usage-card,.deal-card,.shortcut').forEach(e=>{e.classList.remove('bg-white','border-slate-200');e.classList.add('bg-slate-900','border-slate-800');});
+      document.querySelectorAll('.section-title').forEach(e=>{e.classList.remove('text-slate-900');e.classList.add('text-white');});
+      document.querySelectorAll('.pulse-num').forEach(e=>{ if(e.classList.contains('text-slate-900')){e.classList.remove('text-slate-900');e.classList.add('text-white');}});
+    } else {
+      location.reload();
+    }
+    lucide.createIcons();
+  }
+</script>
+</body>
+</html>

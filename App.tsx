@@ -19,7 +19,7 @@ import { WebLoginApprovalModal } from './components/WebLoginApprovalModal';
 import { webLoginApprovalService, type PendingWebLogin } from './services/webLoginApprovalService';
 import { supabase, updateSupabaseSession } from './services/supabaseClient';
 import { App as CapApp } from '@capacitor/app';
-import { userService } from './services/userService';
+import { userService, isExistingMerchantProfile } from './services/userService';
 import { addCampaignService } from './services/addCampaignService';
 import { resilient, peekCache } from './services/resilientData';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
@@ -30,6 +30,30 @@ import { PrivacyPolicy } from './PrivacyPolicy'; // Privacy Policy component
 import { TermsOfService } from './TermsOfService'; // Terms of Service component
 import { PrivacyPolicySignup } from './PrivacyPolicySignup'; // Privacy Policy for signup
 import { TermsOfServiceSignup } from './TermsOfServiceSignup'; // Terms of Service for signup
+
+// Views a merchant who hasn't fully onboarded + subscribed is still allowed on —
+// so they can finish signup, subscribe, read the legal docs, or re-authenticate.
+// Everything else (dashboard, deals, catalogue, profile, etc.) is gated.
+const MERCHANT_GATE_EXEMPT: AppView[] = [
+  'splash', 'login', 'welcome', 'language_selection', 'location_permission', 'verify_phone',
+  'merchant_onboarding', 'merchant_subscriptions',
+  'terms_of_service', 'privacy_policy', 'terms_of_service_signup', 'privacy_policy_signup',
+];
+
+// The single source of truth for "can this merchant use the app?". Returns the view
+// they must be sent to if not, else null. A merchant with an ACTIVE SUBSCRIPTION is
+// never gated — that grandfathers legacy accounts and survives a transient
+// subscription-check failure, so we can never lock out a paying merchant. Without a
+// subscription: a fully-onboarded merchant goes to the subscription page (renew /
+// finish paying); an incomplete one goes back into the wizard (which resumes at the
+// missing step). onboarding_complete is the authoritative flag; the field check is a
+// fallback for a client that predates it.
+function merchantGateTarget(u: User): AppView | null {
+  if (u.hasActiveSubscription) return null;
+  const profileDone = (u as any).onboarding_complete === true
+    || !!(u.full_name && u.store_name && u.business_type && u.terms_accepted && u.privacy_accepted);
+  return profileDone ? 'merchant_subscriptions' : 'merchant_onboarding';
+}
 
 const AppContent: React.FC = () => {
   const [view, setView] = useState<AppView>('splash');
@@ -117,11 +141,38 @@ const AppContent: React.FC = () => {
     if (mainRef.current) mainRef.current.scrollTo(0, 0);
   }, [view]);
 
+  // GLOBAL MERCHANT GATE. Runs on EVERY navigation (not just session-restore), so a
+  // half-finished signup can never reach the dashboard / create deals by resuming a
+  // backgrounded app or slipping through the wizard. If a logged-in merchant lands
+  // on a gated page without a complete profile + active subscription, bounce them to
+  // the right place (wizard resumes the missing step; subscription page to pay/renew).
+  // Gated on `loading` so it never fires before session restore has populated the
+  // user + subscription status (which would false-positive a real merchant).
+  useEffect(() => {
+    if (loading) return;
+    if (!user.isLoggedIn || user.role !== 'merchant') return;
+    const staffRole = (user as any).staff_role;
+    if (staffRole && staffRole !== 'owner') return; // staff never onboard/subscribe
+    if (MERCHANT_GATE_EXEMPT.includes(view)) return;
+    const target = merchantGateTarget(user);
+    if (target && target !== view) {
+      console.warn('[App] Merchant gate: blocking', view, '→', target,
+        '(onboarding_complete:', (user as any).onboarding_complete, ', hasActiveSubscription:', user.hasActiveSubscription, ')');
+      navigateTo(target);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, loading, user.isLoggedIn, user.role, (user as any).staff_role, user.hasActiveSubscription,
+      (user as any).onboarding_complete, user.full_name, user.store_name, user.business_type,
+      user.terms_accepted, user.privacy_accepted]);
+
   // Tracks whether the first deals fetch has completed. The loading animation
   // is shown only on this initial load — the 10s auto-refresh polls stay silent
   // so the list doesn't flash a loader every cycle.
   const dealsLoadedRef = useRef(false);
   useEffect(() => { dealsLoadedRef.current = false; }, [user.id]);
+  // One-shot per session: backfill deals whose translations never generated.
+  const translationRepairRef = useRef(false);
+  useEffect(() => { translationRepairRef.current = false; }, [user.id]);
 
   // refreshDeals fetches merchant's own campaigns
   const refreshDeals = useCallback(async () => {
@@ -157,6 +208,28 @@ const AppContent: React.FC = () => {
 
       setDeals(fetchedDeals);
       dealsLoadedRef.current = true;
+
+      // Backfill missing translations: the client-side, fire-and-forget translation
+      // at publish can silently fail, leaving a deal English-only. repair-translations
+      // runs server-side and only touches deals missing localized fields (idempotent),
+      // so fire it once per session, then refetch so the new translations show. Both
+      // the merchant and consumer apps read the same rows, so this fixes both.
+      if (user.role === 'merchant' && !translationRepairRef.current) {
+        // <= 1 key means null or English-only (a failed translation stores just
+        // {en:...}); both need a real translation.
+        const needsRepair = fetchedDeals.some((d: any) =>
+          Object.keys(d.localized_heading || {}).length <= 1 ||
+          Object.keys(d.localized_offer || {}).length <= 1 ||
+          Object.keys(d.localized_description || {}).length <= 1,
+        );
+        if (needsRepair) {
+          translationRepairRef.current = true;
+          addCampaignService.repairCampaignTranslations(user.id)
+            .then(() => addCampaignService.getMerchantDeals(user.id))
+            .then((fresh) => { if (Array.isArray(fresh)) setDeals(fresh); })
+            .catch((err) => console.error('[App.tsx] Translation repair failed:', err));
+        }
+      }
     } catch (err) {
       console.error("[App.tsx refreshDeals] Data pipeline failure:", err);
     } finally {
@@ -176,6 +249,12 @@ const AppContent: React.FC = () => {
   // same activation polling flow. We poll instead of trusting either signal
   // because the verify-subscription route writes `pending_activation` and the
   // Supabase webhook handler is what flips to `active` (a few seconds lag).
+  // Set when the merchant reaches the (Play-compliant) "subscribe on the web"
+  // step at the very END of signup. Once their subscription flips to active, we
+  // auto-advance them into the dashboard instead of leaving them parked on the
+  // read-only my-subscription page. Signup-only: a merchant managing billing
+  // from their profile never sets this, so they stay where they are.
+  const signupActivationRedirectRef = useRef(false);
   const pollInFlightRef = useRef(false);
   const pollForSubscriptionActivation = useCallback(async () => {
     if (pollInFlightRef.current) return; // dedupe overlapping triggers
@@ -209,6 +288,19 @@ const AppContent: React.FC = () => {
       pollInFlightRef.current = false;
     }
   }, [user, setUser]);
+
+  // Signup → subscription → dashboard. When the merchant finished signup on a
+  // Play-compliant build they were sent to the web to subscribe (parked on the
+  // my-subscription page). The moment their subscription becomes active — no
+  // matter which path detected it (this poll, the subscription page's own
+  // refresh, or a realtime update) — carry them into the dashboard. Gated on the
+  // signup-only ref so profile-initiated billing changes are never redirected.
+  useEffect(() => {
+    if (user.hasActiveSubscription && signupActivationRedirectRef.current) {
+      signupActivationRedirectRef.current = false;
+      navigateTo('merchant_dashboard');
+    }
+  }, [user.hasActiveSubscription]);
 
   // Razorpay subscription returns from the VedicJaalam /subscribe web page
   // (Play-compliant redirect — see services/razorpayCheckoutService.ts). Three
@@ -504,9 +596,11 @@ const AppContent: React.FC = () => {
             // Check if this is a staff member — they skip onboarding entirely
             const isStaffMember = savedUser.staff_role && savedUser.staff_role !== 'owner';
 
-            // Existing merchant = has store_name + full_name from original signup
-            // Don't force onboarding for missing optional fields (terms, privacy, category, etc.)
-            const profileComplete = !!(savedUser.full_name && savedUser.store_name);
+            // Existing/established merchant → skip the wizard. Same rule as the
+            // fresh-login path (AuthStack): complete core profile OR already
+            // established (active subscription and/or ≥1 store). Keeps a normal
+            // reopen and a reinstall behaving identically.
+            const profileComplete = isExistingMerchantProfile(savedUser, subscriptionInfo);
 
             if (isStaffMember) {
               // Staff members always go to dashboard — no onboarding
@@ -800,6 +894,7 @@ const AppContent: React.FC = () => {
                 user={user}
                 setUser={setUser}
                 theme={theme}
+                onAwaitWebSubscription={() => { signupActivationRedirectRef.current = true; }}
               />
             ) : user.role === 'merchant' ? ( // Check for 'merchant' role
               <PermissionsProvider userId={user.id}>

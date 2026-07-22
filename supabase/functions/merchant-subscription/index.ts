@@ -617,8 +617,23 @@ Deno.serve(async (req) => {
       }
       let ny = wy, nm = wm + 1;
       if (nm > 11) { nm = 0; ny += 1; }
-      const windowStartTs = new Date(Date.UTC(wy, wm, clampDay(wy, wm, anchorDay)) - IST_OFFSET_MS).toISOString();
+      let windowStartTs = new Date(Date.UTC(wy, wm, clampDay(wy, wm, anchorDay)) - IST_OFFSET_MS).toISOString();
       const windowEndTs = new Date(Date.UTC(ny, nm, clampDay(ny, nm, anchorDay)) - IST_OFFSET_MS).toISOString();
+
+      // Clamp the window start UP to the actual cycle start. On an UPGRADE (Model B)
+      // the billing anchor moves to the upgrade instant (current_period_start = now),
+      // but the anchor-day math above only keeps the day-of-month and snaps back to
+      // midnight IST — so deals created EARLIER the same day, before the upgrade,
+      // would wrongly count against the fresh allowance (2/8 instead of 0/8). Using
+      // the real current_period_start excludes anything created before this cycle
+      // began. Only the first (upgrade) cycle is affected; for later cycles the
+      // midnight-anchored start is already ≥ current_period_start, so this is a no-op.
+      if (subscription.current_period_start) {
+        const cycleStartTs = new Date(subscription.current_period_start).toISOString();
+        if (new Date(cycleStartTs).getTime() > new Date(windowStartTs).getTime()) {
+          windowStartTs = cycleStartTs;
+        }
+      }
 
       console.log('[manage-subscription] Billing-cycle count window:', {
         merchant_id: user.id,

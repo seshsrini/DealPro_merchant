@@ -9,7 +9,7 @@ import { useTranslation } from '../../contexts/LanguageContext';
 import { ensureFreshToken, supabase, recoverSessionOrSilentReauth } from '../../services/supabaseClient';
 import { biometricService } from '../../services/biometricService';
 import { userService } from '../../services/userService';
-import { generatePromoBanner, generatePriceTagImage, generateFreeGiftsImage, BannerPlacement } from './StepImage';
+import { generatePromoBanner, generatePriceTagImage, generateFreeGiftsImage, mrpFromDiscount, BannerPlacement } from './StepImage';
 import { TRUST_BADGES } from './StepTrustBadges';
 import { FreeGiftItem } from './StepBuyGetFree';
 import { UploadVideoLoader } from '../UploadVideoLoader';
@@ -219,101 +219,15 @@ export const StepReview: React.FC<StepReviewProps> = ({
     })();
   }, [wizardState.bannerPlacement]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-generate banners for tagged additional images (slots 1..N) — same treatment as cover,
-  // but the offer section uses the per-image tag (discount % / offer price) instead of the deal-wide offer.
-  const additionalBannersGeneratedRef = useRef(false);
-  useEffect(() => {
-    if (additionalBannersGeneratedRef.current || !onUpdateAdditional || wizardState.skipBannerGeneration) return;
-    const overlays = wizardState.imagePriceOverlays || {};
-    const taggedSlots = Object.keys(overlays)
-      .map(Number)
-      .filter(i => i >= 1 && (overlays[i]?.discountPct || overlays[i]?.offerPrice));
-    if (taggedSlots.length === 0) return;
-    additionalBannersGeneratedRef.current = true;
-    (async () => {
-      setGeneratingBanner(true);
-      try {
-        const urls = wizardState.additionalImageUrls;
-        const files = wizardState.additionalImageFiles;
-        // Combined display order: URLs first (slots 1..urls.length), then Files
-        const newUrls: string[] = [];
-        const newFiles: File[] = [];
-        const newOverlays: Record<number, { discountPct: string; offerPrice: string }> = { ...overlays };
-
-        // URLs occupy combined slots 1..urls.length
-        for (let i = 0; i < urls.length; i++) {
-          const slot = i + 1;
-          const ov = overlays[slot];
-          const tagged = ov && (ov.discountPct || ov.offerPrice);
-          // Skip sources that are already a baked banner (catalogue image, a
-          // re-entered Review, or a restored draft). Re-baking stacks a SECOND
-          // layer of text — the "double text" bug. Mirrors the cover's clean-source
-          // guard. Keep the image as-is and drop the tag so it isn't baked again.
-          const alreadyBaked = /promo-banner-/.test(urls[i]);
-          if (tagged && alreadyBaked) {
-            newUrls.push(urls[i]);
-            delete newOverlays[slot];
-          } else if (tagged) {
-            try {
-              const res = await fetch(urls[i]);
-              const blob = await res.blob();
-              const srcFile = new File([blob], `existing-add-${slot}.jpg`, { type: blob.type || 'image/jpeg' });
-              // Additional images carry the price tag ONLY — never the full deal
-              // banner (that's the cover's job). Keeps them clean and avoids any
-              // chance of duplicating the cover's text.
-              const banner = await generatePriceTagImage(
-                srcFile,
-                { discountPct: ov.discountPct, offerPrice: ov.offerPrice },
-              );
-              newFiles.push(banner);
-              delete newOverlays[slot];
-            } catch (err) {
-              console.warn('[StepReview] Failed to bake tagged URL image, keeping original:', err);
-              newUrls.push(urls[i]);
-            }
-          } else {
-            newUrls.push(urls[i]);
-          }
-        }
-
-        // Files occupy combined slots (urls.length + 1) .. (urls.length + files.length)
-        for (let j = 0; j < files.length; j++) {
-          const slot = urls.length + j + 1;
-          const ov = overlays[slot];
-          const tagged = ov && (ov.discountPct || ov.offerPrice);
-          // Skip files that are already a baked banner — re-baking stacks a second
-          // text layer (the "double text" bug). generatePromoBanner names its output
-          // `promo-banner-*`, so that prefix reliably flags an already-baked source.
-          const alreadyBaked = files[j].name.startsWith('promo-banner-');
-          if (tagged && alreadyBaked) {
-            newFiles.push(files[j]);
-            delete newOverlays[slot];
-          } else if (tagged) {
-            try {
-              // Tag-only treatment for additional images (see URL branch above).
-              const banner = await generatePriceTagImage(
-                files[j],
-                { discountPct: ov.discountPct, offerPrice: ov.offerPrice },
-              );
-              newFiles.push(banner);
-              delete newOverlays[slot];
-            } catch (err) {
-              console.warn('[StepReview] Failed to bake tagged file image, keeping original:', err);
-              newFiles.push(files[j]);
-            }
-          } else {
-            newFiles.push(files[j]);
-          }
-        }
-
-        onUpdateAdditional(newFiles, newUrls, newOverlays);
-      } catch (err) {
-        console.error('[StepReview] Additional banner generation failed:', err);
-      } finally {
-        setGeneratingBanner(false);
-      }
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // NOTE: Additional-image price tags are NO LONGER baked here on mount.
+  // That on-mount effect was fragile — it raced with the cover's placement bake and
+  // cleared the overlay data as it baked, so choosing a text-free cover layout ("none")
+  // could leave additional photos with neither baked pixels nor overlay data → their
+  // tags vanished. Instead the tags now live in `wizardState.imagePriceOverlays` right
+  // up to publish: the preview below renders them as an overlay from that data (so they
+  // can never disappear based on the cover choice), and handlePublish bakes each tag
+  // into the image pixels deterministically at upload. Cover placement and additional
+  // tags are now fully independent.
 
   // Run optimizer on mount
   useEffect(() => {
@@ -426,16 +340,72 @@ export const StepReview: React.FC<StepReviewProps> = ({
         throw new Error('Image upload failed. Please go back and re-select your image, then try again.');
       }
 
-      // Upload additional images
+      // Upload additional images — BAKE each photo's price tag into the pixels here,
+      // deterministically, right before upload. The on-mount effect above also bakes
+      // (for the live preview), but relying on it alone was fragile: it runs async and
+      // once-only, so a fast Publish tap or a re-edit could ship a clean image whose
+      // tag then depended on the `image_price_overlays` data path — which is unreliable
+      // (e.g. the consumer get-all-fast function returns it empty). Baking at publish
+      // makes the tag part of the image on EVERY surface (merchant preview, consumer
+      // feed/details, lightbox, posters). Idempotent: `promo-banner-*` sources are
+      // already baked, so we never stack a second tag ("double text").
       const mediaUrls: string[] = [];
-      // Include existing additional URLs
-      for (const url of wizardState.additionalImageUrls) {
+      // Combined additional slots: URLs occupy 1..urls.length, then files after them.
+      // Slot 0 is the cover (handled separately), so additional slots start at 1.
+      const bakedOverlays: Record<string, { discountPct: string; offerPrice: string }> = {
+        ...(wizardState.imagePriceOverlays as Record<string, { discountPct: string; offerPrice: string }> || {}),
+      };
+      const urls = wizardState.additionalImageUrls;
+      const files = wizardState.additionalImageFiles;
+
+      const tagOf = (slot: number) => {
+        const ov = bakedOverlays[String(slot)];
+        return ov && (ov.discountPct || ov.offerPrice) ? ov : null;
+      };
+
+      // Existing additional URLs
+      for (let k = 0; k < urls.length; k++) {
+        const url = urls[k];
+        const slot = k + 1;
+        const ov = tagOf(slot);
+        if (ov && !/promo-banner-/.test(url)) {
+          try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const src = new File([blob], `add-${slot}.jpg`, { type: blob.type || 'image/jpeg' });
+            const baked = await generatePriceTagImage(src, { discountPct: ov.discountPct, offerPrice: ov.offerPrice });
+            const up = await addCampaignService.uploadDealImage(user.id, baked);
+            mediaUrls.push(up.publicUrl);
+            delete bakedOverlays[String(slot)]; // tag is in the pixels now — no data overlay
+            continue;
+          } catch (err) {
+            console.warn('[StepReview] Failed to bake tag onto existing additional image, keeping original:', err);
+          }
+        } else if (ov) {
+          // Already a baked banner — the tag is in the image; drop the data overlay.
+          delete bakedOverlays[String(slot)];
+        }
         mediaUrls.push(url);
       }
-      // Upload new additional files
-      for (const file of wizardState.additionalImageFiles) {
+
+      // New additional files
+      for (let j = 0; j < files.length; j++) {
+        const file = files[j];
+        const slot = urls.length + j + 1;
+        const ov = tagOf(slot);
+        let toUpload = file;
+        if (ov && !file.name.startsWith('promo-banner-')) {
+          try {
+            toUpload = await generatePriceTagImage(file, { discountPct: ov.discountPct, offerPrice: ov.offerPrice });
+            delete bakedOverlays[String(slot)];
+          } catch (err) {
+            console.warn('[StepReview] Failed to bake tag onto additional image, uploading original:', err);
+          }
+        } else if (ov) {
+          delete bakedOverlays[String(slot)]; // already baked — drop data overlay
+        }
         try {
-          const result = await addCampaignService.uploadDealImage(user.id, file);
+          const result = await addCampaignService.uploadDealImage(user.id, toUpload);
           mediaUrls.push(result.publicUrl);
         } catch {
           console.warn('[StepReview] Failed to upload additional image, skipping');
@@ -511,10 +481,13 @@ export const StepReview: React.FC<StepReviewProps> = ({
       if (finalVideoUrl) payload.video_url = finalVideoUrl;
       if (freeGiftsPayload.length > 0) payload.free_gifts = freeGiftsPayload;
 
-      // Image price overlays — only include non-empty overlays
-      if (wizardState.imagePriceOverlays) {
+      // Image price overlays — only the overlays we DIDN'T bake into the pixels
+      // (bakedOverlays has baked slots removed above). This keeps the data path as a
+      // fallback for anything that couldn't be baked, while baked images render from
+      // their pixels alone — so a tag can never show twice.
+      {
         const cleanedOverlays: Record<string, { discountPct: string; offerPrice: string }> = {};
-        for (const [idx, overlay] of Object.entries(wizardState.imagePriceOverlays)) {
+        for (const [idx, overlay] of Object.entries(bakedOverlays)) {
           const ov = overlay as { discountPct: string; offerPrice: string };
           if (ov && (ov.discountPct || ov.offerPrice)) {
             cleanedOverlays[idx] = ov;
@@ -594,7 +567,17 @@ export const StepReview: React.FC<StepReviewProps> = ({
                 className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
               >
-                {allPreviews.map((item, i) => (
+                {allPreviews.map((item, i) => {
+                  // Per-photo price tag, straight from the overlay data (slot i). Only
+                  // additional photos (i >= 1) — the cover carries its own baked banner.
+                  // This renders the tag regardless of the cover's layout choice, so a
+                  // text-free cover can never make the additional tags disappear.
+                  const overlay = !item.isVideo && i >= 1
+                    ? (wizardState.imagePriceOverlays as Record<number, { discountPct: string; offerPrice: string }>)?.[i]
+                    : undefined;
+                  const hasOverlay = !!(overlay && (overlay.discountPct || overlay.offerPrice));
+                  const mrp = overlay?.offerPrice ? mrpFromDiscount(parseFloat(overlay.offerPrice), overlay.discountPct) : null;
+                  return (
                   <div key={i} className="w-full flex-shrink-0 snap-center relative">
                     {item.isVideo ? (
                       <video src={item.url} className="w-full aspect-square object-cover bg-black" controls muted playsInline />
@@ -607,8 +590,18 @@ export const StepReview: React.FC<StepReviewProps> = ({
                         <span className="text-[10px] font-semibold text-white">{t('m_video')}</span>
                       </div>
                     )}
+                    {hasOverlay && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-8 pb-3 px-4">
+                        {overlay!.discountPct && <div className="inline-block bg-red-500 text-white text-xs font-black px-2 py-1 rounded mb-1.5">{overlay!.discountPct}% OFF</div>}
+                        <div className="flex items-baseline gap-2">
+                          {overlay!.offerPrice && <span className="text-white text-2xl font-black">₹{overlay!.offerPrice}</span>}
+                          {mrp && <span className="text-white/60 text-sm line-through">₹{mrp}</span>}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
               {totalMedia > 1 && (
                 <>

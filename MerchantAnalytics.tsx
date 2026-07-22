@@ -8,6 +8,7 @@ import { aiInsightsService, AIInsight } from './services/aiInsightsService';
 import { performanceScoreService, PerformanceScore, ScoreFactor } from './services/performanceScoreService';
 import { resilient } from './services/resilientData';
 import { useResumeRefetch } from './services/useResumeRefetch';
+import { useTranslation } from './contexts/LanguageContext';
 
 interface MerchantAnalyticsProps {
   user: User;
@@ -97,6 +98,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
   const [loadingRepeat, setLoadingRepeat] = useState(false);
 
   const isDark = theme === 'dark';
+  const { t, locale } = useTranslation();
 
   const lifetimeConversionRate = useMemo(() => {
     return totalLifetimeClicks > 0
@@ -222,7 +224,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
       if (!user?.id) return;
       setLoadingPerformanceScore(true);
       try {
-        const score = await resilient(() => performanceScoreService.getScore(user.id), { cacheKey: `an_perfscore_${user.id}` });
+        const score = await resilient(() => performanceScoreService.getScore(user.id, locale), { cacheKey: `an_perfscore_${user.id}_${locale}` });
         setPerformanceScore(score);
       } catch {
         /* keep last-good score */
@@ -232,14 +234,14 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
     };
 
     fetchPerformanceScore();
-  }, [user?.id, resumeNonce]);
+  }, [user?.id, resumeNonce, locale]);
 
   useEffect(() => {
     const fetchAIInsights = async () => {
       if (!user?.id) return;
       setLoadingAiInsights(true);
       try {
-        const insights = await resilient(() => aiInsightsService.getAIInsights(user.id), { cacheKey: `an_aiinsights_${user.id}` });
+        const insights = await resilient(() => aiInsightsService.getAIInsights(user.id, locale), { cacheKey: `an_aiinsights_${user.id}_${locale}` });
         setAiInsights(insights);
       } catch {
         /* keep last-good insights */
@@ -249,7 +251,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
     };
 
     fetchAIInsights();
-  }, [user?.id, resumeNonce]);
+  }, [user?.id, resumeNonce, locale]);
 
   const fetchAnalytics = async () => {
     // ---- Reliability rework ---------------------------------------------
@@ -315,7 +317,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
       <div className={`px-6 pt-6 pb-32 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
-          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Loading analytics...</p>
+          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_loading')}</p>
         </div>
       </div>
     );
@@ -326,12 +328,12 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
       <div className={`px-6 pt-6 pb-32 ${isDark ? 'bg-slate-950' : 'bg-white'}`}>
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <AlertCircle className="w-8 h-8 text-red-500" />
-          <p className="text-sm font-medium text-red-500">{error}</p>
+          <p className="text-sm font-medium text-red-500">{t('man_error')}</p>
           <button
             onClick={fetchAnalytics}
             className="h-10 px-6 bg-slate-900 text-white rounded-xl text-sm font-medium active:scale-[0.98] transition-all"
           >
-            Retry
+            {t('man_retry')}
           </button>
         </div>
       </div>
@@ -359,8 +361,8 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
             <Brain className="w-5 h-5 text-purple-500" />
           </div>
           <div className="flex-1">
-            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>AI Insights Dashboard</p>
-            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Full AI-powered analysis & predictions</p>
+            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_ai_dashboard')}</p>
+            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_ai_dashboard_sub')}</p>
           </div>
           <ChevronRight className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
         </button>
@@ -369,10 +371,10 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
       {/* Header */}
       <div>
         <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-          Campaign Analytics
+          {t('man_title')}
         </h1>
         <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-          {user.store_name || 'My Insights'}
+          {user.store_name || t('man_my_insights')}
         </p>
       </div>
 
@@ -388,7 +390,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
                 : isDark ? 'text-slate-400' : 'text-slate-500'
             }`}
           >
-            {period === 'lifetime' ? 'Lifetime' : `${period} Days`}
+            {period === 'lifetime' ? t('man_lifetime') : t('man_n_days').replace('{n}', period)}
           </button>
         ))}
       </div>
@@ -398,7 +400,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         <div className={`rounded-xl p-3 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div className="flex items-center gap-1.5 mb-2">
             <BarChart3 className="w-3.5 h-3.5 text-blue-500" />
-            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Campaigns</span>
+            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_campaigns')}</span>
           </div>
           <p className={`text-2xl font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>{analytics.totalCampaigns}</p>
         </div>
@@ -406,7 +408,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         <div className={`rounded-xl p-3 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div className="flex items-center gap-1.5 mb-2">
             <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Active</span>
+            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_active')}</span>
           </div>
           <p className={`text-2xl font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>{analytics.activeCampaigns}</p>
         </div>
@@ -414,7 +416,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         <div className={`rounded-xl p-3 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div className="flex items-center gap-1.5 mb-2">
             <TicketCheck className="w-3.5 h-3.5 text-amber-500" />
-            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Redeemed</span>
+            <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_redeemed')}</span>
           </div>
           <p className={`text-2xl font-semibold text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>{totalLifetimeRedemptions.toLocaleString()}</p>
         </div>
@@ -422,22 +424,22 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
 
       {/* Campaign Status */}
       <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-        <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>Campaign Status</h3>
+        <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_campaign_status')}</h3>
         <div className="grid grid-cols-2 gap-3">
           <div className={`rounded-lg p-3 border ${isDark ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'}`}>
-            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Approved</p>
+            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{t('man_approved')}</p>
             <p className="text-xl font-semibold text-emerald-500">{analytics.statusBreakdown.approved}</p>
           </div>
           <div className={`rounded-lg p-3 border ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
-            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>In Review</p>
+            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{t('man_in_review')}</p>
             <p className="text-xl font-semibold text-amber-500">{analytics.statusBreakdown.review}</p>
           </div>
           <div className={`rounded-lg p-3 border ${isDark ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-50 border-orange-200'}`}>
-            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>Needs Review</p>
+            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>{t('man_needs_review')}</p>
             <p className="text-xl font-semibold text-orange-500">{analytics.statusBreakdown.needs_review}</p>
           </div>
           <div className={`rounded-lg p-3 border ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
-            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-red-400' : 'text-red-600'}`}>Expired</p>
+            <p className={`text-xs font-medium mb-1 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{t('man_expired')}</p>
             <p className="text-xl font-semibold text-red-500">{analytics.statusBreakdown.expired}</p>
           </div>
         </div>
@@ -447,7 +449,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
       <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center gap-2 mb-4">
           <Calendar className="w-4 h-4 text-blue-500" />
-          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Campaign Trend</h3>
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_campaign_trend')}</h3>
         </div>
 
         <div className="relative h-48 mt-4">
@@ -547,20 +549,20 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
 
       {/* Lifetime Analytics */}
       <div className="space-y-4">
-        <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Lifetime Analytics</h3>
+        <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_lifetime_analytics')}</h3>
 
         {isAnyAnalyticsLoading ? (
           <div className={`p-12 rounded-xl border text-center ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
             <Loader2 className="w-6 h-6 mx-auto mb-3 text-slate-400 animate-spin" />
-            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Loading lifetime data...</p>
+            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_loading_lifetime')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: 'Total Clicks', value: totalLifetimeClicks.toLocaleString(), icon: MousePointer2, color: 'amber' },
-              { label: 'Conversion Rate', value: lifetimeConversionRate, icon: Percent, color: 'blue' },
-              { label: 'Invites Sent', value: totalInvitesSent.toLocaleString(), icon: HeartHandshake, color: 'purple' },
-              { label: 'Invites Accepted', value: totalInvitesAccepted.toLocaleString(), icon: CheckCircle2, color: 'emerald' },
+              { label: t('man_total_clicks'), value: totalLifetimeClicks.toLocaleString(), icon: MousePointer2, color: 'amber' },
+              { label: t('man_conversion_rate'), value: lifetimeConversionRate, icon: Percent, color: 'blue' },
+              { label: t('man_invites_sent'), value: totalInvitesSent.toLocaleString(), icon: HeartHandshake, color: 'purple' },
+              { label: t('man_invites_accepted'), value: totalInvitesAccepted.toLocaleString(), icon: CheckCircle2, color: 'emerald' },
             ].map(({ label, value, icon: Icon, color }) => (
               <div
                 key={label}
@@ -584,7 +586,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-violet-500" />
-            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Customer Loyalty</h3>
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_customer_loyalty')}</h3>
           </div>
           {loadingRepeat && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
         </div>
@@ -592,7 +594,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         {!loadingRepeat && repeatData ? (
           repeatData.totalCustomers === 0 ? (
             <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              No redemption data yet. Customers who redeem your deals will appear here.
+              {t('man_no_redemption')}
             </p>
           ) : (
             <>
@@ -600,27 +602,27 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
               <div className="grid grid-cols-3 gap-2 mb-4">
                 <div className={`rounded-lg p-3 text-center ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
                   <p className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{repeatData.totalCustomers}</p>
-                  <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Total Customers</p>
+                  <p className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_total_customers')}</p>
                 </div>
                 <div className={`rounded-lg p-3 text-center ${isDark ? 'bg-violet-500/10' : 'bg-violet-50'}`}>
                   <p className="text-xl font-bold text-violet-500">{repeatData.repeatCustomers}</p>
-                  <p className={`text-[10px] font-medium ${isDark ? 'text-violet-400' : 'text-violet-600'}`}>Repeat</p>
+                  <p className={`text-[10px] font-medium ${isDark ? 'text-violet-400' : 'text-violet-600'}`}>{t('man_repeat')}</p>
                 </div>
                 <div className={`rounded-lg p-3 text-center ${isDark ? 'bg-emerald-500/10' : 'bg-emerald-50'}`}>
                   <p className="text-xl font-bold text-emerald-500">{repeatData.repeatRate}%</p>
-                  <p className={`text-[10px] font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Repeat Rate</p>
+                  <p className={`text-[10px] font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{t('man_repeat_rate')}</p>
                 </div>
               </div>
 
               {/* Frequency breakdown */}
               <div className="mb-4">
-                <p className={`text-[10px] font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Redemption Frequency</p>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_redemption_frequency')}</p>
                 <div className="space-y-1.5">
                   {[
-                    { label: '1 time', count: repeatData.frequencyBreakdown.once, color: 'bg-slate-400' },
-                    { label: '2 times', count: repeatData.frequencyBreakdown.twice, color: 'bg-blue-500' },
-                    { label: '3-5 times', count: repeatData.frequencyBreakdown.threeToFive, color: 'bg-violet-500' },
-                    { label: '6+ times', count: repeatData.frequencyBreakdown.sixPlus, color: 'bg-amber-500' },
+                    { label: t('man_1_time'), count: repeatData.frequencyBreakdown.once, color: 'bg-slate-400' },
+                    { label: t('man_2_times'), count: repeatData.frequencyBreakdown.twice, color: 'bg-blue-500' },
+                    { label: t('man_3_5_times'), count: repeatData.frequencyBreakdown.threeToFive, color: 'bg-violet-500' },
+                    { label: t('man_6_plus_times'), count: repeatData.frequencyBreakdown.sixPlus, color: 'bg-amber-500' },
                   ].filter(r => r.count > 0).map(row => {
                     const pct = repeatData.totalCustomers > 0 ? Math.round((row.count / repeatData.totalCustomers) * 100) : 0;
                     return (
@@ -639,7 +641,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
               {/* Top repeaters */}
               {repeatData.topRepeaters.length > 0 && (
                 <div>
-                  <p className={`text-[10px] font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Top Loyal Customers</p>
+                  <p className={`text-[10px] font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_top_loyal')}</p>
                   <div className="space-y-2">
                     {repeatData.topRepeaters.map((r, i) => (
                       <div key={r.consumerId} className={`flex items-center gap-2.5 p-2 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
@@ -649,8 +651,8 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
                           {i < 3 ? <Crown className="w-3.5 h-3.5" /> : i + 1}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-xs font-medium truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{(r as any).name || 'Customer'}</p>
-                          <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{r.uniqueDeals} different deals</p>
+                          <p className={`text-xs font-medium truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{(r as any).name || t('man_customer')}</p>
+                          <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_n_different_deals').replace('{n}', String(r.uniqueDeals))}</p>
                         </div>
                         <div className={`px-2 py-1 rounded-md ${isDark ? 'bg-violet-500/10' : 'bg-violet-50'}`}>
                           <span className="text-[11px] font-bold text-violet-500">{r.count}x</span>
@@ -665,28 +667,28 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
               <div className={`mt-3 flex items-center gap-2 p-2.5 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
                 <Repeat className="w-4 h-4 text-blue-500" />
                 <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                  Avg {repeatData.avgRedemptionsPerCustomer} redemptions per customer
+                  {t('man_avg_redemptions').replace('{n}', String(repeatData.avgRedemptionsPerCustomer))}
                 </span>
               </div>
             </>
           )
         ) : !loadingRepeat ? (
-          <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Unable to load customer data.</p>
+          <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_unable_customer')}</p>
         ) : null}
       </div>
 
       {/* Product Catalogue Stats */}
       <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Product Catalogue</h3>
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_product_catalogue')}</h3>
           {loadingCatalogue && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
         </div>
 
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: 'Products', value: catalogueStats.activeProducts, icon: Package, color: 'blue' },
-            { label: 'Views', value: catalogueStats.totalViews, icon: Eye, color: 'slate' },
-            { label: 'Likes', value: catalogueStats.totalLikes, icon: Heart, color: 'pink' },
+            { label: t('man_products'), value: catalogueStats.activeProducts, icon: Package, color: 'blue' },
+            { label: t('man_views'), value: catalogueStats.totalViews, icon: Eye, color: 'slate' },
+            { label: t('man_likes'), value: catalogueStats.totalLikes, icon: Heart, color: 'pink' },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className={`rounded-lg p-3 text-center ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
               <Icon className={`w-5 h-5 text-${color}-500 mx-auto mb-1.5`} />
@@ -703,7 +705,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Award className="w-4 h-4 text-amber-500" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Top Performers</h3>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_top_performers')}</h3>
             </div>
             {loadingTopProducts && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
           </div>
@@ -760,7 +762,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
           ) : (
             <div className="text-center py-6">
               <Package className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
-              <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>No product data yet</p>
+              <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_no_product_data')}</p>
             </div>
           )}
         </div>
@@ -771,7 +773,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         <div className={`rounded-xl p-4 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div className="flex items-center gap-2 mb-3">
             <Zap className="w-4 h-4 text-amber-500" />
-            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Smart Insights</h3>
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_smart_insights')}</h3>
           </div>
 
           <div className="space-y-2">
@@ -781,9 +783,9 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
                   <Star className="w-4 h-4 text-emerald-500" />
                 </div>
                 <div>
-                  <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Top Category</p>
+                  <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_top_category')}</p>
                   <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{productInsights.bestCategory}</p>
-                  <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Focus on adding more products in this category</p>
+                  <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_top_category_tip')}</p>
                 </div>
               </div>
             </div>
@@ -794,15 +796,15 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
                   <BarChart3 className="w-4 h-4 text-blue-500" />
                 </div>
                 <div>
-                  <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Avg Performance</p>
+                  <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_avg_performance')}</p>
                   <div className="flex gap-4 mt-1">
                     <div>
                       <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{productInsights.avgViewsPerProduct}</p>
-                      <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>views/product</p>
+                      <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_views_per_product')}</p>
                     </div>
                     <div>
                       <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{productInsights.avgLikesPerProduct}</p>
-                      <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>likes/product</p>
+                      <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_likes_per_product')}</p>
                     </div>
                   </div>
                 </div>
@@ -816,9 +818,9 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
                     <TrendingDown className="w-4 h-4 text-orange-500" />
                   </div>
                   <div>
-                    <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Needs Attention</p>
-                    <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{productInsights.lowPerformerCount} products</p>
-                    <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Update images or descriptions to boost engagement</p>
+                    <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_needs_attention')}</p>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_n_products').replace('{n}', String(productInsights.lowPerformerCount))}</p>
+                    <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_needs_attention_tip')}</p>
                   </div>
                 </div>
               </div>
@@ -832,7 +834,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Award className="w-4 h-4 text-blue-500" />
-            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Performance Score</h3>
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_performance_score')}</h3>
           </div>
           {loadingPerformanceScore && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
         </div>
@@ -870,13 +872,13 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
                 performanceScore.grade === 'Fair' ? isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-600' :
                 isDark ? 'bg-orange-500/10 text-orange-400' : 'bg-orange-50 text-orange-600'
               }`}>
-                {performanceScore.grade}
+                {t('man_grade_' + performanceScore.grade.toLowerCase().replace(/ /g, '_'))}
               </div>
             </div>
 
             {/* Score Breakdown */}
             <div className="space-y-2">
-              <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Score Breakdown</p>
+              <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_score_breakdown')}</p>
               {performanceScore.factors.map((factor) => (
                 <div key={factor.name} className={`rounded-lg p-3 border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
                   <div className="flex items-center justify-between mb-2">
@@ -925,7 +927,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
               <div className={`p-4 rounded-lg border ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
                 <div className="flex items-center gap-2 mb-3">
                   <Zap className="w-4 h-4 text-amber-500" />
-                  <p className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Quick Wins</p>
+                  <p className={`text-xs font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t('man_quick_wins')}</p>
                 </div>
                 <div className="space-y-2">
                   {performanceScore.quickWins.map((win, idx) => (
@@ -946,14 +948,14 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
                 className="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
               >
                 <Brain className="w-4 h-4" />
-                View AI Insights Dashboard
+                {t('man_view_ai_dashboard')}
               </button>
             )}
           </div>
         ) : !loadingPerformanceScore ? (
           <div className="text-center py-6">
             <Award className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
-            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Calculating your performance score...</p>
+            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_calculating_score')}</p>
           </div>
         ) : null}
       </div>
@@ -963,7 +965,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Brain className="w-4 h-4 text-purple-500" />
-            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>AI Recommendations</h3>
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{t('man_ai_recommendations')}</h3>
           </div>
           {loadingAiInsights && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
         </div>
@@ -1002,7 +1004,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
                         <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-medium ${colors.text} ${
                           isDark ? 'bg-slate-800' : 'bg-white'
                         }`}>
-                          {insight.impact}
+                          {t('man_impact_' + insight.impact)}
                         </span>
                       </div>
                       <p className={`text-xs leading-relaxed mb-2 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
@@ -1029,8 +1031,8 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         ) : !loadingAiInsights ? (
           <div className="text-center py-6">
             <Brain className={`w-8 h-8 mx-auto mb-2 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
-            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>AI is analyzing your data...</p>
-            <p className={`text-[10px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Insights will appear as you add products and create deals</p>
+            <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('man_ai_analyzing')}</p>
+            <p className={`text-[10px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('man_ai_analyzing_sub')}</p>
           </div>
         ) : null}
       </div>

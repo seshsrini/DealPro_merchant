@@ -353,7 +353,7 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
              </div>
              <div className={`px-5 py-5 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
                 <div
-                  className={`text-sm font-normal leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-700'} rich-text-content`}
+                  className={`whitespace-pre-line text-sm font-normal leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-700'} rich-text-content`}
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(fullDescription) }}
                 />
              </div>

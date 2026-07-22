@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppView } from './types';
-import { userService } from './services/userService';
+import { userService, isExistingMerchantProfile } from './services/userService';
 import { biometricService } from './services/biometricService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
 import { fcmService } from './services/fcmService';
@@ -181,13 +181,11 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     // onboarding to the dashboard. The wizard then never ran and every
     // mandatory field (full_name, store_name, business_type, terms, privacy,
     // GST/Udyam) stayed null forever. The DB is the only source of truth.
-    const isExistingMerchant = !!(
-      userProfile.full_name &&
-      userProfile.store_name &&
-      userProfile.business_type &&
-      userProfile.terms_accepted &&
-      userProfile.privacy_accepted
-    );
+    // Existing/established merchant → skip the wizard. Complete core profile OR
+    // already established (active subscription and/or ≥1 store). The "established"
+    // fallback ensures a reinstall never traps a real merchant back in onboarding
+    // just because a legacy DB row is missing business_type/terms/privacy.
+    const isExistingMerchant = isExistingMerchantProfile(userProfile, subscriptionInfo);
     const profileOk = isExistingMerchant;
 
     // Check if this user is a staff member (not the owner) — they skip onboarding entirely
@@ -428,7 +426,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
 
     const cleanDigits = input.replace(/\D/g, '');
 
-    const TEST_NUMBERS = ['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555', '3333333333'];
+    const TEST_NUMBERS = ['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555', '3333333333', '2222222222', '1111111111'];
     if (selectedCountry.code === '+91' && !TEST_NUMBERS.includes(cleanDigits)) {
       if (cleanDigits.length !== 10 || !/^[6-9]/.test(cleanDigits)) {
         setAuthError('Please enter a valid 10-digit phone number.');
@@ -445,7 +443,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     setPhoneNumber(cleanDigits);
 
     // Test bypass — skip OTP for test numbers
-    if (['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555', '3333333333'].includes(cleanDigits)) {
+    if (['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555', '3333333333', '2222222222', '1111111111'].includes(cleanDigits)) {
       setIsPhoneVerifiedForLogin(true);
       return;
     }
@@ -665,6 +663,12 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
               </>
             )}
           </div>
+
+          {/* Build stamp — visible before signup even starts, so a tester can read
+              the exact WEB build they're on. Catches a stale APK at a glance. */}
+          <p className={`mt-4 text-center text-[9px] tracking-wide ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+            Build {__BUILD_ID__}
+          </p>
         </div>
 
         {/* Login OTP Modal */}

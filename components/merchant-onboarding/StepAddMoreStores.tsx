@@ -1,26 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Plus, ArrowRight } from 'lucide-react';
+import { MapPin, Plus, ArrowRight, Trash2 } from 'lucide-react';
 import { StoreLocation } from '../../types';
 import { floatIn } from './floatIn';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 interface StepAddMoreStoresProps {
   stores: StoreLocation[];
   brandName: string;
   onAddStore: () => void;
+  /** Remove a store from the list. Omit to hide the delete affordance. */
+  onDeleteStore?: (index: number) => void;
   onNext: () => void;
   onBack?: () => void;
   theme: 'light' | 'dark';
 }
 
 export const StepAddMoreStores: React.FC<StepAddMoreStoresProps> = ({
-  stores, brandName, onAddStore, onNext, onBack, theme
+  stores, brandName, onAddStore, onDeleteStore, onNext, onBack, theme
 }) => {
+  const { t } = useTranslation();
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
+  // Index awaiting delete confirmation. Deleting a store the merchant just typed
+  // an address into is destructive and there's no undo, so the trash icon arms
+  // first and only the second tap removes it.
+  const [confirmIndex, setConfirmIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setVisible(true), 50);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setVisible(true), 50);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -29,10 +37,10 @@ export const StepAddMoreStores: React.FC<StepAddMoreStoresProps> = ({
         <MapPin className="w-8 h-8 text-purple-500" />
       </div>
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Your stores
+        {t('ob_stores_title')}
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        {stores.length === 1 ? '1 store added.' : `${stores.length} stores added.`} Add another?
+        {stores.length === 1 ? t('ob_stores_sub_one') : t('ob_stores_sub_many').replace('{n}', String(stores.length))}
       </p>
 
       {/* Store summary cards */}
@@ -41,19 +49,44 @@ export const StepAddMoreStores: React.FC<StepAddMoreStoresProps> = ({
           <div
             key={i}
             style={floatIn(300 + i * 80, visible)}
-            className={`p-4 rounded-xl border ${
+            className={`p-4 rounded-xl border flex items-start gap-3 ${
               isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
             }`}
           >
-            <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              {s.store_name || brandName || `Store ${i + 1}`}
-            </p>
-            <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              {[s.street, s.locality, s.city, s.state].filter(Boolean).join(', ')}
-            </p>
-            <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              {s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`}
-            </p>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                {s.store_name || brandName || t('ob_store_fallback').replace('{n}', String(i + 1))}
+              </p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                {[s.street, s.locality, s.city, s.state].filter(Boolean).join(', ')}
+              </p>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                {s.is24hrs ? t('ob_addr_open24') : `${s.shift1} - ${s.shift2}`}
+              </p>
+            </div>
+            {/* Delete — hidden when only one store remains, since signup needs at least one */}
+            {onDeleteStore && stores.length > 1 && (
+              <button
+                onClick={() => {
+                  if (confirmIndex === i) {
+                    onDeleteStore(i);
+                    setConfirmIndex(null);
+                  } else {
+                    setConfirmIndex(i);
+                  }
+                }}
+                onBlur={() => setConfirmIndex(prev => (prev === i ? null : prev))}
+                aria-label={t('ob_stores_remove')}
+                className={`shrink-0 rounded-lg transition-all active:scale-95 flex items-center gap-1 ${
+                  confirmIndex === i
+                    ? 'px-2.5 py-1.5 text-[11px] font-semibold bg-red-500 text-white'
+                    : `p-2 ${isDark ? 'text-slate-500 hover:text-red-400' : 'text-slate-400 hover:text-red-500'}`
+                }`}
+              >
+                <Trash2 className="w-4 h-4 shrink-0" />
+                {confirmIndex === i && t('ob_stores_remove')}
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -68,7 +101,7 @@ export const StepAddMoreStores: React.FC<StepAddMoreStoresProps> = ({
         }`}
       >
         <Plus className="w-4 h-4" />
-        Add Another Store
+        {t('ob_stores_add')}
       </button>
 
       <div style={floatIn(600, visible)} className="mt-auto pb-safe-bottom flex gap-3">
@@ -79,14 +112,14 @@ export const StepAddMoreStores: React.FC<StepAddMoreStoresProps> = ({
               isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'
             }`}
           >
-            Back
+            {t('ob_back')}
           </button>
         )}
         <button
           onClick={onNext}
           className="flex-1 h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
-          Continue <ArrowRight className="w-4 h-4" />
+          {t('ob_continue')} <ArrowRight className="w-4 h-4" />
         </button>
       </div>
     </div>

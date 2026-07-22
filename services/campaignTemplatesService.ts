@@ -202,7 +202,9 @@ export const campaignTemplatesService = {
     title = title.replace('{{discount}}', template.suggestedDiscount.toString());
 
     // Generate deal offer with better format
-    const dealOffer = `${template.suggestedDiscount}% Off on <Your Product/Category>`;
+    // No template percentage in the offer: the % baked into the deal image must
+    // come only from the offer/heading the merchant types, never the template's.
+    const dealOffer = 'Special Offer on <Your Product/Category>';
 
     // Generate description based on category
     let description = '';

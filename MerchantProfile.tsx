@@ -377,6 +377,9 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
       {/* Footer */}
       <div className="mt-8 text-center">
         <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_copyright')}</p>
+        {/* Build stamp — lets a tester confirm at a glance they're on the latest web
+            build (baked in at build time; a stale APK shows an old value here). */}
+        <p className={`mt-1 text-[9px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Build {__BUILD_ID__}</p>
       </div>
     </div>
   );

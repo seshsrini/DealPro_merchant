@@ -234,10 +234,12 @@ Deno.serve(async (req) => {
 
     const updatePromises = campaigns.map(async (d: any) => {
       // Only translate if localized fields are missing or empty
-      if (!d.localized_heading || Object.keys(d.localized_heading).length === 0 ||
-          !d.localized_offer || Object.keys(d.localized_offer).length === 0 ||
-          !d.localized_description || Object.keys(d.localized_description).length === 0 ||
-          !d.localized_shop_name || Object.keys(d.localized_shop_name).length === 0) {
+      // <= 1 key means null or English-only (a failed Gemini call stores just
+      // {en:...}); both still need a real translation, so re-translate them.
+      if (Object.keys(d.localized_heading || {}).length <= 1 ||
+          Object.keys(d.localized_offer || {}).length <= 1 ||
+          Object.keys(d.localized_description || {}).length <= 1 ||
+          Object.keys(d.localized_shop_name || {}).length <= 1) {
         
         console.log(`Repairing translations for campaign: ${d.campaign_id}`);
         const translations = await translateCampaignData(

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PartyPopper, Rocket, Store, Sparkles, ArrowRight } from 'lucide-react';
 import { floatIn } from './floatIn';
+import { useTranslation } from '../../contexts/LanguageContext';
 
 interface StepCongratsProps {
   storeName: string;
@@ -13,12 +14,13 @@ interface StepCongratsProps {
 }
 
 export const StepCongrats: React.FC<StepCongratsProps> = ({ storeName, onGoToDashboard, theme, pendingSubscription = false }) => {
+  const { t } = useTranslation();
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setVisible(true), 50);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setVisible(true), 50);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -46,7 +48,7 @@ export const StepCongrats: React.FC<StepCongratsProps> = ({ storeName, onGoToDas
         style={floatIn(200, visible)}
         className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}
       >
-        {pendingSubscription ? 'Almost there!' : "You're all set!"}
+        {pendingSubscription ? t('ob_congrats_title_pending') : t('ob_congrats_title_done')}
       </h2>
 
       <p
@@ -54,17 +56,15 @@ export const StepCongrats: React.FC<StepCongratsProps> = ({ storeName, onGoToDas
         className={`text-sm mb-8 max-w-[280px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
       >
         <strong className={isDark ? 'text-white' : 'text-slate-800'}>{storeName}</strong>{' '}
-        {pendingSubscription
-          ? 'is registered. One last step — set up your subscription on our website to start posting deals.'
-          : 'is ready to go. Start creating deals and reach customers in your area.'}
+        {pendingSubscription ? t('ob_congrats_pending_tail') : t('ob_congrats_done_tail')}
       </p>
 
       {/* What you can do now */}
       <div style={floatIn(500, visible)} className="w-full space-y-2.5 mb-8">
         {[
-          { icon: Store, text: 'Create your first deal', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-          { icon: Rocket, text: 'Launch a Deal of the Day', color: 'text-purple-500', bg: 'bg-purple-500/10' },
-          { icon: Sparkles, text: 'Attract nearby customers', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+          { icon: Store, text: t('ob_congrats_feat_deal'), color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+          { icon: Rocket, text: t('ob_congrats_feat_dotd'), color: 'text-purple-500', bg: 'bg-purple-500/10' },
+          { icon: Sparkles, text: t('ob_congrats_feat_attract'), color: 'text-amber-500', bg: 'bg-amber-500/10' },
         ].map(({ icon: Icon, text, color, bg }, i) => (
           <div
             key={i}
@@ -88,7 +88,7 @@ export const StepCongrats: React.FC<StepCongratsProps> = ({ storeName, onGoToDas
           onClick={onGoToDashboard}
           className="w-full h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
-          {pendingSubscription ? 'Set up subscription' : 'Go to Dashboard'} <ArrowRight className="w-4 h-4" />
+          {pendingSubscription ? t('ob_congrats_cta_setup') : t('ob_congrats_cta_dashboard')} <ArrowRight className="w-4 h-4" />
         </button>
       </div>
     </div>
