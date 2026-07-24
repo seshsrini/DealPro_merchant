@@ -36,15 +36,43 @@ against.
 
 Take a fresh structural dump from the **live DEV** database instead:
 
-```bash
-pg_dump --schema-only --no-owner --no-privileges \
-  "postgresql://postgres:<pw>@db.<dev-ref>.supabase.co:5432/postgres" \
-  > prod-schema.sql
-# review, then apply to the new PROD database
+Easiest path — the wrapper script, which dumps **and audits** the result for
+embedded project URLs, service keys and placeholders before you apply it:
+
+```powershell
+.\scripts\dump-schema-for-prod.ps1 -DbUrl "postgresql://postgres:<pw>@db.<dev-ref>.supabase.co:5432/postgres"
 ```
 
-Afterwards, regenerate `scripts/schema-dump.sql` from the live DB so the committed
-copy stops drifting.
+Or do it by hand:
+
+```powershell
+# Supabase CLI (no Postgres install needed)
+npx supabase db dump --db-url "postgresql://postgres:<pw>@db.<dev-ref>.supabase.co:5432/postgres" `
+  --schema public -f prod-schema.sql
+
+# …or pg_dump, if PostgreSQL client tools are installed
+pg_dump --schema-only --no-owner --no-privileges `
+  --file prod-schema.sql `
+  "postgresql://postgres:<pw>@db.<dev-ref>.supabase.co:5432/postgres"
+```
+
+Windows notes:
+- Use `--file` / `-f`, **not** `> file`. PowerShell redirection can emit UTF-16/BOM,
+  which corrupts the SQL when you feed it back in.
+- Line continuation is a backtick `` ` ``, not a backslash.
+- URL-encode special characters in the password (`@` → `%40`) and keep the whole
+  connection string quoted, or PowerShell will treat `;`/`&` as operators.
+
+Afterwards, regenerate the committed copy from the live DB so it stops drifting:
+
+```powershell
+npx supabase db dump --db-url "postgresql://postgres:<pw>@db.<dev-ref>.supabase.co:5432/postgres" `
+  --schema public -f scripts\schema-dump.sql
+```
+
+⚠ The regenerated file will contain the webhook triggers **including their embedded
+service_role key** — the reason a live key is sitting in the current committed dump.
+Scrub it, or keep the file out of git, and rotate the key.
 
 ---
 

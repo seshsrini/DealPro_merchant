@@ -49,23 +49,13 @@ export const dealOfDayService = {
   },
 
   /**
-   * Upload image for Deal of the Day
-   * Reuses the same upload functionality as regular campaigns
+   * Upload image for Deal of the Day.
+   * Delegates to the SAME Cloudinary path regular campaigns use, so DOTD images
+   * live alongside campaign images in Cloudinary. Previously this called the
+   * `upload-deal-image` edge function, which writes to a Supabase Storage bucket —
+   * inconsistent with everything else and requiring a STORAGE_BUCKET_NAME secret.
    */
   uploadDealImage: async (merchantId: string, file: File): Promise<{ publicUrl: string, imageName: string }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('merchantId', merchantId);
-
-    const { data, error } = await supabase.functions.invoke('upload-deal-image', {
-      body: formData,
-    });
-
-    if (error) {
-      console.error('[dealOfDayService] Failed to upload image:', error);
-      throw new Error('Unable to process deal. Please try again.');
-    }
-
-    return data as { publicUrl: string, imageName: string };
+    return addCampaignService.uploadDealImage(merchantId, file);
   },
 };
