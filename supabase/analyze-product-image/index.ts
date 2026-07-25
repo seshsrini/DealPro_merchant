@@ -8,15 +8,16 @@ const corsHeaders = {
 };
 
 // Try multiple model+endpoint combinations until one works.
-// Some keys/regions only support v1 (not v1beta) and some models are renamed/deprecated.
+// This PROD Gemini key only serves the gemini-3.x family and the "-latest"
+// aliases on v1beta — every versioned gemini-2.x / 1.5 model 404s for it, and v1
+// is not supported. Verified 2026-07 by hitting generateContent directly:
+//   gemini-flash-latest / gemini-flash-lite-latest / gemini-3-flash-preview → 200
+//   gemini-2.5-flash / gemini-2.0-flash / gemini-1.5-* → 404
+// Prefer the "-latest" aliases so this never goes stale on the next model bump.
 const GEMINI_ATTEMPTS: Array<{ model: string; api: 'v1' | 'v1beta' }> = [
-  { model: 'gemini-2.5-flash',     api: 'v1beta' },
-  { model: 'gemini-2.0-flash',     api: 'v1beta' },
-  { model: 'gemini-2.0-flash-001', api: 'v1beta' },
-  { model: 'gemini-1.5-flash',     api: 'v1' },
-  { model: 'gemini-1.5-flash',     api: 'v1beta' },
-  { model: 'gemini-1.5-flash-002', api: 'v1' },
-  { model: 'gemini-flash-latest',  api: 'v1' },
+  { model: 'gemini-flash-latest',      api: 'v1beta' },
+  { model: 'gemini-3-flash-preview',   api: 'v1beta' },
+  { model: 'gemini-flash-lite-latest', api: 'v1beta' },
 ];
 
 const PROMPT = `You are a product cataloguing assistant for "DealPro," an Indian retail deals marketplace.
