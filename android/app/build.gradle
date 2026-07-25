@@ -1,5 +1,14 @@
 apply plugin: 'com.android.application'
 
+// Release signing — reads android/keystore.properties (gitignored). When that
+// file is absent (e.g. a machine without the keystore) the release build falls
+// back to debug signing instead of failing.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace "com.dealpro.merchant"
     compileSdk rootProject.ext.compileSdkVersion
@@ -20,8 +29,21 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            // Sign with the release keystore when keystore.properties is present;
+            // otherwise fall back to debug signing so local builds don't fail.
+            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
             // Enable code obfuscation and shrinking for security
             minifyEnabled true
             shrinkResources true
