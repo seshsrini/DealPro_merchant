@@ -478,6 +478,20 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           </div>
         </div>
 
+        {/* Test escape hatch — shown in the hosted (PLAY_COMPLIANT) view while
+            VITE_ALLOW_TEST_SUBSCRIPTION=true, so testers activate a no-charge PROD
+            subscription without going through live Razorpay. Gone at launch. */}
+        {allowTestBypass && !active && (
+          <button
+            onClick={handleTestBypass}
+            disabled={testBypassing}
+            className="w-full h-11 rounded-xl border border-dashed border-amber-400 bg-amber-50 text-amber-800 text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60"
+          >
+            {testBypassing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+            {testBypassing ? 'Activating test subscription…' : 'Skip Payment (Test Subscription)'}
+          </button>
+        )}
+
         {active && planName ? (
           <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white border-slate-200'}`}>
             <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-2.5 flex items-center gap-2">
