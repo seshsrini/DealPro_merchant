@@ -58,15 +58,20 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Look up tier to get trial days
-    let trialDays = 120;
+    // Trial length from the tier. NO free trial by default — merchants pay from
+    // day one. Only a tier that EXPLICITLY sets trial_period_days > 0 gets one.
+    // (The old default was 120 days, and `if (tier?.trial_period_days)` treated the
+    // intended 0 as "unset" and kept 120 — so every subscription silently got a
+    // 120-day free trial. Use ?? and an explicit >0 guard to avoid both traps.)
+    let trialDays = 0;
     if (tier_id) {
       const { data: tier } = await adminClient
         .from('subscription_tiers')
         .select('trial_period_days')
         .eq('id', tier_id)
         .maybeSingle();
-      if (tier?.trial_period_days) trialDays = tier.trial_period_days;
+      const t = tier?.trial_period_days;
+      if (typeof t === 'number' && t > 0) trialDays = t;
     }
 
     // Deactivate any existing active subscriptions
@@ -76,10 +81,12 @@ Deno.serve(async (req) => {
       .eq('merchant_id', merchantId)
       .eq('status', 'active');
 
-    // Create new subscription with trial
+    // No trial (trialDays 0) → billing starts today: the paid period runs from now.
+    // With a trial, the paid period starts when the trial ends.
     const now = new Date();
-    const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
-    const periodEnd = new Date(trialEnd.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const trialEnd = trialDays > 0 ? new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000) : null;
+    const periodStart = trialEnd ?? now;
+    const periodEnd = new Date(periodStart.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     const { data: sub, error: insertErr } = await adminClient
       .from('merchant_subscriptions')
@@ -89,7 +96,7 @@ Deno.serve(async (req) => {
         plan_name: tier_key,
         status: 'active',
         billing_type: 'manual',
-        trial_end: trialEnd.toISOString(),
+        trial_end: trialEnd ? trialEnd.toISOString() : null,
         current_period_start: now.toISOString(),
         current_period_end: periodEnd.toISOString(),
         cancel_at_period_end: false,
@@ -105,12 +112,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[create-subscription] Created subscription for ${merchantId}: ${tier_name}, trial ends ${trialEnd.toISOString()}`);
+    console.log(`[create-subscription] Created subscription for ${merchantId}: ${tier_name}, ${trialEnd ? 'trial ends ' + trialEnd.toISOString() : 'no trial (billing from day one)'}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        isTrialing: true,
+        isTrialing: trialDays > 0,
         subscription: sub,
         subscriptionId: sub.id,
       }),
