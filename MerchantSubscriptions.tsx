@@ -69,6 +69,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const [error, setError] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selectedTierId, setSelectedTierId] = useState<number | null>(null);
+  // Test-only bypass (VITE_ALLOW_TEST_SUBSCRIPTION=true): activate a pro_test
+  // subscription with no payment, mirroring the signup wizard's Skip Payment
+  // button. Compiles out of real prod builds when the flag is false.
+  const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true';
+  const [testBypassing, setTestBypassing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);
   const [currentTierId, setCurrentTierId] = useState<number | null>(cachedSub?.tier_id ?? null);
@@ -419,6 +424,40 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     }
   };
 
+  // Test-only: create a pro_test subscription without payment. Mirrors
+  // StepSubscription.handleTestBypass. Also clears the payment-pending flag so
+  // App.tsx stops the "Activating your subscription" re-poll/overlay (which
+  // otherwise spins forever in test mode with no real Razorpay webhook).
+  const handleTestBypass = async () => {
+    if (!user.id || testBypassing) return;
+    setTestBypassing(true);
+    setError(null);
+    setNoticeMsg(null);
+    try {
+      const { data, error: efErr } = await supabase.functions.invoke('merchant-subscription', {
+        body: { action: 'create_test_subscription', tier_key: 'pro_test' },
+      });
+      if (efErr || !data?.success) {
+        throw new Error(data?.error || efErr?.message || 'Could not create test subscription.');
+      }
+      clearPaymentPending(); // stop App.tsx's activation re-poll/overlay
+      setUser({
+        ...user,
+        hasActiveSubscription: true,
+        subscription_status: 'active',
+        current_tier_id: data.subscription?.id ?? null,
+      });
+      setNoticeTone('success');
+      setNoticeMsg('Test subscription activated (no payment). You can publish deals now.');
+      await fetchData();
+    } catch (err: any) {
+      console.error('[MerchantSubscriptions] Test bypass error:', err?.message || err);
+      setError(err?.message || 'Test bypass failed.');
+    } finally {
+      setTestBypassing(false);
+    }
+  };
+
   // ── Google Play compliant view ─────────────────────────────────────────────
   // No in-app selling: read-only status + "manage on the web". All plan
   // selection, upgrade/downgrade, prices and in-app checkout are removed here;
@@ -507,6 +546,20 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           <CreditCard className="w-5 h-5 text-blue-500" />
         </div>
       </div>
+
+      {/* Test-only bypass — visible while VITE_ALLOW_TEST_SUBSCRIPTION=true, gone
+          from real prod builds. Activates a pro_test subscription with no payment
+          and clears any stuck payment-pending overlay. */}
+      {allowTestBypass && (
+        <button
+          onClick={handleTestBypass}
+          disabled={testBypassing}
+          className="w-full h-11 rounded-xl border border-dashed border-amber-400 bg-amber-50 text-amber-800 text-sm font-bold flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60"
+        >
+          {testBypassing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+          {testBypassing ? 'Activating test subscription…' : 'Skip Payment (Test Subscription)'}
+        </button>
+      )}
 
       {/* Plan-change confirmation (instant upgrade / parked downgrade / lock) */}
       {noticeMsg && (
