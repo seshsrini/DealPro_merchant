@@ -59,11 +59,13 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
     setOtpError(null);
     setIsSendingOtp(true);
     try {
-      // Test bypass — auto-verify test numbers without Firebase
+      // Test numbers: show the OTP entry screen with a fixed code (123456) — no
+      // SMS, no Firebase. Lets Google Play reviewers exercise the real OTP screen
+      // without receiving an SMS. The code is checked in verifyOtp().
       const digits = phoneNumber.replace(/\D/g, '').slice(-10);
       if (TEST_NUMBERS.includes(digits)) {
-        console.log('[OtpModal] Test number detected, auto-verifying');
-        onVerificationSuccess();
+        setCurrentStep('otpInput');
+        setResendTimer(60);
         return;
       }
 
@@ -97,6 +99,19 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
     setOtpError(null);
     if (otpInput.length !== 6) {
       setOtpError("Please enter the 6-digit OTP.");
+      return;
+    }
+
+    // Test numbers accept the fixed code 123456 (no Firebase). Same success path
+    // as a real verification — onVerificationSuccess() drives the identical login.
+    const testDigits = phoneNumber.replace(/\D/g, '').slice(-10);
+    if (TEST_NUMBERS.includes(testDigits)) {
+      if (otpInput === '123456') {
+        onVerificationSuccess();
+      } else {
+        setOtpError('Invalid OTP. Please try again.');
+        onVerificationError();
+      }
       return;
     }
 

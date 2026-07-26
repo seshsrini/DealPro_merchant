@@ -442,12 +442,10 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     setAuthError(null);
     setPhoneNumber(cleanDigits);
 
-    // Test bypass — skip OTP for test numbers
-    if (['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555', '3333333333', '2222222222', '1111111111'].includes(cleanDigits)) {
-      setIsPhoneVerifiedForLogin(true);
-      return;
-    }
-
+    // Test numbers go through the SAME OTP modal as real numbers (fixed code
+    // 123456, no SMS) so the login flow is identical and reviewable. The modal's
+    // onVerificationSuccess sets isPhoneVerifiedForLogin(true) — exactly what the
+    // old instant-bypass did — so the login outcome is unchanged.
     const fullPhone = `${selectedCountry.code}${cleanDigits}`;
     setOtpPhoneNumber(fullPhone);
     setShowOtpModal(true);
