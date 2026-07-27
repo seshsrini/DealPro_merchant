@@ -100,6 +100,10 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
   const [showPincodeDropdown, setShowPincodeDropdown] = useState(false);
   const pincodeSuggestRef = useRef<number | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
+  // "Find my store location" checkbox — opt-in GPS auto-fill of the full address,
+  // same as the signup store-address step (StepStoreAddress).
+  const [useMyLocation, setUseMyLocation] = useState(false);
+  const [findingLocation, setFindingLocation] = useState(false);
   const [storeCategories, setStoreCategories] = useState<string[]>(FALLBACK_CATEGORIES);
   const [deletingStoreId, setDeletingStoreId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -375,6 +379,33 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
       }
     } catch {}
     setGpsLoading(false);
+  };
+
+  // "Find my store location" — opt-in GPS auto-fill of the FULL address (street,
+  // locality, city, state, pincode), mirroring the signup store-address step.
+  // Fills EMPTY fields only, never overwrites what the merchant already typed.
+  const handleFindMyLocation = async () => {
+    setFindingLocation(true);
+    try {
+      const coords = await locationsearchService.getCurrentLocation();
+      if (!coords) { setUseMyLocation(false); return; }
+      setForm(f => ({ ...f, latitude: coords.latitude, longitude: coords.longitude }));
+      const full = await locationsearchService.reverseGeocodeFull(coords.latitude, coords.longitude);
+      if (full) {
+        setForm(f => ({
+          ...f,
+          address:  f.address  || (full.street ? full.street.slice(0, 80) : f.address),
+          locality: f.locality || full.locality || f.locality,
+          city:     f.city     || full.city     || f.city,
+          state:    f.state    || full.state    || f.state,
+          pincode:  (f.pincode && f.pincode.length >= 6) ? f.pincode : (full.pincode || f.pincode),
+        }));
+      }
+    } catch {
+      setUseMyLocation(false);
+    } finally {
+      setFindingLocation(false);
+    }
   };
 
   const handleSave = async () => {
@@ -764,6 +795,33 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
 
               {/* Scrollable form */}
               <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-24 space-y-4">
+                {/* Find my store location — opt-in GPS auto-fill (same as signup) */}
+                <label className={`flex items-start gap-2.5 cursor-pointer p-3 rounded-xl border ${
+                  isDark ? 'bg-blue-500/5 border-blue-500/20' : 'bg-blue-50/60 border-blue-200'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={useMyLocation}
+                    disabled={findingLocation}
+                    onChange={(e) => {
+                      setUseMyLocation(e.target.checked);
+                      if (e.target.checked) handleFindMyLocation();
+                    }}
+                    className="w-4 h-4 rounded accent-blue-600 mt-0.5 shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <span className={`text-sm font-semibold flex items-center gap-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {findingLocation
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                        : <Navigation className="w-3.5 h-3.5 text-blue-500" />}
+                      {t('ob_addr_find_location')}
+                    </span>
+                    <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {t('ob_addr_find_location_hint')}
+                    </span>
+                  </div>
+                </label>
+
                 {/* Store Name */}
                 <div>
                   <label className={labelClass}>Store / Branch Name <span className="text-red-500">*</span></label>
