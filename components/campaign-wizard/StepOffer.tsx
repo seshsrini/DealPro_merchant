@@ -158,11 +158,11 @@ export const StepOffer: React.FC<StepOfferProps> = ({ value, onChange, onNext, o
           {(() => {
             const bucket = bucketForCategory(storeCategory);
             const keys: Record<OfferBucket, string[]> = {
-              retail: ['m_offer_q1', 'm_offer_q2', 'm_offer_q3', 'm_offer_q4', 'm_offer_q5', 'm_offer_q6', 'm_offer_q7', 'm_offer_q8'],
-              food:   ['m_offer_food_1', 'm_offer_food_2', 'm_offer_food_3', 'm_offer_food_4', 'm_offer_food_5', 'm_offer_food_6', 'm_offer_food_7', 'm_offer_food_8'],
-              service:['m_offer_service_1', 'm_offer_service_2', 'm_offer_service_3', 'm_offer_service_4', 'm_offer_service_5', 'm_offer_service_6', 'm_offer_service_7', 'm_offer_service_8'],
-              pro:    ['m_offer_pro_1', 'm_offer_pro_2', 'm_offer_pro_3', 'm_offer_pro_4', 'm_offer_pro_5', 'm_offer_pro_6', 'm_offer_pro_7', 'm_offer_pro_8'],
-              hybrid: ['m_offer_hybrid_1', 'm_offer_hybrid_2', 'm_offer_hybrid_3', 'm_offer_hybrid_4', 'm_offer_hybrid_5', 'm_offer_hybrid_6', 'm_offer_hybrid_7', 'm_offer_hybrid_8'],
+              retail: ['m_offer_q1', 'm_offer_q2', 'm_offer_q3', 'm_offer_q4', 'm_offer_q5', 'm_offer_q6', 'm_offer_q7', 'm_offer_q8', 'm_offer_q9', 'm_offer_q10', 'm_offer_q11', 'm_offer_q12'],
+              food:   ['m_offer_food_1', 'm_offer_food_2', 'm_offer_food_3', 'm_offer_food_4', 'm_offer_food_5', 'm_offer_food_6', 'm_offer_food_7', 'm_offer_food_8', 'm_offer_food_9', 'm_offer_food_10'],
+              service:['m_offer_service_1', 'm_offer_service_2', 'm_offer_service_3', 'm_offer_service_4', 'm_offer_service_5', 'm_offer_service_6', 'm_offer_service_7', 'm_offer_service_8', 'm_offer_service_9', 'm_offer_service_10'],
+              pro:    ['m_offer_pro_1', 'm_offer_pro_2', 'm_offer_pro_3', 'm_offer_pro_4', 'm_offer_pro_5', 'm_offer_pro_6', 'm_offer_pro_7', 'm_offer_pro_8', 'm_offer_pro_9', 'm_offer_pro_10'],
+              hybrid: ['m_offer_hybrid_1', 'm_offer_hybrid_2', 'm_offer_hybrid_3', 'm_offer_hybrid_4', 'm_offer_hybrid_5', 'm_offer_hybrid_6', 'm_offer_hybrid_7', 'm_offer_hybrid_8', 'm_offer_hybrid_9', 'm_offer_hybrid_10'],
             };
             return keys[bucket].map((k) => t(k));
           })().map((chip) => (

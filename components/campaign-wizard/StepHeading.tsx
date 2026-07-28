@@ -134,7 +134,7 @@ export const StepHeading: React.FC<StepHeadingProps> = ({ value, onChange, onNex
           {t('m_examples')}
         </p>
         <div className="space-y-2">
-          {[t('m_example_1'), t('m_example_2'), t('m_example_3'), t('m_example_4')].map((ex) => (
+          {[t('m_example_1'), t('m_example_2'), t('m_example_3'), t('m_example_4'), t('m_example_5'), t('m_example_6'), t('m_example_7'), t('m_example_8')].map((ex) => (
             <button
               key={ex}
               onClick={() => onChange(ex)}
