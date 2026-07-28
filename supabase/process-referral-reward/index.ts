@@ -1,24 +1,29 @@
 /**
  * process-referral-reward Edge Function
  *
- * Called by the check_referral_reward() SQL trigger via pg_net when a merchant
- * hits the referral threshold (e.g., 20 qualified referrals in a calendar month).
+ * Grants a referral reward: a near-free next billing cycle on the referrer's
+ * active subscription. Invoked by the process_merchant_referral() SQL trigger
+ * (via pg_net) when a referrer crosses the monthly referral threshold
+ * (app_configs.referral_reward_threshold).
  *
- * 1. Defers Google Play billing by 30 days (purchases.subscriptions.defer)
- * 2. Updates merchant_subscriptions in Supabase
- * 3. Logs the reward in merchant_rewards_log
- * 4. Sends a congratulatory push notification / in-app message
+ * Why an offer, not a cash payout: RazorpayX payouts aren't available to a
+ * proprietorship, so instead of paying the merchant we discount ONE billing
+ * cycle to Razorpay's ~₹1 minimum via a Subscription OFFER attached to their
+ * existing subscription (schedule_change_at = cycle_end, so it applies to the
+ * NEXT cycle and reverts afterwards). The offer is a single-cycle PERCENTAGE
+ * discount created once in the Razorpay Dashboard — its id lives in
+ * app_configs.referral_reward_offer_id ({"offer_id":"offer_xxx"}). A percentage
+ * offer scales to every tier (₹199…₹2499), unlike a flat amount.
  *
- * Required Supabase secrets:
- *   GOOGLE_SERVICE_ACCOUNT_JSON — JSON key for androidpublisher scope
- *   GOOGLE_PLAY_PACKAGE_NAME — e.g. "com.dealpro.merchant"
+ * Legacy (non-Razorpay) subscriptions fall back to grant_free_month() — a 30-day
+ * DB period extension (their billing is our custom run, which honours the date).
+ *
+ * Idempotent: one reward per merchant per calendar month, keyed on
+ * merchant_rewards_log (merchant_id, reward_month). The trigger also guards this,
+ * but we re-check so a manual/retried invoke can't double-reward.
+ *
+ * Required Supabase secrets: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET (live).
  */
-
-// @ts-ignore
-declare const Deno: {
-  env: { get(key: string): string | undefined };
-  serve: (handler: (req: Request) => Promise<Response> | Response) => void;
-};
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.49.1';
 
@@ -28,306 +33,116 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-// ──────────────────────────────────────────────
-//  Google OAuth2 — service account JWT → access token
-// ──────────────────────────────────────────────
-
-async function getGoogleAccessToken(serviceAccountJson: string): Promise<string> {
-  const sa = JSON.parse(serviceAccountJson);
-  const now = Math.floor(Date.now() / 1000);
-
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const claims = {
-    iss: sa.client_email,
-    scope: 'https://www.googleapis.com/auth/androidpublisher',
-    aud: 'https://oauth2.googleapis.com/token',
-    iat: now,
-    exp: now + 3600,
-  };
-
-  const encode = (obj: Record<string, unknown>) =>
-    btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-
-  const unsignedToken = `${encode(header)}.${encode(claims)}`;
-
-  const pemBody = sa.private_key
-    .replace(/-----BEGIN PRIVATE KEY-----/, '')
-    .replace(/-----END PRIVATE KEY-----/, '')
-    .replace(/\s/g, '');
-  const keyBuffer = Uint8Array.from(atob(pemBody), (c: string) => c.charCodeAt(0));
-
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    keyBuffer,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-
-  const signatureBuffer = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    new TextEncoder().encode(unsignedToken)
-  );
-
-  const signature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-
-  const jwt = `${unsignedToken}.${signature}`;
-
-  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
-  });
-
-  if (!tokenRes.ok) {
-    const errBody = await tokenRes.text();
-    throw new Error(`Google OAuth token exchange failed: ${tokenRes.status} ${errBody}`);
-  }
-
-  const tokenData = await tokenRes.json();
-  return tokenData.access_token;
-}
-
-// ──────────────────────────────────────────────
-//  Google Play — Defer subscription billing
-// ──────────────────────────────────────────────
-
-async function deferPlaySubscription(
-  accessToken: string,
-  packageName: string,
-  subscriptionId: string,
-  purchaseToken: string,
-  newExpiryTimeMillis: number
-): Promise<{ success: boolean; newExpiryTimeMillis?: string; error?: string }> {
-  const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${subscriptionId}/tokens/${purchaseToken}:defer`;
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      deferralInfo: {
-        expectedExpiryTimeMillis: String(Date.now() + 86400000), // rough current expiry
-        desiredExpiryTimeMillis: String(newExpiryTimeMillis),
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const errBody = await res.text();
-    console.error('[process-referral-reward] Google defer API error:', res.status, errBody);
-    return { success: false, error: `Google API ${res.status}: ${errBody}` };
-  }
-
-  const data = await res.json();
-  return {
-    success: true,
-    newExpiryTimeMillis: data.newExpiryTimeMillis,
-  };
-}
-
-// ──────────────────────────────────────────────
-//  Edge Function handler
-// ──────────────────────────────────────────────
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const googleSaJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON');
-  const packageName = Deno.env.get('GOOGLE_PLAY_PACKAGE_NAME') || 'com.dealpro.merchant';
-
-  const supabase = createClient(supabaseUrl, serviceRoleKey);
-
-  // SECURITY: deployed with --no-verify-jwt. This is an INTERNAL endpoint, invoked
-  // ONLY by the referral DB trigger (migrations/00015_referral_stacking.sql) which
-  // sends `Authorization: Bearer <service_role_key>`. Require that exact bearer so
-  // an anonymous caller can't POST a body merchant_id and extend any merchant's
-  // paid period by 30 days at will.
-  //
-  // ⚠️ PREREQUISITE before deploying this function: the DB GUC
-  //    app.settings.service_role_key MUST be set (the trigger reads it via
-  //    current_setting). If it is empty, the trigger sends an empty bearer and
-  //    this check will reject it — i.e. referral rewards would stop. Verify with:
-  //      SELECT current_setting('app.settings.service_role_key', true);
-  //    and set (Supabase SQL editor, postgres role) with:
-  //      ALTER DATABASE postgres SET app.settings.service_role_key = '<service_role_key>';
-  //    then reconnect, before deploying this version.
-  {
-    const authToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
-    const expected = serviceRoleKey ?? '';
-    // constant-time compare (length check first is acceptable for a long secret)
-    let ok = authToken.length > 0 && authToken.length === expected.length;
-    let diff = 0;
-    for (let i = 0; i < authToken.length && i < expected.length; i++) {
-      diff |= authToken.charCodeAt(i) ^ expected.charCodeAt(i);
-    }
-    ok = ok && diff === 0;
-    if (!ok) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-      );
-    }
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const body = await req.json();
-    const { merchant_id, subscription_id: subDbId, referral_count } = body;
-    const refCount = Number(referral_count) || 10;
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
 
-    if (!merchant_id) {
-      return new Response(
-        JSON.stringify({ error: 'Missing merchant_id' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
+    const { merchant_id } = await req.json();
+    if (!merchant_id) return json({ error: 'merchant_id is required' }, 400);
 
-    console.log(`[process-referral-reward] Processing reward for merchant ${merchant_id}`);
+    // reward_month = first day of the current month (YYYY-MM-01) — the idempotency key.
+    const now = new Date();
+    const rewardMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
 
-    // ── 1. Fetch the active subscription ──
-    const { data: sub, error: subErr } = await supabase
+    // Idempotency: at most one reward per merchant per month.
+    const { data: already } = await supabase
+      .from('merchant_rewards_log')
+      .select('id')
+      .eq('merchant_id', merchant_id)
+      .eq('reward_month', rewardMonth)
+      .maybeSingle();
+    if (already) return json({ skipped: 'already rewarded this month' });
+
+    // The referrer's active subscription.
+    const { data: sub } = await supabase
       .from('merchant_subscriptions')
-      .select('*')
+      .select('id, razorpay_subscription_id, billing_type, current_period_end, status')
       .eq('merchant_id', merchant_id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
+    if (!sub) return json({ skipped: 'no active subscription for merchant' });
 
-    if (subErr || !sub) {
-      console.error('[process-referral-reward] No active subscription:', subErr);
-      return new Response(
-        JSON.stringify({ error: 'No active subscription found' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
-      );
-    }
+    // Qualified referrals this month — for the audit log only.
+    const { count: refCount } = await supabase
+      .from('merchant_referrals')
+      .select('*', { count: 'exact', head: true })
+      .eq('referrer_id', merchant_id)
+      .eq('status', 'qualified')
+      .gte('qualified_at', rewardMonth);
 
-    const currentEnd = new Date(sub.trial_end || sub.current_period_end || Date.now());
-    const newEnd = new Date(currentEnd.getTime() + 30 * 86400000); // +30 days
-    const isInTrial = sub.trial_end && new Date(sub.trial_end) > new Date();
-
-    // ── 2. Defer Google Play billing (if Google Play subscription) ──
-    let googleDeferred = false;
-    if (sub.billing_type === 'google_play' && sub.subscription_id && googleSaJson) {
-      try {
-        const accessToken = await getGoogleAccessToken(googleSaJson);
-
-        // Determine the Google product ID from plan_name
-        const productId = tierKeyToProductId(sub.plan_name);
-
-        const deferResult = await deferPlaySubscription(
-          accessToken,
-          packageName,
-          productId,
-          sub.subscription_id,  // this is the purchaseToken
-          newEnd.getTime()
-        );
-
-        if (deferResult.success) {
-          googleDeferred = true;
-          console.log(`[process-referral-reward] Google Play billing deferred to ${newEnd.toISOString()}`);
-        } else {
-          console.error('[process-referral-reward] Google defer failed:', deferResult.error);
-          // Continue anyway — update our DB even if Google defer fails
-          // (merchant still gets the local extension; Google sync can be retried)
-        }
-      } catch (err: any) {
-        console.error('[process-referral-reward] Google defer error:', err.message);
+    // ── Razorpay Autopay path: attach the one-cycle discount offer ──────────────
+    if (sub.razorpay_subscription_id) {
+      const { data: cfg } = await supabase
+        .from('app_configs')
+        .select('config_value')
+        .eq('config_key', 'referral_reward_offer_id')
+        .maybeSingle();
+      const cv: any = cfg?.config_value;
+      const offerId: string | null = cv?.offer_id || (typeof cv === 'string' ? cv : null);
+      if (!offerId) {
+        console.error('[process-referral-reward] referral_reward_offer_id not set in app_configs');
+        return json({ error: 'referral_reward_offer_id not configured' }, 500);
       }
-    }
 
-    // ── 3. Update merchant_subscriptions ──
-    const updateFields: Record<string, any> = {
-      current_period_end: newEnd.toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+      const keyId = Deno.env.get('RAZORPAY_KEY_ID');
+      const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET');
+      if (!keyId || !keySecret) return json({ error: 'Razorpay keys not configured' }, 500);
+      const auth = btoa(`${keyId}:${keySecret}`);
 
-    if (isInTrial) {
-      updateFields.trial_end = newEnd.toISOString();
-    }
+      // Attach the offer to the EXISTING subscription. schedule_change_at=cycle_end
+      // → it discounts the NEXT billing cycle, then the subscription reverts to the
+      // normal amount (the offer itself is configured single-cycle in the Dashboard).
+      const rzpRes = await fetch(
+        `https://api.razorpay.com/v1/subscriptions/${sub.razorpay_subscription_id}`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ offer_id: offerId, schedule_change_at: 'cycle_end', customer_notify: 1 }),
+        },
+      );
+      if (!rzpRes.ok) {
+        const errText = await rzpRes.text();
+        console.error('[process-referral-reward] Razorpay offer attach failed:', rzpRes.status, errText.slice(0, 300));
+        return json({ error: `Razorpay offer attach failed (${rzpRes.status}): ${errText}` }, 502);
+      }
 
-    const { error: updateErr } = await supabase
-      .from('merchant_subscriptions')
-      .update(updateFields)
-      .eq('id', sub.id);
-
-    if (updateErr) {
-      console.error('[process-referral-reward] Subscription update error:', updateErr);
-      throw updateErr;
-    }
-
-    // ── 4. Log to merchant_rewards_log ──
-    await supabase
-      .from('merchant_rewards_log')
-      .insert({
+      // Audit + idempotency marker. days_extended=0 — it's a discount, not an extension.
+      await supabase.from('merchant_rewards_log').insert({
         merchant_id,
-        reward_type: 'free_month',
-        referral_count: refCount,
-        reward_month: new Date().toISOString().slice(0, 10).replace(/-\d{2}$/, '-01'), // first of month
-        days_extended: 30,
-        old_end_date: currentEnd.toISOString(),
-        new_end_date: newEnd.toISOString(),
+        reward_type: 'free_month_offer',
+        referral_count: refCount ?? 0,
+        reward_month: rewardMonth,
+        days_extended: 0,
+        old_end_date: sub.current_period_end,
+        new_end_date: sub.current_period_end,
       });
 
-    // ── 5. Send in-app notification ──
-    try {
-      await supabase
-        .from('notification_logs')
-        .insert({
-          merchant_id,
-          notification_type: 'referral_reward',
-          channel: 'in_app',
-          subject: 'You earned a free month!',
-          body: `Amazing! You hit ${refCount} referrals this month. Your next DealPro bill has been pushed back by 30 days!`,
-          status: 'sent',
-        });
-    } catch (notifErr: any) {
-      console.error('[process-referral-reward] Notification insert error:', notifErr.message);
-      // Non-fatal — reward still granted
+      console.log(`[process-referral-reward] Attached offer ${offerId} to ${sub.razorpay_subscription_id} (merchant ${merchant_id})`);
+      return json({ success: true, method: 'razorpay_offer', subscription_id: sub.razorpay_subscription_id, offer_id: offerId });
     }
 
-    console.log(`[process-referral-reward] Reward granted for merchant ${merchant_id}. Extended to ${newEnd.toISOString()}. Google deferred: ${googleDeferred}`);
+    // ── Legacy (non-Razorpay) path: extend the DB period by 30 days ─────────────
+    // grant_free_month() finds the active sub, extends trial_end/current_period_end
+    // by 30 days, and logs to merchant_rewards_log itself.
+    const { error: rpcErr } = await supabase.rpc('grant_free_month', { m_id: merchant_id });
+    if (rpcErr) {
+      console.error('[process-referral-reward] grant_free_month failed:', rpcErr.message);
+      return json({ error: rpcErr.message }, 500);
+    }
+    return json({ success: true, method: 'grant_free_month' });
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        merchant_id,
-        old_end: currentEnd.toISOString(),
-        new_end: newEnd.toISOString(),
-        google_play_deferred: googleDeferred,
-        days_extended: 30,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    );
-
-  } catch (error: any) {
-    console.error('[process-referral-reward] Error:', error.message);
-    return new Response(
-      JSON.stringify({ error: error.message || 'Internal Server Error' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    );
+  } catch (err: any) {
+    console.error('[process-referral-reward] Error:', err?.message);
+    return json({ error: err?.message || 'Internal error' }, 500);
   }
 });
-
-// ──────────────────────────────────────────────
-//  Helpers
-// ──────────────────────────────────────────────
-
-function tierKeyToProductId(tierKey: string): string {
-  const map: Record<string, string> = {
-    'starter': 'dealpro_starter_monthly',
-    'growth': 'dealpro_growth_monthly',
-    'pro': 'dealpro_pro_monthly',
-  };
-  return map[tierKey] || `dealpro_${tierKey}_monthly`;
-}
