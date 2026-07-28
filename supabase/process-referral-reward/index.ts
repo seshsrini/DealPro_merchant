@@ -36,6 +36,30 @@ const corsHeaders = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
+// A Razorpay subscription OFFER is scoped to one payment method, so we keep two
+// (UPI + Card) and attach the one that matches the subscription's mandate. This
+// reads the method from the subscription's latest invoice payment.
+async function getSubscriptionMethod(subId: string, auth: string): Promise<string> {
+  try {
+    const invRes = await fetch(
+      `https://api.razorpay.com/v1/invoices?subscription_id=${subId}&count=10`,
+      { headers: { Authorization: `Basic ${auth}` } },
+    );
+    if (!invRes.ok) return 'unknown';
+    const inv = await invRes.json();
+    const paymentId = (inv.items || []).map((i: any) => i.payment_id).find((p: any) => !!p);
+    if (!paymentId) return 'unknown';
+    const payRes = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    if (!payRes.ok) return 'unknown';
+    const pay = await payRes.json();
+    return pay.method || 'unknown'; // 'upi' | 'card' | …
+  } catch {
+    return 'unknown';
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -82,22 +106,30 @@ Deno.serve(async (req) => {
 
     // ── Razorpay Autopay path: attach the one-cycle discount offer ──────────────
     if (sub.razorpay_subscription_id) {
+      const keyId = Deno.env.get('RAZORPAY_KEY_ID');
+      const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET');
+      if (!keyId || !keySecret) return json({ error: 'Razorpay keys not configured' }, 500);
+      const auth = btoa(`${keyId}:${keySecret}`);
+
+      // Offer ids per payment method (a subscription offer is method-scoped):
+      //   app_configs.referral_reward_offer_id = {"upi":"offer_...","card":"offer_..."}
       const { data: cfg } = await supabase
         .from('app_configs')
         .select('config_value')
         .eq('config_key', 'referral_reward_offer_id')
         .maybeSingle();
-      const cv: any = cfg?.config_value;
-      const offerId: string | null = cv?.offer_id || (typeof cv === 'string' ? cv : null);
-      if (!offerId) {
-        console.error('[process-referral-reward] referral_reward_offer_id not set in app_configs');
-        return json({ error: 'referral_reward_offer_id not configured' }, 500);
-      }
+      const cv: any = cfg?.config_value || {};
 
-      const keyId = Deno.env.get('RAZORPAY_KEY_ID');
-      const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET');
-      if (!keyId || !keySecret) return json({ error: 'Razorpay keys not configured' }, 500);
-      const auth = btoa(`${keyId}:${keySecret}`);
+      // Attach the offer matching the subscription's mandate method.
+      const method = await getSubscriptionMethod(sub.razorpay_subscription_id, auth);
+      const offerId: string | null =
+        method === 'card' ? (cv.card || null)
+        : method === 'upi' ? (cv.upi || null)
+        : (cv.upi || cv.card || null); // unknown → best effort
+      if (!offerId) {
+        console.error(`[process-referral-reward] no offer configured for method=${method}`);
+        return json({ error: `referral_reward_offer_id for method '${method}' not configured` }, 500);
+      }
 
       // Attach the offer to the EXISTING subscription. schedule_change_at=cycle_end
       // → it discounts the NEXT billing cycle, then the subscription reverts to the
@@ -127,8 +159,8 @@ Deno.serve(async (req) => {
         new_end_date: sub.current_period_end,
       });
 
-      console.log(`[process-referral-reward] Attached offer ${offerId} to ${sub.razorpay_subscription_id} (merchant ${merchant_id})`);
-      return json({ success: true, method: 'razorpay_offer', subscription_id: sub.razorpay_subscription_id, offer_id: offerId });
+      console.log(`[process-referral-reward] Attached ${method} offer ${offerId} to ${sub.razorpay_subscription_id} (merchant ${merchant_id})`);
+      return json({ success: true, method: 'razorpay_offer', payment_method: method, subscription_id: sub.razorpay_subscription_id, offer_id: offerId });
     }
 
     // ── Legacy (non-Razorpay) path: extend the DB period by 30 days ─────────────
