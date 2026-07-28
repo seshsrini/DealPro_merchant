@@ -212,9 +212,6 @@ export const StepTemplate: React.FC<StepTemplateProps> = ({
                             {template.description}
                           </p>
                           <div className="mt-auto pt-2 flex items-center gap-2">
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/20 text-white">
-                              {template.suggestedDiscount}% off
-                            </span>
                             <span className="text-[10px] font-medium text-white/60">
                               {template.durationDays}d
                             </span>
@@ -257,9 +254,6 @@ export const StepTemplate: React.FC<StepTemplateProps> = ({
                             {template.description}
                           </p>
                           <div className="mt-auto pt-2 flex items-center gap-2">
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/20 text-white">
-                              {template.suggestedDiscount}% off
-                            </span>
                             <span className="text-[10px] font-medium text-white/60">
                               {template.durationDays}d
                             </span>
