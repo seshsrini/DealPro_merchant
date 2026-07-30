@@ -14,6 +14,7 @@ import { PaymentPlans } from './PaymentPlans'; // Import PaymentPlans
 import { BankVerification } from './BankVerification'; // NEW: Import BankVerification
 import { MerchantAnalytics } from './MerchantAnalytics'; // Import MerchantAnalytics
 import { MerchantCatalogue } from './MerchantCatalogue';
+import { CatalogueLocked } from './components/CatalogueLocked';
 import { SmartNotifications } from './SmartNotifications'; // Import SmartNotifications
 import { MerchantAIInsights } from './MerchantAIInsights'; // Import AI Insights Dashboard
 import { MerchantStores } from './MerchantStores';
@@ -50,13 +51,14 @@ interface MerchantStackProps {
   setIsScanning: (val: boolean) => void;
   preSelectedTab?: CampaignTab | null;
   setPreSelectedTab?: (tab: CampaignTab | null) => void;
+  catalogueLocked?: boolean;
 }
 
 export const MerchantStack: React.FC<MerchantStackProps> = ({
   view, setView, user, setUser, deals, loading, setLoading, theme, refreshDeals,
   dealIdToEdit, setDealIdToEdit, onClearDealIdToEdit,
   isScanning, setIsScanning,
-  preSelectedTab, setPreSelectedTab
+  preSelectedTab, setPreSelectedTab, catalogueLocked = false
 }) => {
   // Product wizard edit state (local to MerchantStack)
   const [editProduct, setEditProduct] = useState<CatalogueItem | null>(null);
@@ -205,7 +207,9 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
   else if (view === 'help_feedback') currentView = <HelpFeedback user={user} setView={setView} theme={theme} />;
   else if (view === 'merchant_analytics') currentView = <MerchantAnalytics user={user} theme={theme} setView={setView} />;
   else if (view === 'merchant_catalogue') currentView = (
-    <MerchantCatalogue user={user} theme={theme} setView={setView} setEditProduct={setEditProduct} />
+    catalogueLocked
+      ? <CatalogueLocked theme={theme} onUpgrade={() => setView('merchant_subscriptions')} />
+      : <MerchantCatalogue user={user} theme={theme} setView={setView} setEditProduct={setEditProduct} />
   );
   else if (view === 'product_wizard') currentView = (
     <ProductWizard

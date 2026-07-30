@@ -12,6 +12,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { setSentryUser } from './services/sentryService';
 import { InviteCodeScreen } from './components/InviteCodeScreen';
 import { Header, MerchantBottomNav } from './components/Navigation';
+import { useCatalogueAccessLocked } from './hooks/useCatalogueAccess';
 import { DealProLogo } from './components/DealProLogo';
 import { MerchantOnboarding } from './MerchantOnboarding';
 import { QRscan } from './QRscan';
@@ -102,6 +103,12 @@ const AppContent: React.FC = () => {
     hasActiveSubscription: false, // Initialize subscription status
   });
   const [deals, setDeals] = useState<Deal[]>([]);
+
+  // Catalogue is not included in the ₹199 plan. Re-checked on every app
+  // load/reload (and whenever the merchant changes) so an upgrade unlocks it
+  // without a reinstall. Drives both the grayed-out bottom-nav tab and the
+  // blocked catalogue view. Fails open for non-merchants / lookup errors.
+  const catalogueLocked = useCatalogueAccessLocked(user);
 
   // OTP Modal State for Merchant Phone Verification during Registration
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -915,12 +922,13 @@ const AppContent: React.FC = () => {
                 setIsScanning={setIsScanning}
                 preSelectedTab={preSelectedTab}
                 setPreSelectedTab={setPreSelectedTab}
+                catalogueLocked={catalogueLocked}
               />
               </PermissionsProvider>
             ) : null}
           </main>
           {user.isLoggedIn && user.role === 'merchant' && !['verify_phone', 'merchant_onboarding', 'privacy_policy', 'terms_of_service'].includes(view) && (
-            <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} />
+            <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} catalogueLocked={catalogueLocked} />
           )}
 
           <QRscan
