@@ -597,6 +597,14 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
         <div className="px-6 space-y-3">
           {activeStores.map(store => {
             const hrs = parseStoreHrs(store.store_hrs);
+            // Compose ONE consistent full address for every store. Stores added via
+            // different flows (typed / GPS / pincode) populate different fields, so
+            // showing only `address` made some cards look full and others sparse.
+            // Joining all present parts renders a uniform address regardless.
+            const streetPart = [store.address, store.landmark ? `nr ${store.landmark}` : '']
+              .map(s => (s || '').trim()).filter(Boolean).join(', ');
+            const fullAddress = [streetPart, store.locality, store.city, store.state]
+              .map(s => (s || '').trim()).filter(Boolean).join(', ');
             return (
               <div
                 key={store.id}
@@ -607,9 +615,6 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                     <h3 className={`text-sm font-semibold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {store.store_name}
                     </h3>
-                    <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
-                      {store.city}, {store.state}
-                    </p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
@@ -688,8 +693,8 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                   )}
                   <div className="flex items-start gap-2">
                     <MapPin className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
-                    <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
-                      {store.address}{store.landmark ? `, nr ${store.landmark}` : ''}
+                    <span className={`text-xs leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
+                      {fullAddress || '—'}
                     </span>
                   </div>
                   {store.pincode && (
