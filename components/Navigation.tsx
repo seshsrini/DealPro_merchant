@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Ticket, Languages, ChevronDown, Search, Bell, LayoutGrid } from 'lucide-react';
+import { Home, Zap, Heart, User, ChevronLeft, Sun, Moon, LayoutDashboard, BarChart3, List, Ticket, Languages, ChevronDown, Search, Bell, LayoutGrid, Lock } from 'lucide-react';
 import { AppView, Locale, User as UserType } from '../types';
 import { useTranslation } from '../contexts/LanguageContext';
 import { usePermissions } from '../contexts/PermissionsContext';
@@ -185,7 +185,7 @@ const MERCHANT_VIEW_TO_TAB: Record<string, AppView> = {
   help_feedback: 'profile',
 };
 
-export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view: AppView) => void; theme: 'light' | 'dark' }> = ({ currentView, setView, theme }) => {
+export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view: AppView) => void; theme: 'light' | 'dark'; catalogueLocked?: boolean }> = ({ currentView, setView, theme, catalogueLocked = false }) => {
   const isDark = theme === 'dark';
   const { can } = usePermissions();
   const { t } = useTranslation();
@@ -222,17 +222,29 @@ export const MerchantBottomNav: React.FC<{ currentView: AppView; setView: (view:
           const Icon = tab.icon;
           const isActive = activeTabId === tab.id;
           const activeColor = isDark ? 'text-amber-400' : 'text-amber-600';
+          // Catalogue is not included in the ₹199 plan — show the tab but grayed
+          // out and non-clickable (a small lock replaces the active highlight).
+          const isLocked = catalogueLocked && tab.id === 'merchant_catalogue';
 
           return (
             <button
               key={tab.id}
               id={tab.tourId}
-              onClick={() => setView(tab.id as AppView)}
+              onClick={() => { if (!isLocked) setView(tab.id as AppView); }}
+              disabled={isLocked}
+              aria-disabled={isLocked}
               className={`relative flex flex-col items-center justify-center gap-1 pt-2.5 pb-1.5 flex-1 min-w-0 transition-colors ${
-                isActive ? activeColor : isDark ? 'text-slate-400' : 'text-slate-500'
+                isLocked
+                  ? `opacity-40 cursor-not-allowed ${isDark ? 'text-slate-500' : 'text-slate-400'}`
+                  : isActive ? activeColor : isDark ? 'text-slate-400' : 'text-slate-500'
               }`}
             >
-              {isActive && (
+              {isLocked && (
+                <span className={`absolute top-1 right-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  <Lock className="w-3 h-3" />
+                </span>
+              )}
+              {isActive && !isLocked && (
                 <span className={`absolute top-0 h-[3px] w-8 rounded-full ${isDark ? 'bg-amber-400' : 'bg-amber-500'}`} />
               )}
               {/* Persistent highlight behind the ACTIVE tab — a soft amber glow so
