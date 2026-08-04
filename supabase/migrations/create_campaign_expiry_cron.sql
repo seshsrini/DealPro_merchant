@@ -14,10 +14,11 @@
 -- tabs read the status column, so they depend on this cron.
 -- ============================================================================
 
--- Ensure pg_cron is enabled
-CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
-GRANT USAGE ON SCHEMA cron TO postgres;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA cron TO postgres;
+-- pg_cron must already be enabled (Supabase Dashboard -> Database -> Extensions).
+-- We intentionally do NOT run `CREATE EXTENSION pg_cron` / GRANTs here: on Supabase
+-- that re-triggers pg_cron's internal grant script and fails with
+-- "2BP01: dependent privileges exist". cron.schedule() below works with the
+-- default postgres privileges once the extension is enabled.
 
 -- Function: expire campaigns whose last valid day (end_date) has passed in IST.
 CREATE OR REPLACE FUNCTION public.expire_ended_campaigns()
