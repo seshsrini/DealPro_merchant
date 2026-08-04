@@ -41,6 +41,7 @@ import { MediaLightbox } from './components/MediaLightbox';
 import { POSTER_TEMPLATES, openDealPoster, buildPosterHtml, type PosterTemplate } from './utils/printDealPoster';
 import { renderPosterMiniMock } from './components/PosterMiniMock';
 import { DealsLoader } from './components/DealsLoader';
+import { CustomerReviews } from './components/CustomerReviews';
 import { pickBadgeCornerForImage, BadgeCorner } from './utils/badgeCornerForImage';
 
 const EDIT_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
@@ -1096,6 +1097,10 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Customer reviews — same summary + reviews the consumer sees, so the
+                  merchant can gauge how their deals are landing. */}
+              <CustomerReviews merchantId={deal.merchantId || user.id} theme={theme} />
 
               {/* Edit button if within window */}
               {deal.created_at && getTimeRemaining(deal.created_at) > 0 && (
