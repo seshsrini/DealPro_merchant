@@ -1098,9 +1098,9 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                 </div>
               </div>
 
-              {/* Customer reviews — same summary + reviews the consumer sees, so the
-                  merchant can gauge how their deals are landing. */}
-              <CustomerReviews merchantId={deal.merchantId || user.id} theme={theme} />
+              {/* Customer reviews — store-specific, same summary + reviews the consumer
+                  sees, so the merchant can gauge how THIS store's deals are landing. */}
+              <CustomerReviews storeId={(deal as any).store_id} merchantId={deal.merchantId || user.id} theme={theme} />
 
               {/* Edit button if within window */}
               {deal.created_at && getTimeRemaining(deal.created_at) > 0 && (

@@ -4,7 +4,10 @@ import { useTranslation } from '../contexts/LanguageContext';
 import { reviewsService, MerchantReview } from '../services/reviewsService';
 
 interface Props {
-  merchantId: string;
+  // Ratings are store-specific — pass the store. merchantId is a fallback for older
+  // data / callers without a store.
+  storeId?: string | null;
+  merchantId?: string | null;
   theme: 'light' | 'dark';
 }
 
@@ -26,9 +29,11 @@ function Stars({ rating, sizeClass, isDark }: { rating: number; sizeClass: strin
   );
 }
 
-export const CustomerReviews: React.FC<Props> = ({ merchantId, theme }) => {
+export const CustomerReviews: React.FC<Props> = ({ storeId, merchantId, theme }) => {
   const isDark = theme === 'dark';
   const { t } = useTranslation();
+  const scope = { storeId, merchantId };
+  const scopeKey = storeId || merchantId || '';
 
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -42,7 +47,7 @@ export const CustomerReviews: React.FC<Props> = ({ merchantId, theme }) => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const data = await reviewsService.getMerchantReviews(merchantId, 0, FIRST_PAGE);
+      const data = await reviewsService.getMerchantReviews(scope, 0, FIRST_PAGE);
       if (cancelled) return;
       if (data) {
         setAverage(data.average);
@@ -54,17 +59,19 @@ export const CustomerReviews: React.FC<Props> = ({ merchantId, theme }) => {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [merchantId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
 
   const loadMore = useCallback(async () => {
     setLoadingMore(true);
-    const data = await reviewsService.getMerchantReviews(merchantId, reviews.length, NEXT_PAGE);
+    const data = await reviewsService.getMerchantReviews(scope, reviews.length, NEXT_PAGE);
     if (data) {
       setReviews((prev) => [...prev, ...(data.reviews || [])]);
       setHasMore(!!data.has_more);
     }
     setLoadingMore(false);
-  }, [merchantId, reviews.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey, reviews.length]);
 
   // Loading placeholder (keeps layout height stable on first paint).
   if (loading) {
@@ -122,14 +129,14 @@ export const CustomerReviews: React.FC<Props> = ({ merchantId, theme }) => {
 
       {/* Written reviews */}
       {reviews.length === 0 ? (
-        <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('reviews_no_written')}</p>
+        <p className={`text-xs ${isDark ? 'text-white' : 'text-slate-400'}`}>{t('reviews_no_written')}</p>
       ) : (
         <div className="space-y-4">
           {reviews.map((r, i) => (
             <div key={i} className={`pb-4 ${i < reviews.length - 1 ? `border-b ${isDark ? 'border-slate-800' : 'border-slate-100'}` : ''}`}>
               <div className="flex items-center justify-between mb-1">
                 <Stars rating={r.rating} sizeClass="w-3.5 h-3.5" isDark={isDark} />
-                <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{fmtDate(r.created_at)}</span>
+                <span className={`text-[10px] ${isDark ? 'text-white' : 'text-slate-400'}`}>{fmtDate(r.created_at)}</span>
               </div>
               <p className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{r.comments}</p>
             </div>

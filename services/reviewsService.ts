@@ -17,14 +17,24 @@ export interface MerchantReviews {
 
 export const reviewsService = {
   /**
-   * Fetch the merchant's rating aggregate + a page of written reviews.
-   * First call: offset 0, limit 10. "Show more": offset = loaded count, limit 20.
+   * Fetch a STORE's rating aggregate + a page of written reviews (ratings are
+   * store-specific). Pass { storeId } for a store; { merchantId } is a fallback for
+   * older data / callers with no store. First call: offset 0, limit 10.
+   * "Show more": offset = loaded count, limit 20.
    */
-  async getMerchantReviews(merchantId: string, offset = 0, limit = 10): Promise<MerchantReviews | null> {
+  async getMerchantReviews(
+    scope: { storeId?: string | null; merchantId?: string | null } | string,
+    offset = 0,
+    limit = 10,
+  ): Promise<MerchantReviews | null> {
+    // Back-compat: a bare string is treated as a merchantId.
+    const s = typeof scope === 'string' ? { merchantId: scope } : scope;
+    const body: Record<string, unknown> = { offset, limit };
+    if (s.storeId) body.store_id = s.storeId;
+    else if (s.merchantId) body.merchant_id = s.merchantId;
+    else return null;
     try {
-      const { data, error } = await supabase.functions.invoke('get-merchant-reviews', {
-        body: { merchant_id: merchantId, offset, limit },
-      });
+      const { data, error } = await supabase.functions.invoke('get-merchant-reviews', { body });
       if (error || !data || (data as any).error) {
         console.warn('[reviewsService] getMerchantReviews failed:', error || (data as any)?.error);
         return null;
