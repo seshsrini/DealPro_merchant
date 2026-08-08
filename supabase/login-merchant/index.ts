@@ -313,6 +313,17 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Robust lockout: a disabled/resigned staff member (suspended membership, owns
+    // no store of their own, no active membership) may not log in — deny with a
+    // clear message instead of silently dropping them into an empty account.
+    const { data: __canAct } = await adminClient.rpc('merchant_is_active_actor', { p_user_id: merchantProfile.id });
+    if (__canAct === false) {
+      console.log('[MerchantOtpLogin] Denying disabled staff login:', merchantProfile.id);
+      return new Response(JSON.stringify({ error: 'ACCESS_DISABLED', message: 'Your access has been disabled by the store owner. Please contact them if this is a mistake.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403,
+      });
+    }
+
     console.log('[MerchantOtpLogin] Merchant found:', merchantProfile.id, 'role:', merchantProfile.role, 'staff_role:', staffRole);
 
     // Store invite_code on existing merchant if provided and not already set

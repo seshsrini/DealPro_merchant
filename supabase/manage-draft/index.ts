@@ -41,6 +41,15 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Unauthorized: token ${reason}`);
     }
 
+    // Robust staff lockout: block a suspended/removed staff member (false only when
+    // the user has staff rows but none active). Fail-open on null.
+    const { data: __actorOk } = await authClient.rpc('merchant_is_active_actor', { p_user_id: user.id });
+    if (__actorOk === false) {
+      return new Response(JSON.stringify({ error: 'ACCESS_DISABLED', message: 'Your access has been disabled by the store owner.' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // ── Body ──
     const body = await req.json();
     const action = String(body?.action || '');

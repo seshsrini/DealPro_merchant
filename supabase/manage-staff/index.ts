@@ -269,7 +269,7 @@ Deno.serve(async (req) => {
       // Prevent modifying owner
       const { data: target } = await adminClient
         .from('merchant_staff')
-        .select('role, merchant_id')
+        .select('user_id, role, merchant_id')
         .eq('id', staff_id)
         .single();
 
@@ -290,7 +290,33 @@ Deno.serve(async (req) => {
 
       await adminClient.from('merchant_staff').update(updates).eq('id', staff_id);
 
+      // Robust lockout: when suspending, revoke the staff member's existing Supabase
+      // sessions so their app can't refresh past its current (≤1h) access token.
+      // Best-effort — the per-request active-actor gate is the hard guarantee, so a
+      // failure here (e.g. older GoTrue) does NOT weaken the block on server actions.
+      if (updates.status === 'suspended' && target.user_id) {
+        try {
+          await fetch(`${supabaseUrl}/auth/v1/admin/users/${target.user_id}/logout`, {
+            method: 'POST',
+            headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+          });
+          console.log('[manage-staff] Revoked sessions for suspended staff:', target.user_id);
+        } catch (e: any) {
+          console.warn('[manage-staff] session revoke failed (non-fatal):', e?.message);
+        }
+      }
+
       return new Response(JSON.stringify({ success: true }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ─── ACTION: session_check ─── (client polls this to self-eject when disabled)
+    if (action === 'session_check') {
+      const { data: active } = await adminClient.rpc('merchant_is_active_actor', { p_user_id: user.id });
+      // Fail-open: treat null (RPC not yet deployed) as active so a rollout gap
+      // never logs everyone out; only an explicit false ejects the user.
+      return new Response(JSON.stringify({ active: active !== false }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

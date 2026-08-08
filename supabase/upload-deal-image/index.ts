@@ -22,6 +22,13 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader)
     if (authError || !user) throw new Error('Auth failed: ' + authError?.message)
 
+    // Robust staff lockout: block a suspended/removed staff member (false only when
+    // the user has staff rows but none active). Fail-open on null.
+    const { data: __actorOk } = await supabase.rpc('merchant_is_active_actor', { p_user_id: user.id })
+    if (__actorOk === false) {
+      return new Response(JSON.stringify({ error: 'ACCESS_DISABLED', message: 'Your access has been disabled by the store owner.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     const formData = await req.formData()
     const file = formData.get('file') as File
     const merchantId = formData.get('merchantId')
