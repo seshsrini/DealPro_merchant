@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ArrowRight } from 'lucide-react';
 import { bannerService, ActiveBanner } from '../services/bannerService';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
 
@@ -69,38 +70,55 @@ export const SleepingBanner: React.FC<Props> = ({ userId, audience, isHome, them
   };
 
   return (
-    <div className="fixed inset-0 z-[900] bg-black/60 flex items-center justify-center px-6">
-      <div className={`w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-white'}`}>
-        {banner.image_url && (
-          <img
-            src={banner.image_url}
-            alt=""
-            className="w-full h-40 object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
+    // Full-screen banner constrained to the app's mobile frame (max-w-md) so a
+    // desktop browser shows a phone-width column, not the whole viewport. Warm
+    // amber / orange / yellow gradient surface.
+    <div className={`fixed inset-0 z-[900] flex justify-center ${isDark ? 'bg-black/70' : 'bg-black/50'}`}>
+      <div className="relative w-full max-w-md h-full flex flex-col select-none overflow-hidden bg-gradient-to-br from-amber-100 via-orange-100 to-yellow-50">
+        {/* Hero image */}
+        {banner.image_url ? (
+          <div className="relative w-full h-[42%] overflow-hidden shrink-0">
+            <img
+              src={banner.image_url}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }}
+            />
+            {/* fade the image into the warm background so text below reads cleanly */}
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-orange-100 to-transparent" />
+          </div>
+        ) : (
+          <div className="pt-16 shrink-0" />
         )}
-        <div className="p-5 text-center">
-          <h3 className={`text-lg font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>{banner.title}</h3>
+
+        {/* Content */}
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-8 overflow-y-auto">
+          <h2 className="text-2xl font-bold mb-4 leading-tight text-slate-900">
+            {banner.title}
+          </h2>
           {/* message supports basic formatting (bold / line breaks), sanitized */}
           <div
-            className={`text-sm leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-700'}`}
+            className="text-base leading-relaxed max-w-md text-slate-700"
             dangerouslySetInnerHTML={{ __html: sanitizeHtml(banner.message) }}
           />
           {canLink && (
             <button
               onClick={onLinkTap}
-              className={`mt-3 text-sm font-semibold underline underline-offset-2 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}
+              className="mt-6 text-base font-semibold underline underline-offset-4 text-orange-700"
             >
               {banner.link_label}
             </button>
           )}
         </div>
-        <div className="px-5 pb-5">
+
+        {/* Bottom action — arrow to acknowledge, like the onboarding "next" button */}
+        <div className="px-8 pb-10 pt-4 shrink-0 flex justify-end">
           <button
             onClick={dismiss}
-            className="w-full h-11 rounded-xl bg-amber-500 text-white text-sm font-bold active:scale-[0.98] transition-all"
+            aria-label="Got it"
+            className="w-14 h-14 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white flex items-center justify-center active:scale-90 transition-all shadow-lg"
           >
-            OK
+            <ArrowRight className="w-6 h-6" />
           </button>
         </div>
       </div>
