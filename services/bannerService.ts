@@ -3,20 +3,23 @@ import { supabase } from './supabaseClient';
 export interface ActiveBanner {
   id: string;
   title: string;
-  message: string;
+  message: string;              // may contain basic HTML (<b>, <br>, <a>, …)
   image_url: string | null;
+  link_label: string | null;    // CTA text
+  link_url: string | null;      // external URL (opens browser)
+  link_search: string | null;   // in-app deal-search term (consumer)
 }
 
 export const bannerService = {
-  /** The active, un-acknowledged banner for this user/audience (or null). */
+  /** The active, un-acknowledged banner for this user/audience (or null). Geo is
+   *  resolved server-side from the user's profile / stores. */
   async getActiveBanner(
     audience: 'consumer' | 'merchant',
     userId: string,
-    city?: string | null,
   ): Promise<ActiveBanner | null> {
     try {
       const { data, error } = await supabase.functions.invoke('get-active-banner', {
-        body: { audience, user_id: userId, city: city || undefined },
+        body: { audience, user_id: userId },
       });
       if (error || !data || (data as any).error) return null;
       return ((data as any).banner as ActiveBanner) || null;

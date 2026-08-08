@@ -937,7 +937,6 @@ const AppContent: React.FC = () => {
             <SleepingBanner
               userId={user.id}
               audience="merchant"
-              city={(user as any).home_location || null}
               isHome={view === 'merchant_dashboard'}
               theme={theme}
             />
