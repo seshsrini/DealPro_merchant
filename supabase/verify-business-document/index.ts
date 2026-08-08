@@ -216,6 +216,11 @@ Deno.serve(async (req) => {
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) return json({ error: 'Unauthorized' }, 401);
 
+    // Robust staff lockout: block a suspended/removed staff member (false only when
+    // the user has staff rows but none active). Fail-open on null.
+    const { data: __actorOk } = await userClient.rpc('merchant_is_active_actor', { p_user_id: user.id });
+    if (__actorOk === false) return json({ error: 'ACCESS_DISABLED', message: 'Your access has been disabled by the store owner.' }, 403);
+
     const { doc_type, number, legal_name } = await req.json();
     if (!PREFIX[doc_type as DocType]) return json({ error: 'Invalid doc_type' }, 400);
     if (!number || typeof number !== 'string' || number.trim().length < 4) {

@@ -85,6 +85,13 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
     });
 
+    // Robust staff lockout: block a suspended/removed staff member (false only when
+    // the user has staff rows but none active). Fail-open on null.
+    const { data: __actorOk } = await serviceRoleSupabase.rpc('merchant_is_active_actor', { p_user_id: (user as any).id });
+    if (__actorOk === false) {
+      return new Response(JSON.stringify({ success: false, error: 'ACCESS_DISABLED', message: 'Your access has been disabled by the store owner.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 });
+    }
+
     const { merchantId, encryptedAccountNumber, ifscCode, bankName, branchName, accountType } = await req.json();
 
     // 1. Validate Input Data

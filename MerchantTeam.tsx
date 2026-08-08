@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, Users, UserPlus, Shield, ShieldCheck, ShieldAlert,
   Copy, Check, X, Loader2, ChevronDown, MoreVertical,
-  Send, Clock, Ban, UserCog, Trash2, Settings,
+  Send, Clock, Ban, Trash2, Settings,
 } from 'lucide-react';
 import { AppView, User } from './types';
 import { merchantStaffService, StaffMember, StaffInvite } from './services/merchantStaffService';
@@ -272,31 +272,35 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
                       </div>
                     </div>
                     {isOwner && !isMemberOwner && !isMe && (
-                      <div className="relative">
-                        <button
-                          onClick={() => setActiveMenuId(activeMenuId === member.id ? null : member.id)}
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
+                      <div className="flex items-center gap-2">
+                        {/* Role dropdown — promote to Manager / demote to Staff */}
+                        <select
+                          value={member.role}
+                          onChange={(e) => handleChangeRole(member.id, e.target.value as 'manager' | 'staff')}
+                          className={`text-[11px] font-semibold rounded-lg px-2 py-1.5 border outline-none cursor-pointer ${isDark ? 'bg-slate-700 text-white border-slate-600' : 'bg-slate-50 text-slate-900 border-slate-200'}`}
                         >
-                          <MoreVertical className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
-                        </button>
-                        {activeMenuId === member.id && (
-                          <div className={`absolute right-0 top-9 w-44 rounded-xl shadow-lg border z-50 overflow-hidden ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
-                            <button
-                              onClick={() => handleChangeRole(member.id, member.role === 'manager' ? 'staff' : 'manager')}
-                              className={`w-full px-4 py-2.5 text-left text-xs font-medium flex items-center gap-2 ${isDark ? 'hover:bg-slate-700 text-slate-300' : 'hover:bg-slate-50 text-slate-700'}`}
-                            >
-                              <UserCog className="w-3.5 h-3.5" />
-                              {member.role === 'manager' ? t('m_demote_staff') : t('m_promote_manager')}
-                            </button>
-                            <button
-                              onClick={() => handleSuspend(member.id)}
-                              className="w-full px-4 py-2.5 text-left text-xs font-medium flex items-center gap-2 text-red-500 hover:bg-red-50"
-                            >
-                              <Ban className="w-3.5 h-3.5" />
-                              {t('m_suspend')}
-                            </button>
-                          </div>
-                        )}
+                          <option value="manager">{ROLE_CONFIG.manager.label}</option>
+                          <option value="staff">{ROLE_CONFIG.staff.label}</option>
+                        </select>
+                        <div className="relative">
+                          <button
+                            onClick={() => setActiveMenuId(activeMenuId === member.id ? null : member.id)}
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
+                          >
+                            <MoreVertical className={`w-4 h-4 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />
+                          </button>
+                          {activeMenuId === member.id && (
+                            <div className={`absolute right-0 top-9 w-44 rounded-xl shadow-lg border z-50 overflow-hidden ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                              <button
+                                onClick={() => handleSuspend(member.id)}
+                                className="w-full px-4 py-2.5 text-left text-xs font-medium flex items-center gap-2 text-red-500 hover:bg-red-50"
+                              >
+                                <Ban className="w-3.5 h-3.5" />
+                                {t('m_suspend')}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

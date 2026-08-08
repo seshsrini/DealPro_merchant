@@ -61,6 +61,17 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: req.headers.get('Authorization') || '' } },
     });
 
+    // Robust staff lockout: block a suspended/removed staff member even with a
+    // still-valid session. merchant_is_active_actor returns false only when the
+    // user has staff rows but none active. Fail-open on null (RPC not deployed /
+    // transient) so legitimate merchants are never blocked by a glitch.
+    const { data: __actorOk } = await supabase.rpc('merchant_is_active_actor', { p_user_id: user.id });
+    if (__actorOk === false) {
+      return new Response(JSON.stringify({ success: false, error: 'ACCESS_DISABLED', message: 'Your access has been disabled by the store owner.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403,
+      });
+    }
+
     const { claimData, merchantId } = await req.json();
     console.log('[VerifyScan] Merchant:', merchantId, 'scanning claim');
 

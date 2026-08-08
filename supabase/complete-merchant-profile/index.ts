@@ -41,6 +41,15 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Robust staff lockout: block a suspended/removed staff member (false only when
+    // the user has staff rows but none active). Fail-open on null.
+    const { data: __actorOk } = await userClient.rpc('merchant_is_active_actor', { p_user_id: user.id });
+    if (__actorOk === false) {
+      return new Response(JSON.stringify({ error: 'ACCESS_DISABLED', message: 'Your access has been disabled by the store owner.' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403,
+      });
+    }
+
     const adminClient = createClient(supabaseUrl, serviceKey);
     const body = await req.json();
 

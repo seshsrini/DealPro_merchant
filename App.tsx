@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AppView, User, Deal } from './types'; // Import User type
 import { biometricService, hydrateSessionFromDurableStore, logBootDiagnostics } from './services/biometricService';
+import { staffLockoutService } from './services/staffLockoutService';
+import { fcmService } from './services/fcmService';
 import { AuthStack } from './AuthStack';
 import { MemberJoin } from './memberJoin';
 import { MerchantStack } from './MerchantStack';
@@ -364,6 +366,43 @@ const AppContent: React.FC = () => {
       stateListener?.remove();
     };
   }, [user.id, user.isLoggedIn, user.role, pollForSubscriptionActivation]);
+
+  // ── Staff lockout guard ──────────────────────────────────────────────────
+  // If the owner disables this staff member, eject them from the app promptly:
+  // poll the backend on login, on every app resume, and every few minutes. On an
+  // explicit "disabled" answer we sign out and bounce to login with a message.
+  // (Server-side per-request gates already block every sensitive action; this is
+  // what closes the open app.) Owners always resolve to active, so this is a
+  // no-op for them.
+  useEffect(() => {
+    if (!user.isLoggedIn || user.role !== 'merchant' || !user.id) return;
+
+    let cancelled = false;
+    const forceLogout = async () => {
+      if (cancelled) return;
+      cancelled = true;
+      try { await fcmService.unregisterToken(); await fcmService.cleanup(); } catch { /* ignore */ }
+      try { await biometricService.clearSession(); } catch { /* ignore */ }
+      setUser({ id: '', username: '', isLoggedIn: false, role: 'user', access_token: null, refresh_token: null } as any);
+      setView('login');
+      try { alert('Your access has been disabled by the store owner.'); } catch { /* ignore */ }
+    };
+
+    const check = async () => {
+      const active = await staffLockoutService.isActive();
+      if (!active) await forceLogout();
+    };
+
+    check(); // immediate check on login/mount
+    const interval = setInterval(check, 3 * 60 * 1000); // every 3 minutes
+
+    let stateListener: { remove: () => void } | undefined;
+    CapApp.addListener('appStateChange', ({ isActive }: { isActive: boolean }) => {
+      if (isActive) check(); // re-check whenever the app is foregrounded
+    }).then((l) => { stateListener = l; }).catch(() => {});
+
+    return () => { cancelled = true; clearInterval(interval); stateListener?.remove(); };
+  }, [user.id, user.isLoggedIn, user.role]);
 
   // Update Supabase client session whenever user.access_token changes
   const wasLoggedInRef = useRef(false);
