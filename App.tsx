@@ -13,6 +13,7 @@ import { setSentryUser } from './services/sentryService';
 import { InviteCodeScreen } from './components/InviteCodeScreen';
 import { Header, MerchantBottomNav } from './components/Navigation';
 import { useCatalogueAccessLocked } from './hooks/useCatalogueAccess';
+import { SleepingBanner } from './components/SleepingBanner';
 import { DealProLogo } from './components/DealProLogo';
 import { MerchantOnboarding } from './MerchantOnboarding';
 import { QRscan } from './QRscan';
@@ -929,6 +930,17 @@ const AppContent: React.FC = () => {
           </main>
           {user.isLoggedIn && user.role === 'merchant' && !['verify_phone', 'merchant_onboarding', 'privacy_policy', 'terms_of_service'].includes(view) && (
             <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} catalogueLocked={catalogueLocked} />
+          )}
+
+          {/* Sleeping banner — silent 60s poll; pops once on the dashboard when active */}
+          {user.isLoggedIn && user.role === 'merchant' && user.id && (
+            <SleepingBanner
+              userId={user.id}
+              audience="merchant"
+              city={(user as any).home_location || null}
+              isHome={view === 'merchant_dashboard'}
+              theme={theme}
+            />
           )}
 
           <QRscan

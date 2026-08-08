@@ -1,44 +1,36 @@
 import { supabase } from './supabaseClient';
 
-export interface BannerUpdateData {
-  topic: string;
-  heading: string;
-  description: string;
-  images: string[];
+export interface ActiveBanner {
+  id: string;
+  title: string;
+  message: string;
+  image_url: string | null;
 }
 
-/**
- * Banner Service
- * Handles updating banner/hoarding data for marketing displays
- */
 export const bannerService = {
-  /**
-   * Update a specific banner by hoarding number
-   */
-  async updateBanner(hoarding_no: number, data: BannerUpdateData): Promise<{ success: boolean; error: any }> {
+  /** The active, un-acknowledged banner for this user/audience (or null). */
+  async getActiveBanner(
+    audience: 'consumer' | 'merchant',
+    userId: string,
+    city?: string | null,
+  ): Promise<ActiveBanner | null> {
     try {
-      console.log('[bannerService] Updating banner:', hoarding_no, data);
-
-      const { data: result, error } = await supabase.functions.invoke('update-banners', {
-        body: {
-          hoarding_no,
-          topic: data.topic,
-          heading: data.heading,
-          description: data.description,
-          images: data.images
-        }
+      const { data, error } = await supabase.functions.invoke('get-active-banner', {
+        body: { audience, user_id: userId, city: city || undefined },
       });
-
-      if (error) {
-        console.error('[bannerService] Error updating banner:', error);
-        return { success: false, error: 'Unable to update banner. Please try again.' };
-      }
-
-      console.log('[bannerService] Successfully updated banner:', hoarding_no);
-      return { success: true, error: null };
-    } catch (err: any) {
-      console.error('[bannerService] Exception updating banner:', err);
-      return { success: false, error: 'Unable to update banner. Please try again.' };
+      if (error || !data || (data as any).error) return null;
+      return ((data as any).banner as ActiveBanner) || null;
+    } catch {
+      return null;
     }
-  }
+  },
+
+  /** Mark a banner acknowledged (tapped OK) so it never shows again for this user. */
+  async ackBanner(bannerId: string, userId: string): Promise<void> {
+    try {
+      await supabase.functions.invoke('ack-banner', { body: { banner_id: bannerId, user_id: userId } });
+    } catch {
+      /* best-effort; a missed ack just means it may reappear next poll */
+    }
+  },
 };
