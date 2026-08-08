@@ -76,7 +76,9 @@ class FirebaseAuthService {
           (event) => {
             console.error('[FirebaseAuth] phoneVerificationFailed event:', event.message);
             cleanup();
-            reject(new Error('Phone verification failed.'));
+            // Surface the real Firebase message (code included) so it reaches the
+            // UI — reviewers/testers can't read logcat.
+            reject(new Error(event.message || 'Phone verification failed.'));
           }
         );
 
@@ -123,7 +125,9 @@ class FirebaseAuthService {
         throw new Error('SMS quota exceeded. Please try again later.');
       }
 
-      throw new Error('Failed to send OTP. Please try again.');
+      // DIAGNOSTIC: surface Firebase's real reason (reviewers/testers can't read
+      // logcat). Revert to the generic message once OTP send is confirmed working.
+      throw new Error(error?.message ? `Send failed: ${error.message}` : 'Failed to send OTP. Please try again.');
     }
   }
 
