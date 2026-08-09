@@ -8,6 +8,7 @@ export interface ActiveBanner {
   link_label: string | null;    // CTA text
   link_url: string | null;      // external URL (opens browser)
   link_search: string | null;   // in-app deal-search term (consumer)
+  audience?: string;             // 'consumer' | 'merchant' | 'both' - client-side guard
 }
 
 export const bannerService = {
@@ -22,7 +23,11 @@ export const bannerService = {
         body: { audience, user_id: userId },
       });
       if (error || !data || (data as any).error) return null;
-      return ((data as any).banner as ActiveBanner) || null;
+      const banner = ((data as any).banner as ActiveBanner) || null;
+      // Defensive: never surface a banner meant for a different audience (guards a
+      // stale/misfiltering server). 'both' is valid for either app.
+      if (banner && banner.audience && banner.audience !== audience && banner.audience !== 'both') return null;
+      return banner;
     } catch {
       return null;
     }

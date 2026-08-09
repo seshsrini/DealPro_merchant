@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Bell } from 'lucide-react';
-import { notificationInsightsService, SmartNotification } from '../services/notificationInsightsService';
+import { notificationInsightsService, notificationReadState, SmartNotification } from '../services/notificationInsightsService';
 
 interface NotificationBadgeProps {
   merchantId: string;
@@ -33,6 +33,8 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
     setLoading(true);
     try {
       const smartNotifications = await notificationInsightsService.getAllSmartNotifications(merchantId);
+      // Forget read-ids for alerts that no longer exist (so a recurring one re-badges).
+      notificationReadState.prune(merchantId, smartNotifications.map((n) => n.id));
       setNotifications(smartNotifications);
     } catch (error) {
       console.error('[NotificationBadge] Error fetching notifications:', error);
@@ -41,7 +43,9 @@ export const NotificationBadge: React.FC<NotificationBadgeProps> = ({
     }
   };
 
-  const totalCount = notifications.length;
+  // Only count alerts the merchant hasn't already seen (opening the panel marks
+  // them read), so the badge clears and stays clear instead of sticking at N.
+  const totalCount = notificationReadState.unreadCount(merchantId, notifications);
 
   return (
     <button

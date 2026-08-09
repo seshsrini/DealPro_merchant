@@ -17,7 +17,7 @@ import {
   ChevronRight,
   RefreshCw,
 } from 'lucide-react';
-import { notificationInsightsService, SmartNotification } from './services/notificationInsightsService';
+import { notificationInsightsService, notificationReadState, SmartNotification } from './services/notificationInsightsService';
 
 interface SmartNotificationsProps {
   user: User;
@@ -46,6 +46,9 @@ export const SmartNotifications: React.FC<SmartNotificationsProps> = ({
     try {
       const smartNotifications = await notificationInsightsService.getAllSmartNotifications(user.id);
       setNotifications(smartNotifications);
+      // Opening the alerts panel = "seen" → mark every current alert read so the
+      // dashboard bell badge clears (and stays clear until a new alert appears).
+      notificationReadState.markRead(user.id, smartNotifications.map((n) => n.id));
     } catch (error) {
       console.error('[SmartNotifications] Error fetching notifications:', error);
     } finally {
