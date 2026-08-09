@@ -15,6 +15,22 @@ interface Props {
 
 const POLL_MS = 60_000; // silent check every 60s
 
+// Local acknowledgement cache. A banner is dismissed once per user; we persist
+// the acked ids in localStorage so the acknowledgement is instant and ROBUST even
+// if the DB write (ack-banner) races or fails — the banner never re-pops after the
+// user taps it. The server ack still runs (best-effort, for cross-device).
+const LOCAL_ACK_KEY = (u: string) => 'dealpro_banner_acked_' + u;
+const isAckedLocally = (u: string, id: string): boolean => {
+  try { const r = localStorage.getItem(LOCAL_ACK_KEY(u)); return r ? (JSON.parse(r) as string[]).includes(id) : false; } catch { return false; }
+};
+const markAckedLocally = (u: string, id: string): void => {
+  try {
+    const r = localStorage.getItem(LOCAL_ACK_KEY(u));
+    const a: string[] = r ? JSON.parse(r) : [];
+    if (!a.includes(id)) { a.push(id); localStorage.setItem(LOCAL_ACK_KEY(u), JSON.stringify(a)); }
+  } catch { /* ignore */ }
+};
+
 const openExternal = (url: string) => {
   // '_system' opens the OS browser on Capacitor; falls back to a normal open.
   try { window.open(url, '_system'); } catch { try { window.open(url, '_blank'); } catch { /* ignore */ } }
@@ -37,7 +53,8 @@ export const SleepingBanner: React.FC<Props> = ({ userId, audience, isHome, them
     let cancelled = false;
     const load = async () => {
       const b = await bannerService.getActiveBanner(audience, userId);
-      if (!cancelled) setBanner(b);
+      // Never resurface a banner the user already dismissed on this device.
+      if (!cancelled) setBanner(b && isAckedLocally(userId, b.id) ? null : b);
     };
     load();
     const t = setInterval(load, POLL_MS);
@@ -45,8 +62,8 @@ export const SleepingBanner: React.FC<Props> = ({ userId, audience, isHome, them
   }, [userId, audience]);
 
   useEffect(() => {
-    if (isHome && banner && !show) setShow(true);
-  }, [isHome, banner, show]);
+    if (isHome && banner && !show && !isAckedLocally(userId, banner.id)) setShow(true);
+  }, [isHome, banner, show, userId]);
 
   const dismiss = async () => {
     if (acking.current) return true;
@@ -54,7 +71,7 @@ export const SleepingBanner: React.FC<Props> = ({ userId, audience, isHome, them
     const b = banner;
     setShow(false);
     setBanner(null);
-    if (b) await bannerService.ackBanner(b.id, userId);
+    if (b) { markAckedLocally(userId, b.id); await bannerService.ackBanner(b.id, userId); }
     acking.current = false;
     return true;
   };

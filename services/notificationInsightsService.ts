@@ -20,6 +20,50 @@ export interface SmartNotification {
   timestamp: Date;
 }
 
+// ── Persisted read-state for smart notifications ────────────────────────────
+// The bell badge must reflect only UNREAD insights. Smart-notification ids are
+// stable (e.g. 'low-inventory', 'peak-time', 'high-performer-<productId>'), so we
+// persist the set of ids the merchant has already seen. Opening the alerts panel
+// marks all current ids read → the badge clears and STAYS clear. A brand-new
+// insight (new id) re-badges; an alert that resolves then recurs also re-badges
+// (its id is pruned once it disappears). localStorage keeps it robust across app
+// restarts — the previous behaviour recomputed the count from scratch every time,
+// so it could never reach zero.
+const READ_KEY = (merchantId: string) => `dealpro_read_notifs_${merchantId}`;
+
+export const notificationReadState = {
+  getReadIds(merchantId: string): Set<string> {
+    try {
+      const raw = localStorage.getItem(READ_KEY(merchantId));
+      return new Set<string>(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set<string>();
+    }
+  },
+  markRead(merchantId: string, ids: string[]): void {
+    try {
+      const set = this.getReadIds(merchantId);
+      let changed = false;
+      for (const id of ids) if (id && !set.has(id)) { set.add(id); changed = true; }
+      if (changed) localStorage.setItem(READ_KEY(merchantId), JSON.stringify([...set]));
+    } catch { /* ignore */ }
+  },
+  // Drop read-ids whose insight no longer exists, so a resolved-then-recurring
+  // alert counts as unread again next time it appears.
+  prune(merchantId: string, currentIds: string[]): void {
+    try {
+      const set = this.getReadIds(merchantId);
+      const cur = new Set(currentIds);
+      const kept = [...set].filter((id) => cur.has(id));
+      if (kept.length !== set.size) localStorage.setItem(READ_KEY(merchantId), JSON.stringify(kept));
+    } catch { /* ignore */ }
+  },
+  unreadCount(merchantId: string, notifications: { id: string }[]): number {
+    const read = this.getReadIds(merchantId);
+    return notifications.filter((n) => !read.has(n.id)).length;
+  },
+};
+
 export const notificationInsightsService = {
   /**
    * Get all smart notifications for a merchant
