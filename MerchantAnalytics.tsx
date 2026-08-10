@@ -40,6 +40,31 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
   const [error, setError] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<'7' | '30' | 'lifetime'>('30');
 
+  // INTEL: DealPro consumers signed up in each store's area (city-level today).
+  interface ConsumerReachRow { store_id: string; store_name: string | null; city: string | null; state: string | null; locality: string | null; pincode: string | null; consumer_count: number; }
+  const [consumerReach, setConsumerReach] = useState<ConsumerReachRow[]>([]);
+  const [loadingReach, setLoadingReach] = useState(true);
+
+  useEffect(() => {
+    if (!user.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await resilient(async () => {
+          const { data, error } = await supabase.functions.invoke('get-store-consumer-reach', { body: { merchantId: user.id } });
+          if (error) throw error;
+          return data;
+        }, { cacheKey: `an_consumer_reach_${user.id}` });
+        if (!cancelled) setConsumerReach(((data as any)?.rows as ConsumerReachRow[]) || []);
+      } catch (e) {
+        console.warn('[MerchantAnalytics] consumer reach failed:', (e as any)?.message || e);
+      } finally {
+        if (!cancelled) setLoadingReach(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user.id]);
+
   const [totalLifetimeDeals, setTotalLifetimeDeals] = useState(0);
   const [totalLifetimeClicks, setTotalLifetimeClicks] = useState(0);
   const [totalLifetimeRedemptions, setTotalLifetimeRedemptions] = useState(0);
@@ -377,6 +402,57 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
           {user.store_name || t('man_my_insights')}
         </p>
       </div>
+
+      {/* Consumer reach — how many DealPro consumers are signed up in each store's
+          area. Upper part of the page, just under the header. Always rendered so
+          it's never invisible; shows an empty/loading state when needed. */}
+      {(
+        <div className={`rounded-xl border overflow-hidden ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className={`flex items-center gap-2.5 px-4 py-3 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+              <Users className="w-[18px] h-[18px] text-emerald-500" />
+            </div>
+            <div className="min-w-0">
+              <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Consumers in your area</p>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>DealPro shoppers signed up near each of your stores</p>
+            </div>
+          </div>
+
+          {loadingReach ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+            </div>
+          ) : consumerReach.length === 0 ? (
+            <div className={`px-4 py-6 text-center text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              No data yet — add a store, or ensure the reach function is deployed.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className={`text-left ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <th className="font-medium text-[11px] uppercase tracking-wide px-4 py-2">Your store locality</th>
+                    <th className="font-medium text-[11px] uppercase tracking-wide px-4 py-2 text-right">Consumers</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {consumerReach.map((r) => (
+                    <tr key={r.store_id} className={`border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+                      <td className={`px-4 py-3 font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                        {r.locality || r.city || '—'}
+                        {r.pincode && <span className={`font-normal ${isDark ? 'text-slate-500' : 'text-slate-400'}`}> ({r.pincode})</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-lg font-bold text-emerald-500">{r.consumer_count.toLocaleString('en-IN')}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Period Selector */}
       <div className={`flex gap-1 p-1 rounded-lg border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
