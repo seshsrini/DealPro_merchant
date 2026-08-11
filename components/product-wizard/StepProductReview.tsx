@@ -78,11 +78,11 @@ const ReviewSection: React.FC<{
 );
 
 function describeStock(count: number | null): { label: string; color: string } {
-  if (count === null) return { label: 'Available',            color: 'text-emerald-500' };
+  // Show the exact plenty tier the merchant picked (10+ vs 50+) so the review
+  // confirms their selection, rather than a generic "Available" for both.
+  if (count === null) return { label: '10+ available',        color: 'text-emerald-500' };
   if (count === 0)    return { label: 'Out of Stock',         color: 'text-red-500' };
-  // Above the 1..10 low-stock range means the "50+" plenty tier, not a literal
-  // count — shown as plain "Available", same as the 10+ tier.
-  if (count > 10)     return { label: 'Available',            color: 'text-emerald-500' };
+  if (count > 10)     return { label: '50+ available',        color: 'text-emerald-500' };
   return                     { label: `Only ${count} left`,   color: 'text-red-500' };
 }
 
