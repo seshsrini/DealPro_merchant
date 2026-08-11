@@ -143,6 +143,61 @@ Deno.serve(async (req) => {
 
     if (updateError) throw updateError;
 
+    // 7b. Award redemption points to the CONSUMER (non-blocking + idempotent).
+    // Redemption is the headline earning moment; award via the service role
+    // because these are the consumer's points, not the scanning merchant's. A
+    // points failure must NEVER fail the redemption itself.
+    const consumerToAward = interaction.consumer_id;
+    if (consumerToAward) {
+      try {
+        const adminClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+        // redeem_deal (+25) — one per campaign per consumer (unique reference_id)
+        const { error: redeemPtErr } = await adminClient
+          .from('points_transactions')
+          .insert({
+            user_id: consumerToAward,
+            action: 'redeem_deal',
+            points: 25,
+            reference_id: `redeem_${interaction.campaign_id}_${consumerToAward}`,
+            metadata: { campaign_id: interaction.campaign_id, claim_no: claimNo, merchant_id: merchantId },
+          });
+        if (!redeemPtErr) {
+          await adminClient.rpc('award_consumer_points', { p_user_id: consumerToAward, p_points: 25 });
+          console.log('[VerifyScan] redeem_deal points awarded to consumer:', consumerToAward);
+        } else if (redeemPtErr.code !== '23505') {
+          console.warn('[VerifyScan] redeem_deal points error:', redeemPtErr.message);
+        }
+
+        // referral_first_redeem (+100 to the REFERRER) on this consumer's first redemption
+        const { data: ref } = await adminClient
+          .from('consumer_referrals')
+          .select('id, referrer_id, status')
+          .eq('referee_id', consumerToAward)
+          .maybeSingle();
+        if (ref && ref.referrer_id && ref.status === 'signed_up') {
+          const { error: refPtErr } = await adminClient
+            .from('points_transactions')
+            .insert({
+              user_id: ref.referrer_id,
+              action: 'referral_first_redeem',
+              points: 100,
+              reference_id: `referral_first_redeem_${consumerToAward}`,
+              metadata: { referee_id: consumerToAward },
+            });
+          if (!refPtErr) {
+            await adminClient.rpc('award_consumer_points', { p_user_id: ref.referrer_id, p_points: 100 });
+            await adminClient.from('consumer_referrals').update({ status: 'redeemed' }).eq('id', ref.id);
+            console.log('[VerifyScan] referral_first_redeem awarded to referrer:', ref.referrer_id);
+          } else if (refPtErr.code !== '23505') {
+            console.warn('[VerifyScan] referral_first_redeem points error:', refPtErr.message);
+          }
+        }
+      } catch (e: any) {
+        console.warn('[VerifyScan] Points award error (non-blocking):', e?.message || e);
+      }
+    }
+
     return new Response(JSON.stringify({ success: true, message: 'Voucher successfully redeemed.' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,

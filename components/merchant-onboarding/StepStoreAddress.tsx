@@ -477,19 +477,29 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
           )}
         </div>
 
-        {/* City & State (auto-filled) */}
-        {store.city && (
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>{t('ob_addr_city')}</label>
-              <input value={store.city} readOnly className={`${inputClass} opacity-60`} />
-            </div>
-            <div>
-              <label className={labelClass}>{t('ob_addr_state')}</label>
-              <input value={store.state} readOnly className={`${inputClass} opacity-60`} />
-            </div>
+        {/* City & State — auto-filled from the pincode/GPS lookup, but always
+            editable so a merchant can complete signup even when a pincode isn't
+            in the directory or geocoding fails (otherwise Continue stayed stuck). */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>{t('ob_addr_city')}</label>
+            <input
+              value={store.city || ''}
+              onChange={(e) => onChange('city', e.target.value)}
+              placeholder={t('ob_addr_city')}
+              className={inputClass}
+            />
           </div>
-        )}
+          <div>
+            <label className={labelClass}>{t('ob_addr_state')}</label>
+            <input
+              value={store.state || ''}
+              onChange={(e) => onChange('state', e.target.value)}
+              placeholder={t('ob_addr_state')}
+              className={inputClass}
+            />
+          </div>
+        </div>
 
         {/* Locality */}
         <div className="relative">
