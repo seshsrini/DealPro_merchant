@@ -373,65 +373,13 @@ Deno.serve(async (req: Request) => {
       }, { onConflict: 'transaction_id', ignoreDuplicates: true });
     if (payErr) console.error('[razorpay-webhook] merchant_payments ledger insert failed (non-fatal):', payErr.message);
 
-    // ── Referral free-month reward (charge-then-refund) ────────────────────
-    // If this monthly subscriber has an unused free-month credit (5 cumulative
-    // qualified referrals each = 1, carryover), refund this cycle's charge.
-    // Non-fatal: a hiccup here must never block the webhook ack.
-    try {
-      // "Free month" only applies to monthly plans — refunding a yearly charge
-      // would be a free YEAR. Resolve the frequency from the subscription's plan.
-      let isMonthly = true;
-      if (subEntity.plan_id) {
-        const { data: pt } = await supabase
-          .from('subscription_tiers')
-          .select('billing_frequency')
-          .eq('razorpay_plan_id', subEntity.plan_id)
-          .maybeSingle();
-        if (pt?.billing_frequency && pt.billing_frequency !== 'monthly') isMonthly = false;
-      }
-
-      if (isMonthly) {
-        const baseMs = event.created_at ? event.created_at * 1000 : (subEntity.current_start ? subEntity.current_start * 1000 : new Date().getTime());
-        const rewardMonth = new Date(baseMs).toISOString().slice(0, 7) + '-01'; // YYYY-MM-01
-
-        // Idempotent: at most one free month per billing month.
-        const { data: existingReward } = await supabase
-          .from('merchant_rewards_log')
-          .select('id')
-          .eq('merchant_id', merchantId)
-          .eq('reward_month', rewardMonth)
-          .maybeSingle();
-
-        if (!existingReward) {
-          const [{ count: qualified }, { count: used }] = await Promise.all([
-            supabase.from('merchant_referrals').select('*', { count: 'exact', head: true })
-              .eq('referrer_id', merchantId).eq('status', 'qualified'),
-            supabase.from('merchant_rewards_log').select('*', { count: 'exact', head: true })
-              .eq('merchant_id', merchantId).eq('reward_type', 'free_month'),
-          ]);
-          const available = Math.floor((qualified || 0) / FREE_MONTH_REFERRALS) - (used || 0);
-
-          if (available >= 1) {
-            const refund = await razorpayRefund(payEntity.id);
-            if (refund) {
-              await supabase.from('merchant_rewards_log').insert({
-                merchant_id: merchantId,
-                reward_type: 'free_month',
-                referral_count: qualified || 0,
-                reward_month: rewardMonth,
-                days_extended: 0, // refund model — we don't extend the period
-              });
-              await supabase.from('merchant_payments')
-                .update({ payment_status: 'refunded', failure_reason: 'Referral free month — refunded' })
-                .eq('transaction_id', payEntity.id);
-              console.log(`[razorpay-webhook] Referral free month: refunded ${payEntity.id} for merchant ${merchantId}`);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.error('[razorpay-webhook] Free-month refund check failed (non-fatal):', (e as Error)?.message);
-    }
+    // ── Referral reward: handled by the OFFER model, not here ──────────────
+    // The referral reward is a one-cycle Razorpay discount OFFER applied via the
+    // signup trigger → `process-referral-reward` (a credit on the merchant's
+    // Razorpay subscription; there is no RazorpayX payout). The old
+    // charge-then-refund path that used to live here was REMOVED because it
+    // double-rewarded (it granted a full refund on top of the offer discount).
+    // Do not reinstate a refund here — there must be exactly ONE referral engine.
   }
 
   return new Response('ok', { status: 200 });
