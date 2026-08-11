@@ -148,6 +148,15 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
     }
   };
 
+  const handleChangeInviteRole = async (inviteId: string, newRole: 'manager' | 'staff') => {
+    try {
+      await merchantStaffService.updateInviteRole(inviteId, newRole);
+      await loadTeam();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const loadPerms = useCallback(async () => {
     setPermsLoading(true);
     try {
@@ -327,7 +336,18 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
                         <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${isDark ? 'bg-indigo-500/10 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
                           {inv.invite_code}
                         </span>
-                        <span className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{inv.role}</span>
+                        {isOwner ? (
+                          <select
+                            value={inv.role}
+                            onChange={(e) => handleChangeInviteRole(inv.id, e.target.value as 'manager' | 'staff')}
+                            className={`text-[10px] font-semibold rounded-md px-1.5 py-0.5 border outline-none cursor-pointer ${isDark ? 'bg-slate-700 text-white border-slate-600' : 'bg-slate-50 text-slate-900 border-slate-200'}`}
+                          >
+                            <option value="manager">{ROLE_CONFIG.manager.label}</option>
+                            <option value="staff">{ROLE_CONFIG.staff.label}</option>
+                          </select>
+                        ) : (
+                          <span className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{inv.role}</span>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-1.5">

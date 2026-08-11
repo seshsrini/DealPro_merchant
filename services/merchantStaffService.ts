@@ -68,6 +68,14 @@ export const merchantStaffService = {
     if (error) throw new Error('Unable to revoke invitation. Please try again.');
   },
 
+  // Change a still-pending invite's role (manager/staff) before it's accepted.
+  async updateInviteRole(inviteId: string, role: 'manager' | 'staff'): Promise<void> {
+    const { error } = await supabase.functions.invoke('manage-staff', {
+      body: { action: 'update_invite', invite_id: inviteId, role },
+    });
+    if (error) throw new Error('Unable to update invite role. Please try again.');
+  },
+
   async getPermissions(): Promise<{ role: string; merchantId: string; permissions: string[] }> {
     const { data, error } = await supabase.functions.invoke('manage-staff', {
       body: { action: 'get_permissions' },
