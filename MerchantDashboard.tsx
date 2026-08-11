@@ -332,8 +332,9 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
             <h1 className={`text-2xl font-bold mt-0.5 leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
               {user.full_name || user.store_name || 'Merchant'}
             </h1>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2">
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${
+            {/* Live-deals pill on its OWN line */}
+            <div className="mt-2">
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${
                 isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
               }`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -345,19 +346,24 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 ) : (
                   <>{totalActiveDeals} {t('m_live_deals')}</>
                 )}
-              </div>
-              {primaryLocation && (
-                <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  <MapPin className="w-3 h-3 shrink-0" />
-                  {primaryLocation}
-                </span>
-              )}
-              {user.store_name && (
-                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
-                  {user.store_name}
-                </span>
-              )}
+              </span>
             </div>
+            {/* Location + store name on the next line */}
+            {(primaryLocation || user.store_name) && (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
+                {primaryLocation && (
+                  <span className={`flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <MapPin className="w-3 h-3 shrink-0" />
+                    {primaryLocation}
+                  </span>
+                )}
+                {user.store_name && (
+                  <span className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
+                    {user.store_name}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <NotificationBadge
             merchantId={user.id}
