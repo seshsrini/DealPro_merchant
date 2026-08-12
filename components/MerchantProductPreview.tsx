@@ -76,11 +76,13 @@ export const MerchantProductPreview: React.FC<Props> = ({ item, theme, onClose, 
       onClick={onClose}
     >
       <div
-        className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-t-xl sm:rounded-xl ${
+        className={`w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden rounded-t-xl sm:rounded-xl ${
           isDark ? 'bg-slate-900' : 'bg-white'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Scrollable content region (min-h-0 lets it actually scroll inside the flex column) */}
+        <div className="flex-1 overflow-y-auto min-h-0">
         {/* Image / Video carousel */}
         <div className={`relative aspect-square overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
           {/* Close */}
@@ -288,9 +290,10 @@ export const MerchantProductPreview: React.FC<Props> = ({ item, theme, onClose, 
             </div>
           )}
         </div>
+        </div>
 
-        {/* Sticky action bar */}
-        <div className={`sticky bottom-0 px-4 py-3 border-t flex gap-3 ${
+        {/* Action bar (fixed at the bottom of the sheet) */}
+        <div className={`shrink-0 px-4 py-3 border-t flex gap-3 ${
           isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
         }`}>
           <button
