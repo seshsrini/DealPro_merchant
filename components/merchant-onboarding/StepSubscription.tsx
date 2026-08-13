@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core';
 import { SubscriptionTier, User } from '../../types';
 import { subscriptionService } from '../../services/subscriptionService';
 import { merchantSubscriptionService } from '../../services/merchantSubscriptionService';
+import { isReviewerAccount } from '../../services/reviewerAccess';
 import { billingService } from '../../services/BillingService';
 import { localSubscriptionStore } from '../../services/LocalSubscriptionStore';
 import { supabase } from '../../services/supabaseClient';
@@ -36,11 +37,12 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);
   const [billingReady, setBillingReady] = useState(false);
   const isNative = Capacitor.isNativePlatform();
-  // Test bypass: shown only while VITE_ALLOW_TEST_SUBSCRIPTION is true. Lets
-  // internal testers skip the subscription step without going through real
-  // payment. The button itself is also conditionally rendered so it disappears
-  // from the bundle entirely when the env flag is false.
-  const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true';
+  // Test bypass: shown while VITE_ALLOW_TEST_SUBSCRIPTION is true (internal
+  // testers) OR when the signed-in account is the designated app-review account
+  // (VITE_REVIEWER_PHONES) so the Google Play reviewer can skip payment. Hidden
+  // from real merchants; the server enforces the same allow-list.
+  const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true'
+    || isReviewerAccount(user);
   const [testBypassing, setTestBypassing] = useState(false);
 
   // Advances to the payment step without creating a subscription or charging

@@ -488,6 +488,24 @@ Deno.serve(async (req) => {
       // the server still validates the request is authenticated to keep
       // strangers from minting test subs against random merchant IDs.
       // ──────────────────────────────────────────────────────────────────
+      // Reviewer-only in production: ONLY the designated app-review account(s)
+      // (REVIEWER_PHONES, comma-separated 10-digit numbers) — or an internal
+      // build with ALLOW_TEST_SUBSCRIPTION=true — may mint a free test
+      // subscription. Everyone else is rejected, so the button can't be
+      // exploited by a tampered client. The caller's phone is read from the
+      // synthetic auth email ({cc}{phone}@internal.dealpro.merchant).
+      const reviewerList = (Deno.env.get('REVIEWER_PHONES') || '')
+        .split(',').map((s: string) => s.replace(/\D/g, '').slice(-10)).filter(Boolean);
+      const allowTestEnv = String(Deno.env.get('ALLOW_TEST_SUBSCRIPTION') || '').toLowerCase() === 'true';
+      const callerPhone = String((user as any).email || '').split('@')[0].replace(/\D/g, '').slice(-10);
+      const isReviewer = !!callerPhone && reviewerList.includes(callerPhone);
+      if (!isReviewer && !allowTestEnv) {
+        return new Response(
+          JSON.stringify({ error: 'Test subscription is not available for this account.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 },
+        );
+      }
+
       const { tier_key } = body;
       const planName = tier_key || 'pro_test';
 
