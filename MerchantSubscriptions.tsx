@@ -8,6 +8,7 @@ import {
 } from './types';
 import { subscriptionService } from './services/subscriptionService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
+import { isReviewerAccount } from './services/reviewerAccess';
 import { razorpayCheckoutService, isPaymentPending, clearPaymentPending } from './services/razorpayCheckoutService';
 import { supabase } from './services/supabaseClient';
 import { resilient, peekCache } from './services/resilientData';
@@ -69,10 +70,13 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const [error, setError] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selectedTierId, setSelectedTierId] = useState<number | null>(null);
-  // Test-only bypass (VITE_ALLOW_TEST_SUBSCRIPTION=true): activate a pro_test
-  // subscription with no payment, mirroring the signup wizard's Skip Payment
-  // button. Compiles out of real prod builds when the flag is false.
-  const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true';
+  // Test-only bypass: activate a pro_test subscription with no payment. Shown
+  // when VITE_ALLOW_TEST_SUBSCRIPTION=true (internal builds) OR the signed-in
+  // account is the designated app-review account (VITE_REVIEWER_PHONES) — so the
+  // Google Play reviewer can subscribe, but real merchants never see it. The
+  // server enforces the same allow-list.
+  const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true'
+    || isReviewerAccount(user);
   const [testBypassing, setTestBypassing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);
