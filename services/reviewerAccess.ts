@@ -15,8 +15,13 @@ export function reviewerPhones(): string[] {
     .filter(Boolean);
 }
 
+/** True when a raw phone string is on the reviewer allow-list. */
+export function isReviewerPhone(phone: string | null | undefined): boolean {
+  const p = String(phone || '').replace(/\D/g, '').slice(-10);
+  return !!p && reviewerPhones().includes(p);
+}
+
 /** True when the signed-in user's phone is on the reviewer allow-list. */
 export function isReviewerAccount(user: { phone?: string | null } | null | undefined): boolean {
-  const phone = String(user?.phone || '').replace(/\D/g, '').slice(-10);
-  return !!phone && reviewerPhones().includes(phone);
+  return isReviewerPhone(user?.phone);
 }
