@@ -17,4 +17,13 @@ ext {
     // Location triggers a benign-but-noisy D8 "Companion object could not be
     // found in class ...location.zze" warning under Jetifier. 21.3.0 fixes it.
     playServicesLocationVersion = '21.3.0'
+    // 16 KB page-size support (Google Play requirement). The barcode-scanning
+    // plugin defaults to CameraX 1.1.0 + ML Kit 17.2.0, whose .so libs
+    // (libimage_processing_util_jni, libbarhopper_v3) are 4 KB-aligned and get
+    // flagged. CameraX 1.4.x and ML Kit barcode 17.3.0 ship 16 KB-aligned libs.
+    androidxCameraCamera2Version = '1.4.1'
+    androidxCameraCoreVersion = '1.4.1'
+    androidxCameraLifecycleVersion = '1.4.1'
+    androidxCameraViewVersion = '1.4.1'
+    mlkitBarcodeScanningVersion = '17.3.0'
 }
