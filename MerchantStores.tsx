@@ -559,7 +559,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
       {forceAddMode && (
         <div className={`mx-6 mb-4 p-3 rounded-xl border text-center ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
           <p className={`text-xs font-semibold ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
-            You need at least one store to use DealPro Merchant.
+            You need at least one store to use Sreshta Merchant.
           </p>
           <p className={`text-[11px] mt-0.5 ${isDark ? 'text-amber-400/70' : 'text-amber-600/70'}`}>
             Add your store below to continue.
@@ -954,7 +954,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                             Customers will see "Delivery available" on your deals
                           </p>
                           <p className={`text-[10px] mt-0.5 leading-snug ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
-                            Delivered by you or your delivery partner; DealPro is not liable.
+                            Delivered by you or your delivery partner; Sreshta is not liable.
                           </p>
                         </div>
                       </div>

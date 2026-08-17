@@ -275,7 +275,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
             {trialExpired ? 'Trial period ended' : 'Choose your plan'}
           </h2>
           <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            {trialExpired ? 'Select a plan to continue using DealPro' : 'Select a subscription to get started'}
+            {trialExpired ? 'Select a plan to continue using Sreshta' : 'Select a subscription to get started'}
           </p>
         </div>
       </div>

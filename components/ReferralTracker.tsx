@@ -163,7 +163,7 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
               </button>
             </div>
             <p className={`text-[10px] mt-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              Share this code with other merchants to invite them to DealPro
+              Share this code with other merchants to invite them to Sreshta
             </p>
           </div>
 
@@ -249,7 +249,7 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
             <div className="space-y-3">
               {[
                 { step: '1', text: 'Share your referral code with other merchants' },
-                { step: '2', text: 'They enter your code during their DealPro signup' },
+                { step: '2', text: 'They enter your code during their Sreshta signup' },
                 { step: '3', text: `Every ${threshold} qualified referrals = 1 free month — unused referrals carry over` },
                 { step: '4', text: 'We refund that month’s charge to your payment method' },
               ].map((item) => (

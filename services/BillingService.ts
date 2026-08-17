@@ -279,7 +279,7 @@ class BillingService {
   }
 
   /**
-   * Check if any DealPro subscription is active.
+   * Check if any Sreshta subscription is active.
    */
   hasActiveSubscription(): boolean {
     return Object.values(PRODUCT_IDS).some((id) =>

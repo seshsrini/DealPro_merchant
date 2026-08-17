@@ -16,7 +16,7 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
   const printRef = useRef<HTMLDivElement>(null);
 
   const [referralCode, setReferralCode] = useState(user.consumer_referral_code || '------');
-  const storeName = user.store_name || user.full_name || 'DealPro Merchant';
+  const storeName = user.store_name || user.full_name || 'Sreshta Merchant';
 
   // Fetch from DB if not on user object
   useEffect(() => {
@@ -61,7 +61,7 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
       <!DOCTYPE html>
       <html>
       <head>
-        <title>DealPro QR - ${storeName}</title>
+        <title>Sreshta QR - ${storeName}</title>
         <style>
           @page {
             size: A4 portrait;
@@ -107,7 +107,7 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
             margin-top: -20px;
           }
           .brand-text .deal { color: #0f172a; }
-          .brand-text .pro { color: #FACA1B; }
+          .brand-text .pro { color: #F59E0B; }
           .qr-wrap {
             background: #fff;
             border: 3px solid #e2e8f0;
@@ -151,8 +151,8 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
       <body>
         <div class="card">
           <div class="logo-wrap">
-            <img src="${window.location.origin}/assets/logo.svg" class="logo" alt="DealPro" />
-            <div class="brand-text"><span class="deal">Deal</span><span class="pro">Pro</span></div>
+            <img src="${window.location.origin}/assets/logo.svg" class="logo" alt="Sreshta" />
+            <div class="brand-text"><span class="deal">Sresht</span><span class="pro">a</span></div>
           </div>
           <div class="qr-wrap">
             <canvas id="print-qr"></canvas>
@@ -161,7 +161,7 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
           <div class="store-name">${storeName}</div>
           <div class="cta">
             Scan this QR code to<br/>
-            <strong>download DealPro app</strong><br/>
+            <strong>download Sreshta app</strong><br/>
             and discover amazing local deals!
           </div>
           <div class="footer">www.dealpro.app</div>
@@ -240,12 +240,12 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
     // CTA
     ctx.fillStyle = '#64748b';
     ctx.font = '13px -apple-system, sans-serif';
-    ctx.fillText('Scan to download DealPro app', w / 2, 440);
+    ctx.fillText('Scan to download Sreshta app', w / 2, 440);
     ctx.fillText('and discover amazing local deals!', w / 2, 460);
 
     // Download
     const link = document.createElement('a');
-    link.download = `DealPro-QR-${referralCode}.png`;
+    link.download = `Sreshta-QR-${referralCode}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
@@ -268,7 +268,7 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
       <div className="px-5 mt-4 space-y-4">
         {/* Info text */}
         <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-          Print this QR code and display it at your store. When customers scan it and sign up on DealPro,
+          Print this QR code and display it at your store. When customers scan it and sign up on Sreshta,
           they'll be linked to your store automatically.
         </p>
 
@@ -283,13 +283,13 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
           <div className="rounded-xl p-3 pb-0 mb-5 bg-white flex flex-col items-center" style={{ backgroundColor: '#ffffff' }}>
             <img
               src={`${import.meta.env.BASE_URL}assets/logo.svg`}
-              alt="DealPro"
+              alt="Sreshta"
               className="w-24 h-auto"
               style={{ background: '#ffffff' }}
             />
             <p className="text-sm font-black" style={{ marginTop: '-14px' }}>
-              <span className="text-slate-900">Deal</span>
-              <span style={{ color: '#FACA1B' }}>Pro</span>
+              <span className="text-slate-900">Sresht</span>
+              <span style={{ color: '#F59E0B' }}>a</span>
             </p>
           </div>
 
@@ -311,7 +311,7 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
           {/* CTA */}
           <p className={`text-[11px] text-center leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
             Scan this QR code to<br />
-            <span className={`font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>download DealPro app</span><br />
+            <span className={`font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>download Sreshta app</span><br />
             and discover amazing local deals!
           </p>
         </div>
@@ -345,7 +345,7 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
             {[
               'Print and stick this QR code at your store entrance or billing counter',
               'Customers scan it with their phone camera',
-              'They download the DealPro app and sign up',
+              'They download the Sreshta app and sign up',
               'You get credit for every consumer who joins through your QR code',
             ].map((step, i) => (
               <div key={i} className="flex items-start gap-2.5">

@@ -20,7 +20,7 @@ const GEMINI_ATTEMPTS: Array<{ model: string; api: 'v1' | 'v1beta' }> = [
   { model: 'gemini-flash-lite-latest', api: 'v1beta' },
 ];
 
-const PROMPT = `You are a product cataloguing assistant for "DealPro," an Indian retail deals marketplace.
+const PROMPT = `You are a product cataloguing assistant for "Sreshta," an Indian retail deals marketplace.
 
 Look at the image and identify the retail product. Return a structured JSON object.
 

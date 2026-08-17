@@ -10,7 +10,7 @@
  *
  * Env:
  *   RESEND_API_KEY      — Resend.com API key for transactional email
- *   RESEND_FROM_EMAIL   — Verified sender (e.g. "DealPro <noreply@dealpro.in>")
+ *   RESEND_FROM_EMAIL   — Verified sender (e.g. "Sreshta <noreply@dealpro.in>")
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.49.1';
@@ -284,7 +284,7 @@ Deno.serve(async (req) => {
     }
 
     const apiKey = Deno.env.get('RESEND_API_KEY');
-    const from = Deno.env.get('RESEND_FROM_EMAIL') || 'DealPro <noreply@dealpro.in>';
+    const from = Deno.env.get('RESEND_FROM_EMAIL') || 'Sreshta <noreply@dealpro.in>';
     if (!apiKey) {
       console.error('[send-support-email] RESEND_API_KEY not configured');
       return new Response(JSON.stringify({ error: 'Email is not configured. Please try again later.' }), {

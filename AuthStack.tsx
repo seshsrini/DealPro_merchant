@@ -471,7 +471,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
         </h2>
 
         <p className={`text-sm text-center mb-8 leading-relaxed max-w-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-          Allow DealPro to use your device's biometric authentication (fingerprint / face) to sign you in instantly next time.
+          Allow Sreshta to use your device's biometric authentication (fingerprint / face) to sign you in instantly next time.
         </p>
 
         <div className={`w-full rounded-xl p-4 mb-8 ${isDark ? 'bg-slate-800/50 border border-slate-700' : 'bg-slate-50 border border-slate-200'}`}>

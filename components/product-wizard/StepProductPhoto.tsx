@@ -11,7 +11,7 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
 const MAX_VIDEO_SECONDS = 30;
 
 /**
- * Adds semi-transparent "DealPro" watermarks to an image file.
+ * Adds semi-transparent "Sreshta" watermarks to an image file.
  * Places 4 watermarks diagonally across the image.
  * Returns a new File with the watermarks baked in.
  */
@@ -49,7 +49,7 @@ async function addDealProWatermark(file: File): Promise<File> {
           ctx.save();
           ctx.translate(x, y);
           ctx.rotate(-25 * Math.PI / 180); // slight diagonal tilt
-          ctx.fillText('DealPro', 0, 0);
+          ctx.fillText('Sreshta', 0, 0);
           ctx.restore();
         });
 

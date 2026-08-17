@@ -1176,7 +1176,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                 {t('reg_merchant')}
               </h3>
               <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                {t('reg_merchant_desc') || <>Empower your business with <span className={isDark ? 'text-white' : 'text-slate-900'}>Deal</span><span className="text-green-500">Pro</span> smart commerce</>}
+                {t('reg_merchant_desc') || <>Empower your business with <span className={isDark ? 'text-white' : 'text-slate-900'}>Sresht</span><span style={{ color: '#F59E0B' }}>a</span> smart commerce</>}
               </p>
             </div>
           </div>
@@ -1205,7 +1205,7 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
           {t('reg_title')}
         </h2>
         <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-          {regRole === 'user' ? 'Join the network to discover local deals.' : <>Empower your business with <span className={isDark ? 'text-white' : 'text-slate-900'}>Deal</span><span className="text-green-500">Pro</span> smart commerce.</>}
+          {regRole === 'user' ? 'Join the network to discover local deals.' : <>Empower your business with <span className={isDark ? 'text-white' : 'text-slate-900'}>Sresht</span><span style={{ color: '#F59E0B' }}>a</span> smart commerce.</>}
         </p>
       </div>
 

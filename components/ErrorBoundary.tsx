@@ -115,7 +115,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             Something went wrong
           </h2>
           <p style={{ fontSize: '14px', color: '#94a3b8', margin: '0 0 24px', lineHeight: 1.5 }}>
-            DealPro hit an unexpected snag. Tap “Try again” to retry — if it keeps happening, reload the app.
+            Sreshta hit an unexpected snag. Tap “Try again” to retry — if it keeps happening, reload the app.
           </p>
 
           <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>

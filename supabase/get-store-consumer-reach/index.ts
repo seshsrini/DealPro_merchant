@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 /**
  * get-store-consumer-reach
  *
- * INTEL: for each of a merchant's stores, how many DealPro consumers are signed
+ * INTEL: for each of a merchant's stores, how many Sreshta consumers are signed
  * up in that store's area. Consumer profiles currently store a city (not
  * coordinates), so this is a CITY-level count today — the honest, available
  * metric. Once consumers carry a home pincode, this can become a true 5 km

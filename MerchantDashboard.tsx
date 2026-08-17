@@ -925,7 +925,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                         : 'Delivery available — contact store'}
                     </p>
                     <p className={`text-[11px] mt-0.5 leading-snug ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
-                      Delivered by the merchant or their partner; DealPro is not liable.
+                      Delivered by the merchant or their partner; Sreshta is not liable.
                     </p>
                   </div>
                 </div>

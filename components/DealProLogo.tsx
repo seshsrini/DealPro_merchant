@@ -6,7 +6,7 @@ interface DealProLogoProps {
   className?: string;
   /** Lucide icon className for the fallback. Defaults to a sensible size. */
   iconClassName?: string;
-  /** Override the alt text. Default 'DealPro'. */
+  /** Override the alt text. Default 'Sreshta'. */
   alt?: string;
 }
 
@@ -32,7 +32,7 @@ export const DealProLogo: React.FC<DealProLogoProps> = ({ className, iconClassNa
       // so this resolves to the right asset path in both. A hardcoded
       // '/assets/...' would 404 under the web build's /merchant/ base.
       src={`${import.meta.env.BASE_URL}assets/merchantlogo.svg`}
-      alt={alt || 'DealPro'}
+      alt={alt || 'Sreshta'}
       className={className}
       onError={() => setFailed(true)}
     />

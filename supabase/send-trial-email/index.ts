@@ -12,7 +12,7 @@
  * Required Supabase secrets:
  *   FIREBASE_SERVICE_ACCOUNT_JSON — Firebase Admin SDK service account key
  *   RESEND_API_KEY              — Resend.com API key for transactional email
- *   RESEND_FROM_EMAIL           — Verified sender (e.g. "DealPro <noreply@dealpro.in>")
+ *   RESEND_FROM_EMAIL           — Verified sender (e.g. "Sreshta <noreply@dealpro.in>")
  */
 
 // @ts-ignore
@@ -186,7 +186,7 @@ function buildTrialExpiryEmailHtml(
       </p>
 
       <p style="font-size: 15px; line-height: 1.7; margin: 0 0 16px;">
-        We hope you've been enjoying the premium features of DealPro over the last few months! We're writing to let you know that your <strong>120-day free trial</strong> is set to conclude on <strong>${trialEndDate}</strong>.
+        We hope you've been enjoying the premium features of Sreshta over the last few months! We're writing to let you know that your <strong>120-day free trial</strong> is set to conclude on <strong>${trialEndDate}</strong>.
       </p>
 
       <!-- What happens next -->
@@ -215,16 +215,16 @@ function buildTrialExpiryEmailHtml(
 
       <!-- Closing -->
       <p style="font-size: 15px; line-height: 1.7; margin: 24px 0 8px;">
-        Thank you for being a valued DealPro merchant. We look forward to helping you grow your business in the coming month!
+        Thank you for being a valued Sreshta merchant. We look forward to helping you grow your business in the coming month!
       </p>
 
       <p style="font-size: 15px; line-height: 1.7; margin: 0 0 4px;">Best regards,</p>
-      <p style="font-size: 15px; line-height: 1.7; margin: 0; font-weight: 600;">The DealPro Team</p>
+      <p style="font-size: 15px; line-height: 1.7; margin: 0; font-weight: 600;">The Sreshta Team</p>
 
       <!-- Footer -->
       <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 28px 0 16px;" />
       <p style="font-size: 12px; color: #94a3b8; text-align: center; line-height: 1.5;">
-        DealPro for Business &bull; You're receiving this because you signed up for a DealPro merchant account.
+        Sreshta for Business &bull; You're receiving this because you signed up for a Sreshta merchant account.
       </p>
     </div>
   `;
@@ -295,7 +295,7 @@ Deno.serve(async (req) => {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const firebaseSaJson = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON');
   const resendApiKey = Deno.env.get('RESEND_API_KEY');
-  const resendFrom = Deno.env.get('RESEND_FROM_EMAIL') || 'DealPro <noreply@dealpro.in>';
+  const resendFrom = Deno.env.get('RESEND_FROM_EMAIL') || 'Sreshta <noreply@dealpro.in>';
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
@@ -349,9 +349,9 @@ Deno.serve(async (req) => {
     }
 
     const merchantName = merchant.full_name || '';
-    const emailSubject = 'Important: Your DealPro Premium trial ends in 3 days \u{1F680}';
-    const notifTitle = 'Your DealPro trial ends in 3 days!';
-    const notifBody = `Hi${merchantName ? ' ' + merchantName : ''}! Your DealPro trial ends in 3 days. Your subscription of ${curr}${amount} will be automatically processed via Google Play on ${trialEndDate}.`;
+    const emailSubject = 'Important: Your Sreshta Premium trial ends in 3 days \u{1F680}';
+    const notifTitle = 'Your Sreshta trial ends in 3 days!';
+    const notifBody = `Hi${merchantName ? ' ' + merchantName : ''}! Your Sreshta trial ends in 3 days. Your subscription of ${curr}${amount} will be automatically processed via Google Play on ${trialEndDate}.`;
 
     let pushSent = 0;
     let pushFailed = 0;
