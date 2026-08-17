@@ -190,7 +190,7 @@ Deno.serve(async (req) => {
       const admin = createClient(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
       const { data: sub } = await admin
         .from('merchant_subscriptions')
-        .select('plan_name')
+        .select('plan_name, current_period_start, current_period_end')
         .eq('merchant_id', merchant_id)
         .eq('status', 'active')
         .gte('current_period_end', new Date().toISOString())
@@ -205,16 +205,43 @@ Deno.serve(async (req) => {
           .maybeSingle();
         const limit = isDotd ? tier?.max_dotd_per_month : tier?.max_campaigns_per_month;
         if (typeof limit === 'number' && limit >= 0) {
-          const now = new Date();
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-          const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+          // Count deals CREATED in the merchant's current BILLING-CYCLE window.
+          // MUST stay IDENTICAL to merchant-subscription's `campaign_usage` — that
+          // is the number the merchant sees and the client gate trusts. This block
+          // previously counted by start_date/end_date overlap with the CALENDAR
+          // month, which diverged from the displayed usage and could FALSE-BLOCK a
+          // merchant who still had regular slots left (older still-active deals from
+          // a prior cycle inflated the count). The window is anchored to the
+          // merchant's billing anniversary (midnight IST), so both regular and DOTD
+          // counts reset to 0 on each merchant's own billing date, not the 1st.
+          const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+          const anchorSource = sub.current_period_start || sub.current_period_end || null;
+          const anchorDay = anchorSource
+            ? new Date(new Date(anchorSource).getTime() + IST_OFFSET_MS).getUTCDate()
+            : 1;
+          const clampDay = (y: number, mIdx: number, day: number) =>
+            Math.min(day, new Date(Date.UTC(y, mIdx + 1, 0)).getUTCDate());
+          const istNow = new Date(Date.now() + IST_OFFSET_MS);
+          let wy = istNow.getUTCFullYear();
+          let wm = istNow.getUTCMonth();
+          if (istNow.getUTCDate() < clampDay(wy, wm, anchorDay)) {
+            wm -= 1; if (wm < 0) { wm = 11; wy -= 1; }
+          }
+          let ny = wy, nm = wm + 1;
+          if (nm > 11) { nm = 0; ny += 1; }
+          let windowStartTs = new Date(Date.UTC(wy, wm, clampDay(wy, wm, anchorDay)) - IST_OFFSET_MS).toISOString();
+          const windowEndTs = new Date(Date.UTC(ny, nm, clampDay(ny, nm, anchorDay)) - IST_OFFSET_MS).toISOString();
+          if (sub.current_period_start) {
+            const cycleStartTs = new Date(sub.current_period_start).toISOString();
+            if (new Date(cycleStartTs).getTime() > new Date(windowStartTs).getTime()) windowStartTs = cycleStartTs;
+          }
           let q = admin.from('campaigns').select('*', { count: 'exact', head: true })
             .eq('merchant_id', merchant_id)
-            .lte('start_date', endOfMonth)
-            .or(`end_date.gte.${startOfMonth},end_date.is.null`);
-          q = isDotd
-            ? q.eq('is_deal_of_the_day', true)
-            : q.or('is_deal_of_the_day.is.null,is_deal_of_the_day.eq.false');
+            .gte('created_at', windowStartTs)
+            .lt('created_at', windowEndTs);
+          // Regular = false OR null (exclude only true); DOTD = true. `.not(is true)`
+          // matches campaign_usage and avoids the chained-.or() pitfall.
+          q = isDotd ? q.eq('is_deal_of_the_day', true) : q.not('is_deal_of_the_day', 'is', true);
           const { count } = await q;
           if (typeof count === 'number' && count >= limit) {
             return new Response(JSON.stringify({
