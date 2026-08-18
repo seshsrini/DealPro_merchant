@@ -175,7 +175,7 @@ function buildTrialExpiryEmailHtml(
       <!-- Logo -->
       <div style="text-align: center; margin-bottom: 28px;">
         <h1 style="font-size: 26px; font-weight: 800; margin: 0;">
-          <span style="color: #0f172a;">Deal</span><span style="color: #FACA1B;">Pro</span>
+          <span style="color: #0f172a;">Deal</span><span style="color: #F59E0B;">Fynd</span>
         </h1>
         <p style="color: #64748b; font-size: 13px; margin: 4px 0 0;">for Business</p>
       </div>

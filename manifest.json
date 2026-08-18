@@ -1,8 +1,8 @@
 
 
 {
-  "name": "DealPro",
-  "short_name": "DealPro",
+  "name": "DealFynd",
+  "short_name": "DealFynd",
   "description": "Hyper-local deal discovery app providing exclusive discounts and QR codes for nearby stores.",
   "start_url": "./",
   "display": "standalone",

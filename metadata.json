@@ -1,5 +1,5 @@
 {
-  "name": "DealPro",
+  "name": "DealFynd",
   "description": "Hyper-local deal discovery app providing exclusive discounts and QR codes for nearby stores.",
   "requestFramePermissions": [
     "geolocation",

@@ -193,7 +193,7 @@ const brandHeader = (): string => `
     <div class="brand-lockup">
       <div class="brand-mark">${DEALPRO_LOGO_SVG}</div>
       <div class="brand-logo">
-        <span>DEAL</span><span class="brand-accent">PRO</span>
+        <span>DEAL</span><span class="brand-accent">FYND</span>
       </div>
     </div>
     <div class="brand-tag">Local deals, simplified</div>
@@ -298,7 +298,7 @@ const renderClassicFrame = (d: ReturnType<typeof extract>): string => `
       <div class="cf-mast">
         <div class="cf-mast-mark">${DEALPRO_LOGO_SVG}</div>
         <div class="cf-mast-line"></div>
-        <div class="cf-brand">DEAL<span>PRO</span></div>
+        <div class="cf-brand">DEAL<span>FYND</span></div>
         <div class="cf-mast-line"></div>
       </div>
 
@@ -341,7 +341,7 @@ const renderSideBySide = (d: ReturnType<typeof extract>): string => `
 
     <div class="sbs-details">
       <div class="sbs-brand">
-        <span>DEAL</span><span class="brand-accent">PRO</span>
+        <span>DEAL</span><span class="brand-accent">FYND</span>
       </div>
       ${d.category ? `<div class="sbs-category">${escapeHtml(d.category)}</div>` : ''}
       <h1 class="sbs-heading">${escapeHtml(d.heading)}</h1>
