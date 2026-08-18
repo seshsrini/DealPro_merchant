@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
   notifyMerchant(
     supabaseAdmin, merchant_id, 'subscription_activated',
     'Subscription confirmed 🎉',
-    `Payment received — your Sreshta ${tierLabel} plan is now active. You're all set.`,
+    `Payment received — your DealFynd ${tierLabel} plan is now active. You're all set.`,
   );
 
   return jsonResponse({ success: true, razorpay_subscription_id });

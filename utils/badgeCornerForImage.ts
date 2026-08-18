@@ -72,7 +72,7 @@ export async function pickBadgeCornerForImage(imageUrl: string): Promise<BadgeCo
 
 /**
  * Map a corner enum to the Tailwind absolute-positioning utility classes.
- * Bottom corners are bumped up to clear the Sreshta branding bar (~5% of the canvas).
+ * Bottom corners are bumped up to clear the DealFynd branding bar (~5% of the canvas).
  */
 export function cornerClass(corner: BadgeCorner, theme: 'tight' | 'safe' = 'safe'): string {
   // 'safe' gives extra clearance from the bottom branding bar; 'tight' hugs the corner.

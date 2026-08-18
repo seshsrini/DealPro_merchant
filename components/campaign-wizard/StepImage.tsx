@@ -616,7 +616,7 @@ export async function generatePromoBanner(
         }
       }
 
-      // === BOTTOM BAR — Sreshta branding (always) ===
+      // === BOTTOM BAR — DealFynd branding (always) ===
       ctx.shadowBlur = 0;
       const barH = SIZE * 0.05;
       const barY = SIZE - barH;
@@ -628,7 +628,7 @@ export async function generatePromoBanner(
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#eab308';
       const brandingPad = SIZE * 0.04;
-      ctx.fillText('Sreshta', brandingPad, barY + barH / 2);
+      ctx.fillText('DealFynd', brandingPad, barY + barH / 2);
 
       ctx.textAlign = 'right';
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
@@ -916,7 +916,7 @@ export async function generateFreeGiftsImage(
         }
       });
 
-      // ─── Bottom bar — Sreshta branding ───
+      // ─── Bottom bar — DealFynd branding ───
       const barH = SIZE * 0.07;
       const barY = SIZE - barH;
       // Pink gradient bar
@@ -931,7 +931,7 @@ export async function generateFreeGiftsImage(
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText('Sreshta', pad, barY + barH / 2);
+      ctx.fillText('DealFynd', pad, barY + barH / 2);
 
       ctx.textAlign = 'right';
       ctx.fillStyle = 'rgba(255,255,255,0.8)';

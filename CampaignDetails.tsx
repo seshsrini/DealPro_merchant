@@ -241,7 +241,7 @@ export const CampaignDetails: React.FC<CampaignDetailsProps> = ({
                           : 'Delivery available — contact store'}
                       </p>
                       <p className={`text-[11px] mt-0.5 leading-snug ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                        Delivered by the merchant or their partner; Sreshta is not liable.
+                        Delivered by the merchant or their partner; DealFynd is not liable.
                       </p>
                     </div>
                   </div>

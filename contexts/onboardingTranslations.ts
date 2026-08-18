@@ -11,7 +11,7 @@ import { Locale } from '../types';
  * never break a screen.
  *
  * Translations are model-generated and pending native review. Proper nouns
- * (Sreshta, GST, PAN, GSTIN, Udyam, FSSAI, DMCA, km) are kept as-is.
+ * (DealFynd, GST, PAN, GSTIN, Udyam, FSSAI, DMCA, km) are kept as-is.
  */
 export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
   en: {
@@ -20,7 +20,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     ob_continue: 'Continue',
 
     // Welcome
-    ob_welcome_title: 'Welcome to Sreshta!',
+    ob_welcome_title: 'Welcome to DealFynd!',
     ob_welcome_sub: 'Before you can start creating deals and reaching customers, we need a few details to set up your merchant account.',
     ob_welcome_step_name: 'Your name',
     ob_welcome_step_store: 'Store details',
@@ -76,7 +76,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     ob_addr_range_km: '{n} km',
     ob_addr_range_city: 'Anywhere within city limits',
     ob_addr_delivery_badge: 'Customers will see "Delivery available" on your deals',
-    ob_addr_delivery_note: 'Delivered by you or your delivery partner; Sreshta is not liable.',
+    ob_addr_delivery_note: 'Delivered by you or your delivery partner; DealFynd is not liable.',
     ob_addr_resolve: 'Resolve from Address',
     ob_addr_use_location: 'Use My Location',
     ob_addr_find_location: 'Find my store location',
@@ -159,7 +159,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
   hi: {
     ob_back: 'वापस',
     ob_continue: 'जारी रखें',
-    ob_welcome_title: 'Sreshta में आपका स्वागत है!',
+    ob_welcome_title: 'DealFynd में आपका स्वागत है!',
     ob_welcome_sub: 'डील बनाना और ग्राहकों तक पहुँचना शुरू करने से पहले, आपका मर्चेंट खाता सेट करने के लिए हमें कुछ विवरण चाहिए।',
     ob_welcome_step_name: 'आपका नाम',
     ob_welcome_step_store: 'स्टोर विवरण',
@@ -209,7 +209,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     ob_addr_range_km: '{n} किमी',
     ob_addr_range_city: 'शहर की सीमा के भीतर कहीं भी',
     ob_addr_delivery_badge: 'ग्राहकों को आपकी डील पर "डिलीवरी उपलब्ध" दिखाई देगा',
-    ob_addr_delivery_note: 'आपके या आपके डिलीवरी पार्टनर द्वारा डिलीवर किया जाता है; Sreshta उत्तरदायी नहीं है।',
+    ob_addr_delivery_note: 'आपके या आपके डिलीवरी पार्टनर द्वारा डिलीवर किया जाता है; DealFynd उत्तरदायी नहीं है।',
     ob_addr_resolve: 'पते से पता लगाएँ',
     ob_addr_use_location: 'मेरा स्थान उपयोग करें',
     ob_addr_find_location: 'मेरे स्टोर का स्थान खोजें',
@@ -284,7 +284,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
   kn: {
     ob_back: 'ಹಿಂದೆ',
     ob_continue: 'ಮುಂದುವರಿಸಿ',
-    ob_welcome_title: 'Sreshta ಗೆ ಸ್ವಾಗತ!',
+    ob_welcome_title: 'DealFynd ಗೆ ಸ್ವಾಗತ!',
     ob_welcome_sub: 'ಡೀಲ್‌ಗಳನ್ನು ರಚಿಸಲು ಮತ್ತು ಗ್ರಾಹಕರನ್ನು ತಲುಪಲು ಪ್ರಾರಂಭಿಸುವ ಮೊದಲು, ನಿಮ್ಮ ವ್ಯಾಪಾರಿ ಖಾತೆಯನ್ನು ಹೊಂದಿಸಲು ನಮಗೆ ಕೆಲವು ವಿವರಗಳು ಬೇಕಾಗುತ್ತವೆ.',
     ob_welcome_step_name: 'ನಿಮ್ಮ ಹೆಸರು',
     ob_welcome_step_store: 'ಸ್ಟೋರ್ ವಿವರಗಳು',
@@ -334,7 +334,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     ob_addr_range_km: '{n} ಕಿಮೀ',
     ob_addr_range_city: 'ನಗರದ ಮಿತಿಯೊಳಗೆ ಎಲ್ಲಿಯಾದರೂ',
     ob_addr_delivery_badge: 'ಗ್ರಾಹಕರು ನಿಮ್ಮ ಡೀಲ್‌ಗಳಲ್ಲಿ "ಡೆಲಿವರಿ ಲಭ್ಯ" ಎಂದು ನೋಡುತ್ತಾರೆ',
-    ob_addr_delivery_note: 'ನಿಮ್ಮಿಂದ ಅಥವಾ ನಿಮ್ಮ ಡೆಲಿವರಿ ಪಾಲುದಾರರಿಂದ ವಿತರಿಸಲಾಗುತ್ತದೆ; Sreshta ಹೊಣೆಗಾರರಲ್ಲ.',
+    ob_addr_delivery_note: 'ನಿಮ್ಮಿಂದ ಅಥವಾ ನಿಮ್ಮ ಡೆಲಿವರಿ ಪಾಲುದಾರರಿಂದ ವಿತರಿಸಲಾಗುತ್ತದೆ; DealFynd ಹೊಣೆಗಾರರಲ್ಲ.',
     ob_addr_resolve: 'ವಿಳಾಸದಿಂದ ಪತ್ತೆಹಚ್ಚಿ',
     ob_addr_use_location: 'ನನ್ನ ಸ್ಥಳವನ್ನು ಬಳಸಿ',
     ob_addr_find_location: 'ನನ್ನ ಸ್ಟೋರ್ ಸ್ಥಳವನ್ನು ಹುಡುಕಿ',
@@ -409,7 +409,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
   ta: {
     ob_back: 'பின்',
     ob_continue: 'தொடரவும்',
-    ob_welcome_title: 'Sreshta க்கு வரவேற்கிறோம்!',
+    ob_welcome_title: 'DealFynd க்கு வரவேற்கிறோம்!',
     ob_welcome_sub: 'டீல்களை உருவாக்கி வாடிக்கையாளர்களை அடையத் தொடங்குவதற்கு முன், உங்கள் வணிகர் கணக்கை அமைக்க எங்களுக்குச் சில விவரங்கள் தேவை.',
     ob_welcome_step_name: 'உங்கள் பெயர்',
     ob_welcome_step_store: 'கடை விவரங்கள்',
@@ -459,7 +459,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     ob_addr_range_km: '{n} கிமீ',
     ob_addr_range_city: 'நகர எல்லைக்குள் எங்கும்',
     ob_addr_delivery_badge: 'உங்கள் டீல்களில் "டெலிவரி உள்ளது" என்று வாடிக்கையாளர்கள் பார்ப்பார்கள்',
-    ob_addr_delivery_note: 'உங்களால் அல்லது உங்கள் டெலிவரி பங்குதாரரால் வழங்கப்படுகிறது; Sreshta பொறுப்பல்ல.',
+    ob_addr_delivery_note: 'உங்களால் அல்லது உங்கள் டெலிவரி பங்குதாரரால் வழங்கப்படுகிறது; DealFynd பொறுப்பல்ல.',
     ob_addr_resolve: 'முகவரியிலிருந்து கண்டறிக',
     ob_addr_use_location: 'எனது இருப்பிடத்தைப் பயன்படுத்து',
     ob_addr_find_location: 'எனது கடையின் இருப்பிடத்தைக் கண்டறியவும்',
@@ -534,7 +534,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
   te: {
     ob_back: 'వెనుకకు',
     ob_continue: 'కొనసాగించు',
-    ob_welcome_title: 'Sreshta కు స్వాగతం!',
+    ob_welcome_title: 'DealFynd కు స్వాగతం!',
     ob_welcome_sub: 'డీల్‌లను సృష్టించడం మరియు కస్టమర్‌లను చేరుకోవడం ప్రారంభించే ముందు, మీ మర్చంట్ ఖాతాను సెటప్ చేయడానికి మాకు కొన్ని వివరాలు కావాలి.',
     ob_welcome_step_name: 'మీ పేరు',
     ob_welcome_step_store: 'స్టోర్ వివరాలు',
@@ -584,7 +584,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     ob_addr_range_km: '{n} కి.మీ',
     ob_addr_range_city: 'నగర పరిమితుల్లో ఎక్కడైనా',
     ob_addr_delivery_badge: 'కస్టమర్‌లు మీ డీల్‌లపై "డెలివరీ అందుబాటులో ఉంది" అని చూస్తారు',
-    ob_addr_delivery_note: 'మీ ద్వారా లేదా మీ డెలివరీ భాగస్వామి ద్వారా డెలివరీ చేయబడుతుంది; Sreshta బాధ్యత వహించదు.',
+    ob_addr_delivery_note: 'మీ ద్వారా లేదా మీ డెలివరీ భాగస్వామి ద్వారా డెలివరీ చేయబడుతుంది; DealFynd బాధ్యత వహించదు.',
     ob_addr_resolve: 'చిరునామా నుండి కనుగొనండి',
     ob_addr_use_location: 'నా స్థానాన్ని ఉపయోగించండి',
     ob_addr_find_location: 'నా స్టోర్ స్థానాన్ని కనుగొనండి',
@@ -659,7 +659,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
   ml: {
     ob_back: 'തിരികെ',
     ob_continue: 'തുടരുക',
-    ob_welcome_title: 'Sreshta-യിലേക്ക് സ്വാഗതം!',
+    ob_welcome_title: 'DealFynd-യിലേക്ക് സ്വാഗതം!',
     ob_welcome_sub: 'ഡീലുകൾ സൃഷ്ടിക്കാനും ഉപഭോക്താക്കളിലേക്ക് എത്താനും തുടങ്ങുന്നതിന് മുമ്പ്, നിങ്ങളുടെ വ്യാപാരി അക്കൗണ്ട് സജ്ജീകരിക്കാൻ ഞങ്ങൾക്ക് കുറച്ച് വിശദാംശങ്ങൾ വേണം.',
     ob_welcome_step_name: 'നിങ്ങളുടെ പേര്',
     ob_welcome_step_store: 'സ്റ്റോർ വിശദാംശങ്ങൾ',
@@ -709,7 +709,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     ob_addr_range_km: '{n} കി.മീ',
     ob_addr_range_city: 'നഗരപരിധിക്കുള്ളിൽ എവിടെയും',
     ob_addr_delivery_badge: 'നിങ്ങളുടെ ഡീലുകളിൽ "ഡെലിവറി ലഭ്യമാണ്" എന്ന് ഉപഭോക്താക്കൾ കാണും',
-    ob_addr_delivery_note: 'നിങ്ങളോ നിങ്ങളുടെ ഡെലിവറി പങ്കാളിയോ വിതരണം ചെയ്യുന്നു; Sreshta ഉത്തരവാദിയല്ല.',
+    ob_addr_delivery_note: 'നിങ്ങളോ നിങ്ങളുടെ ഡെലിവറി പങ്കാളിയോ വിതരണം ചെയ്യുന്നു; DealFynd ഉത്തരവാദിയല്ല.',
     ob_addr_resolve: 'വിലാസത്തിൽ നിന്ന് കണ്ടെത്തുക',
     ob_addr_use_location: 'എന്റെ ലൊക്കേഷൻ ഉപയോഗിക്കുക',
     ob_addr_find_location: 'എന്റെ സ്റ്റോർ ലൊക്കേഷൻ കണ്ടെത്തുക',
@@ -784,7 +784,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
   bn: {
     ob_back: 'পিছনে',
     ob_continue: 'চালিয়ে যান',
-    ob_welcome_title: 'Sreshta-তে স্বাগতম!',
+    ob_welcome_title: 'DealFynd-তে স্বাগতম!',
     ob_welcome_sub: 'ডিল তৈরি এবং গ্রাহকদের কাছে পৌঁছানো শুরু করার আগে, আপনার মার্চেন্ট অ্যাকাউন্ট সেট আপ করতে আমাদের কিছু বিবরণ প্রয়োজন।',
     ob_welcome_step_name: 'আপনার নাম',
     ob_welcome_step_store: 'দোকানের বিবরণ',
@@ -834,7 +834,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     ob_addr_range_km: '{n} কিমি',
     ob_addr_range_city: 'শহরের সীমার মধ্যে যেকোনো জায়গায়',
     ob_addr_delivery_badge: 'গ্রাহকরা আপনার ডিলে "ডেলিভারি উপলব্ধ" দেখতে পাবেন',
-    ob_addr_delivery_note: 'আপনার বা আপনার ডেলিভারি পার্টনার দ্বারা বিতরণ করা হয়; Sreshta দায়ী নয়।',
+    ob_addr_delivery_note: 'আপনার বা আপনার ডেলিভারি পার্টনার দ্বারা বিতরণ করা হয়; DealFynd দায়ী নয়।',
     ob_addr_resolve: 'ঠিকানা থেকে সনাক্ত করুন',
     ob_addr_use_location: 'আমার অবস্থান ব্যবহার করুন',
     ob_addr_find_location: 'আমার দোকানের অবস্থান খুঁজুন',
@@ -909,7 +909,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
   mr: {
     ob_back: 'मागे',
     ob_continue: 'सुरू ठेवा',
-    ob_welcome_title: 'Sreshta मध्ये आपले स्वागत आहे!',
+    ob_welcome_title: 'DealFynd मध्ये आपले स्वागत आहे!',
     ob_welcome_sub: 'डील तयार करणे आणि ग्राहकांपर्यंत पोहोचणे सुरू करण्यापूर्वी, तुमचे व्यापारी खाते सेट करण्यासाठी आम्हाला काही तपशील हवे आहेत.',
     ob_welcome_step_name: 'तुमचे नाव',
     ob_welcome_step_store: 'स्टोअर तपशील',
@@ -959,7 +959,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     ob_addr_range_km: '{n} किमी',
     ob_addr_range_city: 'शहराच्या हद्दीत कुठेही',
     ob_addr_delivery_badge: 'ग्राहकांना तुमच्या डीलवर "डिलिव्हरी उपलब्ध" दिसेल',
-    ob_addr_delivery_note: 'तुमच्याद्वारे किंवा तुमच्या डिलिव्हरी भागीदाराद्वारे वितरित; Sreshta जबाबदार नाही.',
+    ob_addr_delivery_note: 'तुमच्याद्वारे किंवा तुमच्या डिलिव्हरी भागीदाराद्वारे वितरित; DealFynd जबाबदार नाही.',
     ob_addr_resolve: 'पत्त्यावरून शोधा',
     ob_addr_use_location: 'माझे स्थान वापरा',
     ob_addr_find_location: 'माझ्या स्टोअरचे स्थान शोधा',
@@ -1034,7 +1034,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
   gu: {
     ob_back: 'પાછળ',
     ob_continue: 'ચાલુ રાખો',
-    ob_welcome_title: 'Sreshta માં આપનું સ્વાગત છે!',
+    ob_welcome_title: 'DealFynd માં આપનું સ્વાગત છે!',
     ob_welcome_sub: 'ડીલ બનાવવાનું અને ગ્રાહકો સુધી પહોંચવાનું શરૂ કરતા પહેલા, તમારું મર્ચન્ટ એકાઉન્ટ સેટ કરવા માટે અમને કેટલીક વિગતોની જરૂર છે.',
     ob_welcome_step_name: 'તમારું નામ',
     ob_welcome_step_store: 'સ્ટોર વિગતો',
@@ -1084,7 +1084,7 @@ export const ONBOARDING_TRANSLATIONS: Record<Locale, Record<string, string>> = {
     ob_addr_range_km: '{n} કિમી',
     ob_addr_range_city: 'શહેરની હદમાં ગમે ત્યાં',
     ob_addr_delivery_badge: 'ગ્રાહકો તમારી ડીલ પર "ડિલિવરી ઉપલબ્ધ" જોશે',
-    ob_addr_delivery_note: 'તમારા દ્વારા અથવા તમારા ડિલિવરી ભાગીદાર દ્વારા વિતરિત; Sreshta જવાબદાર નથી.',
+    ob_addr_delivery_note: 'તમારા દ્વારા અથવા તમારા ડિલિવરી ભાગીદાર દ્વારા વિતરિત; DealFynd જવાબદાર નથી.',
     ob_addr_resolve: 'સરનામાંથી શોધો',
     ob_addr_use_location: 'મારું સ્થાન વાપરો',
     ob_addr_find_location: 'મારા સ્ટોરનું સ્થાન શોધો',

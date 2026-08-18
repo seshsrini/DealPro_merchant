@@ -376,7 +376,7 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
                 <li>You assume full legal responsibility for any copyright claims, disputes, or legal issues arising from the use of this image</li>
               </ul>
               <p className="pt-2 font-medium">
-                Sreshta and its affiliated companies shall not be held liable for any copyright infringement, legal claims, or damages resulting from images uploaded by merchants.
+                DealFynd and its affiliated companies shall not be held liable for any copyright infringement, legal claims, or damages resulting from images uploaded by merchants.
               </p>
             </div>
             <div className="flex gap-3">

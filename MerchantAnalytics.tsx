@@ -40,7 +40,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
   const [error, setError] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<'7' | '30' | 'lifetime'>('30');
 
-  // INTEL: Sreshta consumers signed up in each store's area (city-level today).
+  // INTEL: DealFynd consumers signed up in each store's area (city-level today).
   interface ConsumerReachRow { store_id: string; store_name: string | null; city: string | null; state: string | null; locality: string | null; pincode: string | null; consumer_count: number; }
   const [consumerReach, setConsumerReach] = useState<ConsumerReachRow[]>([]);
   const [loadingReach, setLoadingReach] = useState(true);
@@ -403,7 +403,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
         </p>
       </div>
 
-      {/* Consumer reach — how many Sreshta consumers are signed up in each store's
+      {/* Consumer reach — how many DealFynd consumers are signed up in each store's
           area. Upper part of the page, just under the header. Always rendered so
           it's never invisible; shows an empty/loading state when needed. */}
       {(
@@ -414,7 +414,7 @@ export const MerchantAnalytics: React.FC<MerchantAnalyticsProps> = ({ user, them
             </div>
             <div className="min-w-0">
               <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Consumers in your area</p>
-              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Sreshta shoppers signed up near each of your stores</p>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>DealFynd shoppers signed up near each of your stores</p>
             </div>
           </div>
 

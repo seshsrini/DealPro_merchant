@@ -140,7 +140,7 @@ const extract = (deal: Deal) => {
 };
 
 /**
- * Sreshta logo (inlined SVG). Inlining lets the popup window render the brand
+ * DealFynd logo (inlined SVG). Inlining lets the popup window render the brand
  * mark instantly without a network fetch — important because the print dialog
  * fires as soon as images load, and an external <img> from /assets/logo.svg
  * would either flash blank or block the print trigger.
@@ -203,7 +203,7 @@ const brandHeader = (): string => `
 const brandFooter = (d: ReturnType<typeof extract>): string => `
   <div class="brand-footer">
     <div class="brand-footer-cta">
-      Get the Sreshta app — discover more deals near you
+      Get the DealFynd app — discover more deals near you
     </div>
     ${d.discountCode ? `<div class="brand-footer-code">Code: <strong>${escapeHtml(d.discountCode)}</strong></div>` : ''}
   </div>
@@ -361,7 +361,7 @@ const renderSideBySide = (d: ReturnType<typeof extract>): string => `
         ${d.endDate ? `<div class="sbs-row"><span class="sbs-icon">${icons.clock}</span>Valid till <strong>${escapeHtml(formatDate(d.endDate))}</strong></div>` : ''}
       </div>
 
-      <div class="sbs-cta">Get the Sreshta app for more deals near you</div>
+      <div class="sbs-cta">Get the DealFynd app for more deals near you</div>
     </div>
   </div>
 `;
@@ -575,7 +575,7 @@ export function buildPosterHtml(deal: Deal, template: PosterTemplate, opts: Buil
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(d.heading || 'Sreshta Poster')}</title>
+  <title>${escapeHtml(d.heading || 'DealFynd Poster')}</title>
   <style>${sharedCss}</style>
 </head>
 <body>
@@ -616,7 +616,7 @@ export function openDealPoster(deal: Deal, template: PosterTemplate): boolean {
     const printer = (window as any)?.cordova?.plugins?.printer;
     if (printer?.print) {
       try {
-        printer.print(html, { name: `Sreshta Poster — ${deal && (deal as any).deal_heading ? (deal as any).deal_heading : 'Deal'}` }, () => {});
+        printer.print(html, { name: `DealFynd Poster — ${deal && (deal as any).deal_heading ? (deal as any).deal_heading : 'Deal'}` }, () => {});
         return true;
       } catch (err) {
         console.error('[printDealPoster] cordova printer failed, falling back to iframe:', err);

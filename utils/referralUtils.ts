@@ -6,7 +6,7 @@ export const generateWhatsAppReferralLink = (
 ): string => {
   const cleanedPhoneNumber = phoneNumber.replace(/[^0-9]/g, ''); // Ensure digits only
 
-  const messageTemplate = `Hi! This is ${merchantName}. I am using Sreshta to grow my business. Join using my code ${referralCode} and get started here: https://dealpro.app/signup?ref=${referralCode}`;
+  const messageTemplate = `Hi! This is ${merchantName}. I am using DealFynd to grow my business. Join using my code ${referralCode} and get started here: https://dealpro.app/signup?ref=${referralCode}`;
   const encodedMessage = encodeURIComponent(messageTemplate);
 
   return `https://wa.me/${cleanedPhoneNumber}?text=${encodedMessage}`;
@@ -16,7 +16,7 @@ export const generateWhatsAppConsumerReferralLink = (
   userName: string,
   phoneNumber?: string // Optional phone number
 ): string => {
-  const messageTemplate = `Hey! I'm using Sreshta to discover amazing local deals and save big! 🎉 Join me and start saving today: https://dealpro.app/signup
+  const messageTemplate = `Hey! I'm using DealFynd to discover amazing local deals and save big! 🎉 Join me and start saving today: https://dealpro.app/signup
 
 Shared by ${userName}`;
   const encodedMessage = encodeURIComponent(messageTemplate);

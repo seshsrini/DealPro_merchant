@@ -750,13 +750,13 @@ const AppContent: React.FC = () => {
         <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6">
           <div className="relative mb-8 w-48 h-48">
             <DealProLogo
-              alt="Sreshta Merchant Logo"
+              alt="DealFynd Merchant Logo"
               className="w-full h-full object-contain animate-float rounded-2xl"
               iconClassName="w-24 h-24 text-white"
             />
           </div>
           <h1 className="text-4xl font-semibold text-white text-center">
-            Sresht<span style={{ color: '#F59E0B' }}>a</span>
+            Deal<span style={{ color: '#F59E0B' }}>Fynd</span>
           </h1>
           <p className="mt-4 text-xs text-slate-400 text-center font-medium">Engineered by Vedic Jaalam</p>
           <img src={`${import.meta.env.BASE_URL}assets/vedicjaalam.svg?v=2`} alt="Vedic Jaalam" className="mt-2 h-6 w-auto" />
@@ -769,11 +769,11 @@ const AppContent: React.FC = () => {
           className="h-full overflow-y-auto hide-scrollbar bg-white flex flex-col px-8 pt-16"
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 2.5rem)' }}
         >
-          {/* Logo + Sreshta branding */}
+          {/* Logo + DealFynd branding */}
           <div className="flex items-center gap-3 mb-6 animate-float-in float-in-delay-1">
             <DealProLogo className="w-10 h-10 rounded-2xl overflow-hidden shrink-0 object-contain" />
 
-            <span className="font-semibold text-xl leading-none text-slate-900">Sresht<span style={{ color: '#F59E0B' }}>a</span></span>
+            <span className="font-semibold text-xl leading-none text-slate-900">Deal<span style={{ color: '#F59E0B' }}>Fynd</span></span>
           </div>
 
           {/* Headline */}
@@ -1081,7 +1081,7 @@ const AppContent: React.FC = () => {
           <div className={`w-full max-w-sm rounded-xl shadow-lg ${theme === 'dark' ? 'bg-slate-900 border border-slate-800' : 'bg-white border border-slate-200'}`}>
             <div className="p-6">
               <h3 className={`text-lg font-semibold text-center mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
-                Exit Sreshta?
+                Exit DealFynd?
               </h3>
               <p className={`text-sm text-center mb-6 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
                 Are you sure you want to exit the app?

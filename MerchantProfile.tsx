@@ -91,7 +91,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
 
     try {
       const referralCode = merchantReferralCode;
-      const storeName = user.store_name || user.username || 'Sreshta Merchant';
+      const storeName = user.store_name || user.username || 'DealFynd Merchant';
 
       await userService.logActivity({
         user_id: user.id,
@@ -102,7 +102,7 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
 
       await MreferralService.onInviteSent(user.id, referralCode, null, null);
 
-      const message = `Hi! This is ${storeName}. I am using Sreshta to grow my business. Join using my code ${referralCode} and get started here: https://dealpro.app/signup?ref=${referralCode}`;
+      const message = `Hi! This is ${storeName}. I am using DealFynd to grow my business. Join using my code ${referralCode} and get started here: https://dealpro.app/signup?ref=${referralCode}`;
       const whatsappLink = `https://wa.me/?text=${encodeURIComponent(message)}`;
       window.open(whatsappLink, '_blank');
 

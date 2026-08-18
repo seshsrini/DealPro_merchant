@@ -51,7 +51,7 @@ export const LocationPermission: React.FC<LocationPermissionProps> = ({ setView,
           Enable location
         </h2>
         <p className="text-sm text-slate-500">
-          Allow Sreshta to use your location to show deals near you
+          Allow DealFynd to use your location to show deals near you
         </p>
       </div>
 

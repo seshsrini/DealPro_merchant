@@ -155,7 +155,7 @@ Deno.serve(async (req: Request) => {
 
       if (lookupErr) return json({ error: 'Lookup failed' }, 500);
       if (!profile) {
-        return json({ error: 'no_account', message: 'No Sreshta merchant account for this number. Please sign up in the mobile app.' }, 404);
+        return json({ error: 'no_account', message: 'No DealFynd merchant account for this number. Please sign up in the mobile app.' }, 404);
       }
 
       const requestCode = String(Math.floor(1000 + Math.random() * 9000)); // 4-digit

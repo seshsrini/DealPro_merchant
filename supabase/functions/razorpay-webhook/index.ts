@@ -340,10 +340,10 @@ Deno.serve(async (req: Request) => {
   if (event.event === 'subscription.charged' && existingSub?.status === 'active') {
     const amt = (payEntity && typeof payEntity.amount === 'number') ? ` for ₹${payEntity.amount / 100}` : '';
     notifyMerchant(supabase, merchantId, 'payment_success', 'Subscription renewed',
-      `Your Sreshta plan renewed${amt}. You're set for another month.`);
+      `Your DealFynd plan renewed${amt}. You're set for another month.`);
   } else if (event.event === 'subscription.halted') {
     notifyMerchant(supabase, merchantId, 'payment_failed', 'Payment failed — action needed',
-      'We could not renew your Sreshta subscription after several attempts. Please update your payment method to keep your deals live.');
+      'We could not renew your DealFynd subscription after several attempts. Please update your payment method to keep your deals live.');
   }
 
   // Billing ledger — record the actual charge so revenue/billing analytics

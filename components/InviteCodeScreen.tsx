@@ -116,7 +116,7 @@ export const InviteCodeScreen: React.FC<InviteCodeScreenProps> = ({ setView, nex
           <div className="space-y-2 pt-2">
             <div className="flex items-center gap-2.5">
               <KeyRound className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
-              <span className="text-[11px] text-slate-400">App invite code from Sreshta</span>
+              <span className="text-[11px] text-slate-400">App invite code from DealFynd</span>
             </div>
             <div className="flex items-center gap-2.5">
               <Share2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
