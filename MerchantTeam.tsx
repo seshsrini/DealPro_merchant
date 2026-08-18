@@ -104,8 +104,8 @@ export const MerchantTeam: React.FC<MerchantTeamProps> = ({ user, setView, theme
   };
 
   const handleShareWhatsApp = (code: string, name: string) => {
-    const storeName = user.store_name || 'DealPro Merchant';
-    const msg = `Hi ${name}! You've been invited to join ${storeName} on DealPro as a team member. Use this invite code to get started: ${code}`;
+    const storeName = user.store_name || 'DealFynd Merchant';
+    const msg = `Hi ${name}! You've been invited to join ${storeName} on DealFynd as a team member. Use this invite code to get started: ${code}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   };
 

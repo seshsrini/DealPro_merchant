@@ -3,7 +3,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.dealpro.merchant',
-  appName: 'DealPro for Business',
+  appName: 'DealFynd for Business',
   webDir: 'dist',
   bundledWebRuntime: false,
   server: {
