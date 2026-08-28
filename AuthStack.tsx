@@ -426,8 +426,7 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
 
     const cleanDigits = input.replace(/\D/g, '');
 
-    const TEST_NUMBERS = ['9999999999', '8888888888', '6666666666', '7777777777', '4444444444', '5555555555', '3333333333', '2222222222', '1111111111'];
-    if (selectedCountry.code === '+91' && !TEST_NUMBERS.includes(cleanDigits)) {
+    if (selectedCountry.code === '+91') {
       if (cleanDigits.length !== 10 || !/^[6-9]/.test(cleanDigits)) {
         setAuthError('Please enter a valid 10-digit phone number.');
         return;
@@ -442,10 +441,6 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
     setAuthError(null);
     setPhoneNumber(cleanDigits);
 
-    // Test numbers go through the SAME OTP modal as real numbers (fixed code
-    // 123456, no SMS) so the login flow is identical and reviewable. The modal's
-    // onVerificationSuccess sets isPhoneVerifiedForLogin(true) — exactly what the
-    // old instant-bypass did — so the login outcome is unchanged.
     const fullPhone = `${selectedCountry.code}${cleanDigits}`;
     setOtpPhoneNumber(fullPhone);
     setShowOtpModal(true);

@@ -89,7 +89,7 @@ export const ForgotPwd: React.FC<ForgotPwdProps> = ({ setView, loading, setLoadi
           setForgotStep('reset');
         }, 1500);
       } else {
-        setForgotError("Invalid OTP (hint: try 123456).");
+        setForgotError("Invalid OTP. Please try again.");
         setLoading(false);
       }
     } else if (forgotStep === 'reset') {
