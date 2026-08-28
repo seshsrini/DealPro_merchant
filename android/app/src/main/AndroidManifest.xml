@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Predictive back (Android 16) defaults ON at targetSdk 36, which routes
+     back gestures through OnBackInvokedCallback and stops calling the
+     legacy onBackPressed path. Capacitor 6's App.addListener('backButton')
+     is built on that legacy path, so leaving this at the default would
+     silently break every back handler in the app - including the
+     exit-confirmation dialog - and back would just close the activity.
+
+     Capacitor 7 supports predictive back properly. Remove this opt-out as
+     part of that upgrade, not before, and re-test back navigation. -->
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -8,7 +17,22 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false"
-        android:networkSecurityConfig="@xml/network_security_config">
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:enableOnBackInvokedCallback="false">
+        <!-- Android 16 (targetSdk 36) ignores orientation and resizability
+             restrictions on large screens (smallest width >= 600dp), which would
+             unlock this portrait-only app into landscape on tablets and foldables
+             before its layouts are ready for it.
+
+             This property opts back out, preserving the portrait lock on large
+             screens. It is a time-boxed reprieve, not a fix: Android honours it
+             only while we target 36, and it stops working at targetSdk 37. The
+             real work - making every screen usable in landscape and at tablet
+             widths - has to happen before the next target-API deadline. -->
+        <property
+            android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+            android:value="true" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:screenOrientation="portrait"
