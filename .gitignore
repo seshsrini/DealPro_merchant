@@ -76,3 +76,9 @@ nul
 # Schema dumps — contain live service_role keys embedded in webhook triggers
 prod-schema.sql
 prod-schema.*.sql
+
+# Release bundles: archived on disk under releases/ for audit, but never
+# committed - each is ~20MB and git would keep every one forever. The audit
+# trail is releases/RELEASES.md; Play Console holds the authoritative bundles.
+releases/*.aab
+releases/*.apk
