@@ -12,7 +12,7 @@
  * Required Supabase secrets:
  *   FIREBASE_SERVICE_ACCOUNT_JSON — Firebase Admin SDK service account key
  *   RESEND_API_KEY              — Resend.com API key for transactional email
- *   RESEND_FROM_EMAIL           — Verified sender (e.g. "DealFynd <noreply@dealpro.in>")
+ *   RESEND_FROM_EMAIL           — Verified sender (e.g. "DealFynd <noreply@vedicjaalam.com>")
  */
 
 // @ts-ignore
@@ -296,7 +296,11 @@ Deno.serve(async (req) => {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const firebaseSaJson = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_JSON');
   const resendApiKey = Deno.env.get('RESEND_API_KEY');
-  const resendFrom = Deno.env.get('RESEND_FROM_EMAIL') || 'DealFynd <noreply@dealpro.in>';
+  // vedicjaalam.com is the domain verified in Resend (DKIM on resend._domainkey
+  // at the root; Return-Path MX and SPF on the `send` subdomain, which is NOT
+  // itself a sending identity). The previous default was @dealpro.in, a domain
+  // with no DNS whatsoever, so every send failed.
+  const resendFrom = Deno.env.get('RESEND_FROM_EMAIL') || 'DealFynd <noreply@vedicjaalam.com>';
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
