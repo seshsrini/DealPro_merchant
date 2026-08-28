@@ -209,8 +209,9 @@ function buildTrialExpiryEmailHtml(
         Managing your plan
       </h2>
       <p style="font-size: 15px; line-height: 1.7; margin: 0 0 16px;">
-        If you'd like to change your tier or manage your subscription, you can do so anytime via the
-        <a href="https://play.google.com/store/account/subscriptions" style="color: #059669; text-decoration: underline; font-weight: 600;">Google Play Subscriptions Center</a>.
+        If you'd like to change your tier, or cancel your subscription, you can do so anytime on your
+        <a href="https://vedicjaalam.com/merchant/subscribe" style="color: #059669; text-decoration: underline; font-weight: 600;">DealFynd subscription page</a>.
+        You do not need the app installed to manage or cancel &mdash; just sign in with the same phone number.
       </p>
 
       <!-- Closing -->
