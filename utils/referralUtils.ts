@@ -1,3 +1,4 @@
+import { PLAY_LISTING_CONSUMER, PLAY_LISTING_MERCHANT, playListingWithReferral } from './appLinks';
 
 export const generateWhatsAppReferralLink = (
   phoneNumber: string, // Expects digits only (e.g., "919876543210")
@@ -6,7 +7,8 @@ export const generateWhatsAppReferralLink = (
 ): string => {
   const cleanedPhoneNumber = phoneNumber.replace(/[^0-9]/g, ''); // Ensure digits only
 
-  const messageTemplate = `Hi! This is ${merchantName}. I am using DealFynd to grow my business. Join using my code ${referralCode} and get started here: https://dealpro.app/signup?ref=${referralCode}`;
+  const link = playListingWithReferral(PLAY_LISTING_MERCHANT, referralCode);
+  const messageTemplate = `Hi! This is ${merchantName}. I am using DealFynd to grow my business. Join using my code ${referralCode} and get started here: ${link}`;
   const encodedMessage = encodeURIComponent(messageTemplate);
 
   return `https://wa.me/${cleanedPhoneNumber}?text=${encodedMessage}`;
@@ -16,7 +18,7 @@ export const generateWhatsAppConsumerReferralLink = (
   userName: string,
   phoneNumber?: string // Optional phone number
 ): string => {
-  const messageTemplate = `Hey! I'm using DealFynd to discover amazing local deals and save big! 🎉 Join me and start saving today: https://dealpro.app/signup
+  const messageTemplate = `Hey! I'm using DealFynd to discover amazing local deals and save big! 🎉 Join me and start saving today: ${PLAY_LISTING_CONSUMER}
 
 Shared by ${userName}`;
   const encodedMessage = encodeURIComponent(messageTemplate);

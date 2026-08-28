@@ -34,6 +34,7 @@ import { resilient } from './services/resilientData';
 import { useResumeRefetch } from './services/useResumeRefetch';
 import { resetFeatureTour } from './components/FeatureTour';
 import { resetCampaignTour } from './components/CampaignTour';
+import { PLAY_LISTING_MERCHANT, playListingWithReferral } from './utils/appLinks';
 
 interface MerchantProfileProps {
   user: any;
@@ -102,7 +103,8 @@ export const MerchantProfile: React.FC<MerchantProfileProps> = ({ user, setUser,
 
       await MreferralService.onInviteSent(user.id, referralCode, null, null);
 
-      const message = `Hi! This is ${storeName}. I am using DealFynd to grow my business. Join using my code ${referralCode} and get started here: https://dealpro.app/signup?ref=${referralCode}`;
+      const inviteLink = playListingWithReferral(PLAY_LISTING_MERCHANT, referralCode);
+      const message = `Hi! This is ${storeName}. I am using DealFynd to grow my business. Join using my code ${referralCode} and get started here: ${inviteLink}`;
       const whatsappLink = `https://wa.me/?text=${encodeURIComponent(message)}`;
       window.open(whatsappLink, '_blank');
 
