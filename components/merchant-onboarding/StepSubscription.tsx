@@ -37,12 +37,12 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);
   const [billingReady, setBillingReady] = useState(false);
   const isNative = Capacitor.isNativePlatform();
-  // Test bypass: shown while VITE_ALLOW_TEST_SUBSCRIPTION is true (internal
-  // testers) OR when the signed-in account is the designated app-review account
-  // (VITE_REVIEWER_PHONES) so the Google Play reviewer can skip payment. Hidden
-  // from real merchants; the server enforces the same allow-list.
-  const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true'
-    || isReviewerAccount(user);
+  // Reviewer-only. The blanket VITE_ALLOW_TEST_SUBSCRIPTION escape hatch was
+  // removed deliberately: it exposed this button to every merchant in any build
+  // where the flag was left on. The ONLY way to see it is to be signed in as a
+  // number on the reviewer allow-list, and the server enforces the same list
+  // independently, so a tampered client gains nothing.
+  const allowTestBypass = isReviewerAccount(user);
   const [testBypassing, setTestBypassing] = useState(false);
 
   // Advances to the payment step without creating a subscription or charging
@@ -423,9 +423,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
               Continue
             </button>
 
-            {/* Legacy 120-day-trial path — left intact behind the dev-only
-                test bypass flag (allowTestBypass = VITE_ALLOW_TEST_SUBSCRIPTION).
-                Hidden in normal production builds. */}
+            {/* Legacy 120-day-trial path — reviewer accounts only. */}
             {allowTestBypass && (
               <button
                 onClick={handleConfirm}
@@ -449,7 +447,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
         </div>
       )}
 
-      {/* Test-only bypass — visible while VITE_ALLOW_TEST_SUBSCRIPTION=true. */}
+      {/* Test bypass — visible only to reviewer allow-list accounts. */}
       {allowTestBypass && (
         <div style={floatIn(550, visible)} className="mt-4 mb-2">
           <div className={`rounded-xl border-2 border-dashed p-3 ${isDark ? 'border-amber-500/40 bg-amber-500/5' : 'border-amber-400 bg-amber-50'}`}>

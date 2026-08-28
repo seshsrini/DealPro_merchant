@@ -70,13 +70,12 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   const [error, setError] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selectedTierId, setSelectedTierId] = useState<number | null>(null);
-  // Test-only bypass: activate a pro_test subscription with no payment. Shown
-  // when VITE_ALLOW_TEST_SUBSCRIPTION=true (internal builds) OR the signed-in
-  // account is the designated app-review account (VITE_REVIEWER_PHONES) — so the
-  // Google Play reviewer can subscribe, but real merchants never see it. The
-  // server enforces the same allow-list.
-  const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true'
-    || isReviewerAccount(user);
+  // Reviewer-only. The blanket VITE_ALLOW_TEST_SUBSCRIPTION escape hatch was
+  // removed deliberately: it exposed this button to every merchant in any build
+  // where the flag was left on. The ONLY way to see it is to be signed in as a
+  // number on the reviewer allow-list, and the server enforces the same list
+  // independently, so a tampered client gains nothing.
+  const allowTestBypass = isReviewerAccount(user);
   const [testBypassing, setTestBypassing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);
@@ -482,9 +481,9 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           </div>
         </div>
 
-        {/* Test escape hatch — shown in the hosted (PLAY_COMPLIANT) view while
-            VITE_ALLOW_TEST_SUBSCRIPTION=true, so testers activate a no-charge PROD
-            subscription without going through live Razorpay. Gone at launch. */}
+        {/* Test escape hatch in the hosted (PLAY_COMPLIANT) view — reviewer
+            accounts only, so a reviewer can reach the subscribed state without
+            a live Razorpay payment. */}
         {allowTestBypass && !active && (
           <button
             onClick={handleTestBypass}
@@ -565,9 +564,9 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         </div>
       </div>
 
-      {/* Test-only bypass — visible while VITE_ALLOW_TEST_SUBSCRIPTION=true, gone
-          from real prod builds. Activates a pro_test subscription with no payment
-          and clears any stuck payment-pending overlay. */}
+      {/* Test bypass — reviewer accounts only. Activates a pro_test
+          subscription with no payment and clears any stuck payment-pending
+          overlay. */}
       {allowTestBypass && (
         <button
           onClick={handleTestBypass}
