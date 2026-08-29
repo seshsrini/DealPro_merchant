@@ -20,6 +20,40 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.08.29.1054 — versionCode 1788015252
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.08.29.1054-vc1788015252.aab` |
+| SHA-256 | `db9b2ec90448c3c6cb08847e846cab1fe140c28ca581c67d1757f97848aa4b70` |
+| Size | 22,298,520 bytes |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
+| targetSdk / minSdk | 36 / 23 |
+| Commit | `8e25f30` |
+| Play status | pending upload |
+
+**Fixes the same OTP failure found and fixed in the consumer app.** Merchant runs
+the identical native phone-auth path; it went unnoticed only because every
+merchant test used a Firebase test number, which sends no SMS — so real-number
+OTP had no production evidence behind it.
+
+`@capacitor-firebase/authentication` defaults `signInWithPhoneNumber` to
+`timeout: 60`, leaving Android SMS auto-retrieval on. When it fires, the plugin
+calls `signInWithCredential` immediately — redeeming the code server-side — and
+only then emits `phoneVerificationCompleted`. `sendOtp()` removed that listener
+inside the `phoneCodeSent` handler, so the app kept asking for a code the backend
+had already spent and the user's entry returned 400 `INVALID_CODE`. Now passes
+`timeout: 0` and keeps the auto-verification listener alive past `phoneCodeSent`.
+
+Also drops the shipped `Send failed: ...` diagnostic that leaked raw Firebase
+text to users, and corrects a stale comment naming project `dealpro-merchant`;
+this app is on `dealpro-prod---m` (376667169728).
+
+**Also enabled server-side, no bundle change:** Play Integrity API on
+`dealpro-prod---m`. It was disabled.
+
+---
+
 ## 2026.08.28.1834 — versionCode 1787956486
 
 | | |
