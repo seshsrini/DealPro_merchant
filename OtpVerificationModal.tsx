@@ -42,6 +42,20 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
     }
   }, [isOpen, phoneNumber]);
 
+  // onVerificationSuccess is an inline arrow at the call site, so its identity
+  // changes every render — hold it in a ref to keep the subscription stable.
+  const onSuccessRef = useRef(onVerificationSuccess);
+  onSuccessRef.current = onVerificationSuccess;
+
+  // Firebase can finish verification without us (instant verification). The
+  // user is already signed in when that lands, so close the flow rather than
+  // keep asking for a code they can no longer redeem.
+  useEffect(() => {
+    if (!isOpen) return;
+    firebaseAuthService.onAutoVerified(() => onSuccessRef.current());
+    return () => firebaseAuthService.onAutoVerified(null);
+  }, [isOpen]);
+
   useEffect(() => {
     if (resendTimer > 0) {
       timerRef.current = setTimeout(() => setResendTimer(resendTimer - 1), 1000);

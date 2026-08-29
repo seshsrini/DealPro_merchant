@@ -1,6 +1,6 @@
 
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { initializeApp, getApps } from 'firebase/app';
 
 // Firebase credentials loaded from environment variables
@@ -8,7 +8,7 @@ const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || '';
 const FIREBASE_REST_BASE = 'https://identitytoolkit.googleapis.com/v1';
 
 // Initialize Firebase web SDK (needed for @capacitor-firebase/authentication on web)
-// Must match android/app/google-services.json (project: dealpro-merchant)
+// Must match android/app/google-services.json (project: dealpro-prod---m)
 if (getApps().length === 0) {
   initializeApp({
     apiKey: FIREBASE_API_KEY,
@@ -31,6 +31,28 @@ if (getApps().length === 0) {
 class FirebaseAuthService {
   private verificationId: string | null = null;
   private emailIdToken: string | null = null;
+  private autoVerified = false;
+  private autoVerifyHandle: PluginListenerHandle | null = null;
+  private autoVerifyCallback: (() => void) | null = null;
+
+  /**
+   * Register a callback for verification Firebase completes on its own.
+   * When it fires the user is ALREADY signed in — the plugin calls
+   * signInWithCredential before emitting the event — so the UI must stop
+   * asking for a code and treat the flow as successful.
+   */
+  onAutoVerified(callback: (() => void) | null): void {
+    this.autoVerifyCallback = callback;
+  }
+
+  private teardownAutoVerify(): void {
+    try {
+      this.autoVerifyHandle?.remove();
+    } catch {
+      // Listener already gone — nothing to do.
+    }
+    this.autoVerifyHandle = null;
+  }
 
   /**
    * Send OTP to the given phone number.
@@ -38,29 +60,40 @@ class FirebaseAuthService {
    */
   async sendOtp(phoneNumber: string): Promise<void> {
     console.log('[FirebaseAuth] Sending OTP to:', phoneNumber);
+    this.teardownAutoVerify();
+    this.autoVerified = false;
 
     try {
       // Set up listeners BEFORE triggering signInWithPhoneNumber.
       // On Android, the verificationId arrives asynchronously via phoneCodeSent event.
+      let settled = false;
       const verificationId = await new Promise<string>(async (resolve, reject) => {
-        // Timeout after 60 seconds
+        // Declared up front and nullable: cleanup() can run before every handle
+        // is assigned, and touching an unassigned `const` throws a ReferenceError
+        // that would silently strand this promise until the timeout.
+        let codeSentHandle: PluginListenerHandle | null = null;
+        let failedHandle: PluginListenerHandle | null = null;
+
         const timeout = setTimeout(() => {
+          settled = true;
           cleanup();
           reject(new Error('OTP request timed out. Please try again.'));
         }, 60000);
 
+        // Tears down only the request-scoped listeners. The auto-verification
+        // listener deliberately outlives this promise — see below.
         const cleanup = () => {
           clearTimeout(timeout);
           codeSentHandle?.remove();
           failedHandle?.remove();
-          completedHandle?.remove();
         };
 
         // Listen for code sent (SMS dispatched)
-        const codeSentHandle = await FirebaseAuthentication.addListener(
+        codeSentHandle = await FirebaseAuthentication.addListener(
           'phoneCodeSent',
           (event) => {
             console.log('[FirebaseAuth] phoneCodeSent event received, verificationId:', event.verificationId?.substring(0, 10) + '...');
+            settled = true;
             cleanup();
             if (event.verificationId) {
               resolve(event.verificationId);
@@ -71,32 +104,52 @@ class FirebaseAuthService {
         );
 
         // Listen for verification failed
-        const failedHandle = await FirebaseAuthentication.addListener(
+        failedHandle = await FirebaseAuthentication.addListener(
           'phoneVerificationFailed',
           (event) => {
             console.error('[FirebaseAuth] phoneVerificationFailed event:', event.message);
+            settled = true;
             cleanup();
-            // Surface the real Firebase message (code included) so it reaches the
-            // UI — reviewers/testers can't read logcat.
-            reject(new Error(event.message || 'Phone verification failed.'));
+            reject(new Error('Phone verification failed.'));
           }
         );
 
-        // Listen for auto-verification (e.g. instant verification on same device)
-        const completedHandle = await FirebaseAuthentication.addListener(
+        // Auto-verification. NOT removed by cleanup(): on Android this fires
+        // AFTER phoneCodeSent, and by the time it does the plugin has already
+        // called signInWithCredential — the user is signed in and the SMS code
+        // is spent. Tearing this listener down on phoneCodeSent meant the app
+        // kept showing the code entry screen, and the user's own entry of that
+        // same (now redeemed) code came back INVALID_CODE.
+        this.autoVerifyHandle = await FirebaseAuthentication.addListener(
           'phoneVerificationCompleted',
-          (event) => {
+          () => {
             console.log('[FirebaseAuth] phoneVerificationCompleted event (auto-verified)');
-            cleanup();
-            // Auto-verified — no code needed, resolve with a sentinel value
-            resolve('__AUTO_VERIFIED__');
+            this.autoVerified = true;
+            this.verificationId = '__AUTO_VERIFIED__';
+            if (!settled) {
+              // Verified before any SMS was needed (instant verification).
+              settled = true;
+              cleanup();
+              resolve('__AUTO_VERIFIED__');
+              return;
+            }
+            // Arrived after the code entry screen was already shown — tell the UI
+            // to stop waiting for a code that is no longer the user's to enter.
+            void this.signOutFirebase().then(() => this.autoVerifyCallback?.());
           }
         );
 
         // Now trigger the phone verification
         try {
-          await FirebaseAuthentication.signInWithPhoneNumber({ phoneNumber });
+          // timeout: 0 disables Android SMS auto-retrieval. Left at its 60s
+          // default the SDK reads the incoming SMS itself and redeems the code
+          // via signInWithCredential, so the code printed in that SMS is already
+          // spent by the time the user types it — Identity Toolkit then returns
+          // 400 INVALID_CODE for their entry. The code we show a user must stay
+          // theirs to spend.
+          await FirebaseAuthentication.signInWithPhoneNumber({ phoneNumber, timeout: 0 });
         } catch (err) {
+          settled = true;
           cleanup();
           reject(err);
         }
@@ -125,9 +178,9 @@ class FirebaseAuthService {
         throw new Error('SMS quota exceeded. Please try again later.');
       }
 
-      // DIAGNOSTIC: surface Firebase's real reason (reviewers/testers can't read
-      // logcat). Revert to the generic message once OTP send is confirmed working.
-      throw new Error(error?.message ? `Send failed: ${error.message}` : 'Failed to send OTP. Please try again.');
+      // Firebase's raw message is English-only and leaks internals — it belongs
+      // in the console log above, not in front of a user.
+      throw new Error('Failed to send OTP. Please try again.');
     }
   }
 
@@ -465,7 +518,7 @@ class FirebaseAuthService {
    * Check if the phone was auto-verified (instant verification on same device).
    */
   isAutoVerified(): boolean {
-    return this.verificationId === '__AUTO_VERIFIED__';
+    return this.autoVerified || this.verificationId === '__AUTO_VERIFIED__';
   }
 
   /**
@@ -479,6 +532,9 @@ class FirebaseAuthService {
    * Reset state (e.g., when modal closes).
    */
   reset(): void {
+    this.teardownAutoVerify();
+    this.autoVerifyCallback = null;
+    this.autoVerified = false;
     this.verificationId = null;
     this.emailIdToken = null;
   }
