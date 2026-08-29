@@ -84,10 +84,9 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
       setResendTimer(60);
     } catch (err: any) {
       console.error("[OtpModal] Failed to send OTP:", err);
-      // DIAGNOSTIC: surface the raw Firebase error so testers (who can't read
-      // logcat) can report the exact cause. Revert to the friendly string once
-      // the OTP setup is confirmed working.
-      setOtpError(`OTP error: ${err?.code || ''} ${err?.message || 'Unable to send verification code.'}`.trim());
+      // Firebase's raw message is English-only and leaks internals — it belongs
+      // in the console log above, not in front of a user.
+      setOtpError('Unable to send verification code. Please try again.');
       setCurrentStep('sending');
     } finally {
       setIsSendingOtp(false);

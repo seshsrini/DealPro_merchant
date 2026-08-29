@@ -710,7 +710,7 @@ const AppContent: React.FC = () => {
   // skipping the login screen entirely.
 
 
-  const isLoginScreen = !user.isLoggedIn && (view === 'login' || view === 'forgot_password' || view === 'register');
+  const isLoginScreen = !user.isLoggedIn && (view === 'login' || view === 'register');
 
   const handleBackNavigation = () => {
     if (view === 'language_selection') {
@@ -719,7 +719,7 @@ const AppContent: React.FC = () => {
       navigateTo('language_selection');
     } else if (view === 'invite_code') {
       navigateTo('location_permission');
-    } else if (!user.isLoggedIn && (view === 'register' || view === 'forgot_password' || view === 'verify_phone')) {
+    } else if (!user.isLoggedIn && (view === 'register' || view === 'verify_phone')) {
       navigateTo('login');
     } else if (view === 'merchant_deals') {
       navigateTo('merchant_dashboard');
@@ -861,7 +861,7 @@ const AppContent: React.FC = () => {
           <Header
             currentView={view}
             setView={navigateTo}
-            showBack={['detail', 'register', 'forgot_password', 'merchant_deals', 'edit_profile', 'merchant_stores', 'help_feedback', 'my_redemptions', 'verify_phone', 'onboarding', 'merchant_subscriptions', 'payment_plans', 'bank_verification', 'store_search', 'notifications'].includes(view)}
+            showBack={['detail', 'register', 'merchant_deals', 'edit_profile', 'merchant_stores', 'help_feedback', 'my_redemptions', 'verify_phone', 'onboarding', 'merchant_subscriptions', 'payment_plans', 'bank_verification', 'store_search', 'notifications'].includes(view)}
             onBack={handleBackNavigation}
             theme={theme}
             toggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}

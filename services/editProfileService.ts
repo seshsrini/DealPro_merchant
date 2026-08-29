@@ -22,11 +22,4 @@ export const editProfileService = {
     }
   },
 
-  resetPassword: async (identifier: string, newPassword: string) => {
-    const { data: response, error } = await supabase.functions.invoke('reset-password', {
-      body: { identifier, newPassword },
-    });
-    if (error) throw new Error('Unable to update profile. Please try again.');
-    return response;
-  },
 };

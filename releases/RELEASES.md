@@ -20,6 +20,35 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.08.29.1134 — versionCode 1788017667
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.08.29.1134-vc1788017667.aab` |
+| SHA-256 | `b8ee0c73e80189c64759cc78b9e618d74db9860a790013e58029e46ae98b65c6` |
+| Size | 22,298,217 bytes |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
+| targetSdk / minSdk | 36 / 23 |
+| Commit | `bbb1af0` |
+| Play status | pending upload |
+
+Everything in 2026.08.29.1054 (which was never uploaded), plus:
+
+**A second raw-error leak, in the OTP modal.** The earlier bundle still rendered
+`OTP error: <code> <raw Firebase message>` to users on a failed send. The service
+had been cleaned up but the modal kept its own copy of the same diagnostic.
+
+**Removed the forgot-password screen and its `123456` bypass.** Orphaned here —
+nothing imported it — but it still shipped in the bundle. It never sent an OTP:
+it checked the identifier existed, accepted the literal `123456`, then called an
+unauthenticated `reset-password` edge function that set the account's password
+using the service role key. The app has no password concept; authentication is
+phone + OTP. The screen, its `AppView` member, `editProfileService.resetPassword`
+and the edge function source are gone. The deployed function was deleted from the
+shared Supabase project separately — removing source does not undeploy it.
+
+---
+
 ## 2026.08.29.1054 — versionCode 1788015252
 
 | | |
@@ -30,7 +59,10 @@ timestamp. Both are therefore unique and monotonic per build.
 | Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
 | targetSdk / minSdk | 36 / 23 |
 | Commit | `8e25f30` |
-| Play status | pending upload |
+| Play status | **superseded by 2026.08.29.1134 — never uploaded.** Its bundle
+  still leaked raw Firebase errors from the OTP modal and carried the dead
+  forgot-password screen. File deleted from this folder so it cannot be uploaded
+  by mistake. |
 
 **Fixes the same OTP failure found and fixed in the consumer app.** Merchant runs
 the identical native phone-auth path; it went unnoticed only because every
