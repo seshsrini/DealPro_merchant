@@ -33,17 +33,7 @@ class FirebaseAuthService {
   private emailIdToken: string | null = null;
   private autoVerified = false;
   private autoVerifyHandle: PluginListenerHandle | null = null;
-  private autoVerifyCallback: (() => void) | null = null;
 
-  /**
-   * Register a callback for verification Firebase completes on its own.
-   * When it fires the user is ALREADY signed in — the plugin calls
-   * signInWithCredential before emitting the event — so the UI must stop
-   * asking for a code and treat the flow as successful.
-   */
-  onAutoVerified(callback: (() => void) | null): void {
-    this.autoVerifyCallback = callback;
-  }
 
   private teardownAutoVerify(): void {
     try {
@@ -114,28 +104,36 @@ class FirebaseAuthService {
           }
         );
 
-        // Auto-verification. NOT removed by cleanup(): on Android this fires
-        // AFTER phoneCodeSent, and by the time it does the plugin has already
-        // called signInWithCredential — the user is signed in and the SMS code
-        // is spent. Tearing this listener down on phoneCodeSent meant the app
-        // kept showing the code entry screen, and the user's own entry of that
-        // same (now redeemed) code came back INVALID_CODE.
+        // Auto-verification. Kept past phoneCodeSent ONLY to observe it; it must
+        // not complete sign-in on its own once the code screen is up.
+        //
+        // Firebase fires this for two different things, and `timeout: 0` only
+        // suppresses one of them:
+        //   - SMS auto-retrieval (event carries verificationCode) — disabled by
+        //     the timeout: 0 below, so the code stays the user's to spend.
+        //   - Instant verification (no verificationCode) — Google verifying the
+        //     device's own number. NOT affected by timeout, still fires.
+        // Acting on the second case silently dropped users into the app while
+        // their SMS was still arriving, so after the code screen is shown we log
+        // it and otherwise leave the user's own entry as the only way in.
         this.autoVerifyHandle = await FirebaseAuthentication.addListener(
           'phoneVerificationCompleted',
-          () => {
-            console.log('[FirebaseAuth] phoneVerificationCompleted event (auto-verified)');
-            this.autoVerified = true;
-            this.verificationId = '__AUTO_VERIFIED__';
+          (event) => {
+            const kind = event?.verificationCode ? 'sms-auto-retrieval' : 'instant-verification';
+            console.log(`[FirebaseAuth] phoneVerificationCompleted (${kind})`);
             if (!settled) {
-              // Verified before any SMS was needed (instant verification).
+              // Nothing has been shown to the user yet and no code was needed —
+              // this is the legitimate instant-verification path.
               settled = true;
+              this.autoVerified = true;
+              this.verificationId = '__AUTO_VERIFIED__';
               cleanup();
               resolve('__AUTO_VERIFIED__');
               return;
             }
-            // Arrived after the code entry screen was already shown — tell the UI
-            // to stop waiting for a code that is no longer the user's to enter.
-            void this.signOutFirebase().then(() => this.autoVerifyCallback?.());
+            // The code screen is already up. Do not touch verificationId and do
+            // not complete sign-in — the user finishes with the code they were
+            // sent, exactly as before.
           }
         );
 
@@ -533,7 +531,6 @@ class FirebaseAuthService {
    */
   reset(): void {
     this.teardownAutoVerify();
-    this.autoVerifyCallback = null;
     this.autoVerified = false;
     this.verificationId = null;
     this.emailIdToken = null;

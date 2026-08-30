@@ -20,6 +20,38 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.08.30.0702 — versionCode 1788087736
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.08.30.0702-vc1788087736.aab` |
+| SHA-256 | `f706406b7769a3d807117d88b620dc40fccb7380c83a9e76fee5c8a4657eab42` |
+| Size | 22,298,181 bytes |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
+| targetSdk / minSdk | 36 / 23 |
+| Commit | `51e01ca` |
+| Play status | pending upload |
+
+**Hotfix for a regression shipped in 2026.08.29.1134**, same defect and same fix
+as the consumer app. Testers were dropped into the app before entering the code
+from their SMS.
+
+That release made the `phoneVerificationCompleted` listener outlive
+`phoneCodeSent`. `timeout: 0` suppresses SMS auto-retrieval but not **instant
+verification** — Google verifying the device's own number — which fires the same
+event and is unaffected by any timeout. The listener therefore completed real
+sign-ins while the SMS was still arriving.
+
+Not an authentication bypass: the plugin emits that event only after
+`signInWithCredential` succeeds. Still the wrong behaviour.
+
+Sign-in now completes from that event only when it arrives **before** the code
+screen is shown. Afterwards it logs which variant fired and does nothing else.
+`timeout: 0` stays, so the 2026.08.29 fix for rejected codes is unaffected. The
+unreachable `onAutoVerified()` callback and its modal subscription are removed.
+
+---
+
 ## 2026.08.29.1134 — versionCode 1788017667
 
 | | |
