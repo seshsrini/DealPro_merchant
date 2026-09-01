@@ -60,13 +60,6 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
     try {
       await firebaseAuthService.sendOtp(phoneNumber);
 
-      // Check if auto-verified (instant verification on same device)
-      if (firebaseAuthService.isAutoVerified()) {
-        console.log('[OtpModal] Auto-verified, completing login');
-        onVerificationSuccess();
-        return;
-      }
-
       setCurrentStep('otpInput');
       setResendTimer(60);
     } catch (err: any) {
