@@ -31,6 +31,7 @@ if (getApps().length === 0) {
 class FirebaseAuthService {
   private verificationId: string | null = null;
   private emailIdToken: string | null = null;
+  private autoVerified = false;
   private autoVerifyHandle: PluginListenerHandle | null = null;
 
 
@@ -50,6 +51,7 @@ class FirebaseAuthService {
   async sendOtp(phoneNumber: string): Promise<void> {
     console.log('[FirebaseAuth] Sending OTP to:', phoneNumber);
     this.teardownAutoVerify();
+    this.autoVerified = false;
 
     try {
       // Set up listeners BEFORE triggering signInWithPhoneNumber.
@@ -114,28 +116,36 @@ class FirebaseAuthService {
         // Acting on the second case silently dropped users into the app while
         // their SMS was still arriving, so after the code screen is shown we log
         // it and otherwise leave the user's own entry as the only way in.
-        // Observation only. Firebase should never complete verification by itself
-        // now that requireSmsValidation(true) is patched into the plugin (see
-        // patches/@capacitor-firebase+authentication+6.3.1.patch), which disables
-        // both instant verification and SMS auto-retrieval. If this ever fires,
-        // that patch is not doing its job on that device — we log it and still
-        // require the user to type the code. The promise resolves only on
-        // phoneCodeSent, which always arrives because an SMS is always sent.
         this.autoVerifyHandle = await FirebaseAuthentication.addListener(
           'phoneVerificationCompleted',
           (event) => {
             const kind = event?.verificationCode ? 'sms-auto-retrieval' : 'instant-verification';
-            console.warn(`[FirebaseAuth] UNEXPECTED phoneVerificationCompleted (${kind}) — requireSmsValidation should have prevented this. Ignoring; user must still enter the code.`);
+            console.log(`[FirebaseAuth] phoneVerificationCompleted (${kind})`);
+            if (!settled) {
+              // Nothing has been shown to the user yet and no code was needed —
+              // this is the legitimate instant-verification path.
+              settled = true;
+              this.autoVerified = true;
+              this.verificationId = '__AUTO_VERIFIED__';
+              cleanup();
+              resolve('__AUTO_VERIFIED__');
+              return;
+            }
+            // The code screen is already up. Do not touch verificationId and do
+            // not complete sign-in — the user finishes with the code they were
+            // sent, exactly as before.
           }
         );
 
         // Now trigger the phone verification
         try {
-          // No timeout override. requireSmsValidation(true) — patched into the
-          // plugin — already disables SMS auto-retrieval and instant verification,
-          // so timeout: 0 was redundant, and passing both is the likeliest reason
-          // the send started failing outright. Back to the plugin default.
-          await FirebaseAuthentication.signInWithPhoneNumber({ phoneNumber });
+          // timeout: 0 disables Android SMS auto-retrieval. Left at its 60s
+          // default the SDK reads the incoming SMS itself and redeems the code
+          // via signInWithCredential, so the code printed in that SMS is already
+          // spent by the time the user types it — Identity Toolkit then returns
+          // 400 INVALID_CODE for their entry. The code we show a user must stay
+          // theirs to spend.
+          await FirebaseAuthentication.signInWithPhoneNumber({ phoneNumber, timeout: 0 });
         } catch (err) {
           settled = true;
           cleanup();
@@ -143,8 +153,15 @@ class FirebaseAuthService {
         }
       });
 
-      this.verificationId = verificationId;
-      console.log('[FirebaseAuth] OTP sent successfully. Verification ID received.');
+      if (verificationId === '__AUTO_VERIFIED__') {
+        // Phone was auto-verified (e.g. instant verification).
+        // The user doesn't need to enter an OTP code.
+        this.verificationId = '__AUTO_VERIFIED__';
+        console.log('[FirebaseAuth] Phone auto-verified — no OTP code needed.');
+      } else {
+        this.verificationId = verificationId;
+        console.log('[FirebaseAuth] OTP sent successfully. Verification ID received.');
+      }
     } catch (error: any) {
       console.error('[FirebaseAuth] Error sending OTP:', error);
 
@@ -160,11 +177,8 @@ class FirebaseAuthService {
       }
 
       // Firebase's raw message is English-only and leaks internals — it belongs
-      // in the console log above, not in front of a user. It is carried on
-      // `detail` for logs and diagnostic builds only.
-      const failure: any = new Error('Failed to send OTP. Please try again.');
-      failure.detail = `${error?.code ? error.code + ' ' : ''}${error?.message || String(error)}`.trim();
-      throw failure;
+      // in the console log above, not in front of a user.
+      throw new Error('Failed to send OTP. Please try again.');
     }
   }
 
@@ -180,6 +194,12 @@ class FirebaseAuthService {
       throw new Error('No OTP was sent. Please request a new OTP.');
     }
 
+    // If phone was auto-verified, no code check needed
+    if (this.verificationId === '__AUTO_VERIFIED__') {
+      console.log('[FirebaseAuth] Phone was auto-verified, skipping code confirmation.');
+      await this.signOutFirebase();
+      return true;
+    }
 
     try {
       await FirebaseAuthentication.confirmVerificationCode({
@@ -492,6 +512,12 @@ class FirebaseAuthService {
     }
   }
 
+  /**
+   * Check if the phone was auto-verified (instant verification on same device).
+   */
+  isAutoVerified(): boolean {
+    return this.autoVerified || this.verificationId === '__AUTO_VERIFIED__';
+  }
 
   /**
    * Check if Firebase Phone Auth is available on this platform.
@@ -505,6 +531,7 @@ class FirebaseAuthService {
    */
   reset(): void {
     this.teardownAutoVerify();
+    this.autoVerified = false;
     this.verificationId = null;
     this.emailIdToken = null;
   }
