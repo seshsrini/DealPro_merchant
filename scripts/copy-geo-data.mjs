@@ -1,13 +1,19 @@
 /**
- * Copy states, cities, localities from DEV → QA
- * Usage: node scripts/copy-geo-data.mjs --dev-pass DEV_PW --qa-pass QA_PW
+ * Copy states, cities, localities from a source project to a target project.
+ * Usage: node scripts/copy-geo-data.mjs --dev-pass SRC_PW --qa-pass TGT_PW \
+ *          [--source-ref SRC_REF] [--target-ref TGT_REF]
+ *
+ * Refs default to the historical DEV -> QA pair. DEV (gkulyxglzqlhpqxlwjqw)
+ * was deleted 2026-09-01, so pass --source-ref explicitly when rebuilding.
  */
 
 import pg from 'pg';
 const { Client } = pg;
 
-const DEV_REF = 'gkulyxglzqlhpqxlwjqw';
-const QA_REF  = 'brgamwtcsnsnkdssyarn';
+const argv  = process.argv.slice(2);
+const argOf = (f) => { const i = argv.indexOf(f); return i !== -1 ? argv[i + 1] : null; };
+const DEV_REF = argOf('--source-ref') || 'gkulyxglzqlhpqxlwjqw';
+const QA_REF  = argOf('--target-ref') || 'brgamwtcsnsnkdssyarn';
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -18,7 +24,7 @@ function parseArgs() {
   const devPass = get('--dev-pass');
   const qaPass  = get('--qa-pass');
   if (!devPass || !qaPass) {
-    console.error('Usage: node scripts/copy-geo-data.mjs --dev-pass DEV_PW --qa-pass QA_PW');
+    console.error('Usage: node scripts/copy-geo-data.mjs --dev-pass SRC_PW --qa-pass TGT_PW [--source-ref REF] [--target-ref REF]');
     process.exit(1);
   }
   return { devPass, qaPass };

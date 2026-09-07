@@ -43,6 +43,18 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
   }, [isOpen, phoneNumber]);
 
 
+  // If Firebase verifies on its own while the code screen is up, the code it
+  // read is already spent — submitting it would fail. Fill it in so the user
+  // sees it and can complete the flow; verifyOtp() then short-circuits.
+  useEffect(() => {
+    if (!isOpen) return;
+    firebaseAuthService.onAutoVerified((smsCode) => {
+      if (smsCode) setOtpInput(smsCode.replace(/\D/g, '').slice(0, 6));
+      setOtpError(null);
+    });
+    return () => firebaseAuthService.onAutoVerified(null);
+  }, [isOpen]);
+
   useEffect(() => {
     if (resendTimer > 0) {
       timerRef.current = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
@@ -59,6 +71,13 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
     setIsSendingOtp(true);
     try {
       await firebaseAuthService.sendOtp(phoneNumber);
+
+      // Check if auto-verified (instant verification on same device)
+      if (firebaseAuthService.isAutoVerified()) {
+        console.log('[OtpModal] Auto-verified, completing login');
+        onVerificationSuccess();
+        return;
+      }
 
       setCurrentStep('otpInput');
       setResendTimer(60);
