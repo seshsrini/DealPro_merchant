@@ -1,0 +1,36 @@
+diff --git a/node_modules/@capacitor-firebase/authentication/android/src/main/java/io/capawesome/capacitorjs/plugins/firebase/authentication/FirebaseAuthenticationPlugin.java b/node_modules/@capacitor-firebase/authentication/android/src/main/java/io/capawesome/capacitorjs/plugins/firebase/authentication/FirebaseAuthenticationPlugin.java
+index d13ab6e..c736aa7 100644
+--- a/node_modules/@capacitor-firebase/authentication/android/src/main/java/io/capawesome/capacitorjs/plugins/firebase/authentication/FirebaseAuthenticationPlugin.java
++++ b/node_modules/@capacitor-firebase/authentication/android/src/main/java/io/capawesome/capacitorjs/plugins/firebase/authentication/FirebaseAuthenticationPlugin.java
+@@ -397,7 +397,14 @@
+                 return;
+             }
+             boolean resendCode = call.getBoolean("resendCode", false);
+-            Long timeout = call.getLong("timeout", 60L);
++            // PluginCall.getLong returns the DEFAULT unless the JSON value is
++            // literally a Long. A JavaScript number crosses the bridge as an
++            // Integer, so `timeout: 0` was silently becoming 60 and SMS
++            // auto-retrieval stayed enabled -- the retriever then redeemed the
++            // SMS code before the user could type it, and their entry came back
++            // INVALID_CODE. Read the raw value instead.
++            Object rawTimeout = call.getData().opt("timeout");
++            Long timeout = (rawTimeout instanceof Number) ? ((Number) rawTimeout).longValue() : 60L;
+             LinkWithPhoneNumberOptions options = new LinkWithPhoneNumberOptions(phoneNumber, resendCode, timeout);
+ 
+             implementation.linkWithPhoneNumber(options);
+@@ -743,7 +750,14 @@
+                 return;
+             }
+             boolean resendCode = call.getBoolean("resendCode", false);
+-            Long timeout = call.getLong("timeout", 60L);
++            // PluginCall.getLong returns the DEFAULT unless the JSON value is
++            // literally a Long. A JavaScript number crosses the bridge as an
++            // Integer, so `timeout: 0` was silently becoming 60 and SMS
++            // auto-retrieval stayed enabled -- the retriever then redeemed the
++            // SMS code before the user could type it, and their entry came back
++            // INVALID_CODE. Read the raw value instead.
++            Object rawTimeout = call.getData().opt("timeout");
++            Long timeout = (rawTimeout instanceof Number) ? ((Number) rawTimeout).longValue() : 60L;
+             SignInWithPhoneNumberOptions options = new SignInWithPhoneNumberOptions(skipNativeAuth, phoneNumber, resendCode, timeout);
+ 
+             implementation.signInWithPhoneNumber(options);

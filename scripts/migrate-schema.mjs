@@ -57,7 +57,11 @@ if (DUMP_ONLY || SEED_ONLY) {
 
 const encodedDevPass = DEV_PASS ? encodeURIComponent(DEV_PASS) : '';
 const encodedQaPass  = QA_PASS ? encodeURIComponent(QA_PASS) : '';
-const DEV_URL = `postgresql://postgres:${encodedDevPass}@db.gkulyxglzqlhpqxlwjqw.supabase.co:5432/postgres`;
+// Source project to dump FROM. Defaulted to the old shared DEV project for
+// backwards compatibility; that project was deleted on 2026-09-01, so pass
+// --source-ref explicitly (e.g. PROD trrinhrajmsnkjnwtncz) when rebuilding.
+const SOURCE_REF = getArg('--source-ref') || 'gkulyxglzqlhpqxlwjqw';
+const DEV_URL = `postgresql://postgres:${encodedDevPass}@db.${SOURCE_REF}.supabase.co:5432/postgres`;
 const QA_URL  = `postgresql://postgres:${encodedQaPass}@db.${TARGET_REF}.supabase.co:5432/postgres`;
 
 async function safeQuery(client, label, sql, params = []) {

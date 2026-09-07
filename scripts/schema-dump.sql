@@ -1,12 +1,25 @@
 -- Schema dump: DEV → QA
--- Generated: 2026-06-04T19:49:17.129Z
+-- Generated: 2026-09-01T12:12:55.710Z
 
 -- EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "postgis";
+-- Added 2026-09-01: the dump uses these but never created them.
+--   pg_trgm -> gin_trgm_ops, used by idx_merchant_stores_city_trgm and
+--              idx_merchant_stores_locality_trgm. Fails at apply time without it.
+--   pg_net  -> net.http_post, called by the subscription-reminder and
+--              referral-reward triggers. Those bodies are plpgsql so they create
+--              fine and fail later at runtime, which is worse than failing now.
+-- Supabase installs extensions into the "extensions" schema, which is on the
+-- default search_path. If the opclass still will not resolve, re-run the two
+-- CREATE EXTENSION lines without "WITH SCHEMA extensions".
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_net  WITH SCHEMA extensions;
 
 -- SEQUENCES (must exist before tables with SERIAL columns)
+CREATE SEQUENCE IF NOT EXISTS public.billing_run_items_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 NO CYCLE;
+CREATE SEQUENCE IF NOT EXISTS public.billing_runs_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 NO CYCLE;
 CREATE SEQUENCE IF NOT EXISTS public.campaign_interactions_interaction_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 NO CYCLE;
 CREATE SEQUENCE IF NOT EXISTS public.cities_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 NO CYCLE;
 CREATE SEQUENCE IF NOT EXISTS public.localities_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 NO CYCLE;
@@ -19,6 +32,7 @@ CREATE SEQUENCE IF NOT EXISTS public.merchant_referrals_id_seq START WITH 1 INCR
 CREATE SEQUENCE IF NOT EXISTS public.merchant_rewards_log_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 NO CYCLE;
 CREATE SEQUENCE IF NOT EXISTS public.merchant_subscriptions_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 NO CYCLE;
 CREATE SEQUENCE IF NOT EXISTS public.merchant_usage_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 NO CYCLE;
+CREATE SEQUENCE IF NOT EXISTS public.pincode_directory_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 NO CYCLE;
 CREATE SEQUENCE IF NOT EXISTS public.razorpay_webhook_events_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 NO CYCLE;
 CREATE SEQUENCE IF NOT EXISTS public.states_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 NO CYCLE;
 CREATE SEQUENCE IF NOT EXISTS public.store_categories_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 NO CYCLE;
@@ -43,6 +57,32 @@ CREATE TABLE IF NOT EXISTS public."VEDIC_profiles" (
   "updated_at" timestamptz DEFAULT now() NOT NULL,
   "invite_code" text,
   "country_code" text
+);
+
+CREATE TABLE IF NOT EXISTS public."app_banners" (
+  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
+  "audience" text DEFAULT 'both'::text NOT NULL,
+  "title" text NOT NULL,
+  "message" text NOT NULL,
+  "image_url" text,
+  "count_type" text,
+  "target_states" text[],
+  "target_cities" text[],
+  "target_localities" text[],
+  "link_label" text,
+  "link_url" text,
+  "link_search" text,
+  "is_active" bool DEFAULT false NOT NULL,
+  "starts_at" timestamptz,
+  "ends_at" timestamptz,
+  "priority" int4 DEFAULT 0 NOT NULL,
+  "created_at" timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public."app_config" (
+  "key" text NOT NULL,
+  "value" text NOT NULL,
+  "updated_at" timestamptz DEFAULT now() NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public."app_configs" (
@@ -88,6 +128,39 @@ CREATE TABLE IF NOT EXISTS public."apps" (
   "is_active" bool DEFAULT true NOT NULL,
   "created_at" timestamptz DEFAULT now() NOT NULL,
   "updated_at" timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public."banner_acks" (
+  "banner_id" uuid NOT NULL,
+  "user_id" text NOT NULL,
+  "acked_at" timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public."billing_run_items" (
+  "id" int8 DEFAULT nextval('billing_run_items_id_seq'::regclass) NOT NULL,
+  "run_id" int8 NOT NULL,
+  "merchant_id" varchar(255) NOT NULL,
+  "amount" numeric(12,2),
+  "status" varchar(24) NOT NULL,
+  "razorpay_payment_id" text,
+  "error" text,
+  "created_at" timestamptz DEFAULT now() NOT NULL,
+  "plan_name" varchar(50)
+);
+
+CREATE TABLE IF NOT EXISTS public."billing_runs" (
+  "id" int8 DEFAULT nextval('billing_runs_id_seq'::regclass) NOT NULL,
+  "triggered_by" uuid,
+  "reward_month" date,
+  "planned_count" int4 DEFAULT 0 NOT NULL,
+  "planned_amount" numeric(14,2) DEFAULT 0 NOT NULL,
+  "sent_count" int4 DEFAULT 0 NOT NULL,
+  "sent_amount" numeric(14,2) DEFAULT 0 NOT NULL,
+  "free_skipped" int4 DEFAULT 0 NOT NULL,
+  "no_mandate" int4 DEFAULT 0 NOT NULL,
+  "failed_count" int4 DEFAULT 0 NOT NULL,
+  "status" varchar(20) DEFAULT 'completed'::character varying NOT NULL,
+  "created_at" timestamptz DEFAULT now() NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public."campaign_drafts" (
@@ -160,7 +233,7 @@ CREATE TABLE IF NOT EXISTS public."campaigns" (
   "last_modified" timestamptz DEFAULT now(),
   "image_url" text,
   "image_name" text,
-  "localized_description" jsonb DEFAULT '{"en": "Standard DealPro incentive protocol.", "hi": "मानक DealPro प्रोत्साहन प्रोटोकॉल।", "kn": "Standard DealPro ಪ್ರೋತ್ಸಾಹಕ ಪ್ರೋಟೋಕಾಲ್."}'::jsonb,
+  "localized_description" jsonb DEFAULT '{"en": "Standard DealPro incentive protocol.", "hi": "à¤®à¤¾à¤¨à¤• DealPro à¤ªà¥à¤°à¥‹à¤¤à¥à¤¸à¤¾à¤¹à¤¨ à¤ªà¥à¤°à¥‹à¤Ÿà¥‹à¤•à¥‰à¤²à¥¤", "kn": "Standard DealPro à²ªà³à²°à³‹à²¤à³à²¸à²¾à²¹à²• à²ªà³à²°à³‹à²Ÿà³‹à²•à²¾à²²à³."}'::jsonb,
   "localized_heading" jsonb DEFAULT '{}'::jsonb,
   "localized_offer" jsonb DEFAULT '{}'::jsonb,
   "localized_shop_name" jsonb DEFAULT '{}'::jsonb,
@@ -170,7 +243,8 @@ CREATE TABLE IF NOT EXISTS public."campaigns" (
   "video_url" text,
   "image_price_overlays" jsonb DEFAULT '{}'::jsonb,
   "trust_badges" jsonb DEFAULT '[]'::jsonb NOT NULL,
-  "free_gifts" jsonb DEFAULT '[]'::jsonb
+  "free_gifts" jsonb DEFAULT '[]'::jsonb,
+  "client_dedup_key" text
 );
 
 CREATE TABLE IF NOT EXISTS public."cities" (
@@ -314,6 +388,12 @@ CREATE TABLE IF NOT EXISTS public."dealpro_test_plan_runs" (
   "passed" int4 DEFAULT 0 NOT NULL,
   "failed" int4 DEFAULT 0 NOT NULL,
   "notes" text
+);
+
+CREATE TABLE IF NOT EXISTS public."deals_listing_cache" (
+  "cache_key" text NOT NULL,
+  "payload" jsonb NOT NULL,
+  "expires_at" timestamptz NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public."diagrams" (
@@ -538,7 +618,83 @@ CREATE TABLE IF NOT EXISTS public."geocode_cache" (
   "state" text,
   "locality" text,
   "created_at" timestamptz DEFAULT now(),
-  "expires_at" timestamptz DEFAULT (now() + '90 days'::interval)
+  "expires_at" timestamptz DEFAULT (now() + '90 days'::interval),
+  "pincode" text
+);
+
+CREATE TABLE IF NOT EXISTS public."hairai_fcm_tokens" (
+  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
+  "user_id" uuid NOT NULL,
+  "device_token" text NOT NULL,
+  "device_type" text,
+  "device_name" text,
+  "app_version" text,
+  "is_active" bool DEFAULT true NOT NULL,
+  "created_at" timestamptz DEFAULT now() NOT NULL,
+  "updated_at" timestamptz DEFAULT now() NOT NULL,
+  "last_used_at" timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public."hairai_feedback" (
+  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
+  "user_id" uuid NOT NULL,
+  "rating" int2 NOT NULL,
+  "comment" text,
+  "app_version" text,
+  "created_at" timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public."hairai_purchases" (
+  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
+  "user_id" uuid NOT NULL,
+  "track" text NOT NULL,
+  "tier" text NOT NULL,
+  "product_id" text NOT NULL,
+  "purchase_token" text NOT NULL,
+  "order_id" text,
+  "amount_micros" int8,
+  "currency" text DEFAULT 'INR'::text NOT NULL,
+  "purchase_state" text DEFAULT 'purchased'::text NOT NULL,
+  "acknowledged" bool DEFAULT false NOT NULL,
+  "verified_at" timestamptz,
+  "purchased_at" timestamptz,
+  "created_at" timestamptz DEFAULT now() NOT NULL,
+  "updated_at" timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public."hairai_transformations" (
+  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
+  "user_id" uuid NOT NULL,
+  "track" text NOT NULL,
+  "template_id" text,
+  "style_name" text,
+  "original_image_url" text,
+  "result_image_url" text,
+  "provider" text DEFAULT 'perfectcorp'::text NOT NULL,
+  "provider_job_id" text,
+  "status" text DEFAULT 'processing'::text NOT NULL,
+  "error_message" text,
+  "created_at" timestamptz DEFAULT now() NOT NULL,
+  "updated_at" timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public."hairai_users" (
+  "id" uuid DEFAULT gen_random_uuid() NOT NULL,
+  "firebase_uid" text,
+  "phone" text NOT NULL,
+  "gender" text,
+  "referral_source" text,
+  "profile_photo_url" text,
+  "hairstyle_tier" text DEFAULT 'free'::text NOT NULL,
+  "beard_tier" text DEFAULT 'free'::text NOT NULL,
+  "notifications_enabled" bool DEFAULT true NOT NULL,
+  "location_enabled" bool DEFAULT true NOT NULL,
+  "intro_seen" bool DEFAULT false NOT NULL,
+  "app_rating" int2,
+  "created_at" timestamptz DEFAULT now() NOT NULL,
+  "updated_at" timestamptz DEFAULT now() NOT NULL,
+  "last_login_at" timestamptz,
+  "biometric_enabled" bool DEFAULT false NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public."hoardings" (
@@ -748,7 +904,18 @@ CREATE TABLE IF NOT EXISTS public."merchant_profiles" (
   "invite_code" text,
   "consumer_referral" text,
   "consumer_referral_code" varchar(6),
-  "merchant_referral_code" varchar(6)
+  "merchant_referral_code" varchar(6),
+  "gstin_verified" bool DEFAULT false NOT NULL,
+  "gstin_verification" jsonb,
+  "udyam_verified" bool DEFAULT false NOT NULL,
+  "udyam_verification" jsonb,
+  "fssai_verified" bool DEFAULT false NOT NULL,
+  "fssai_verification" jsonb,
+  "trade_license_verified" bool DEFAULT false NOT NULL,
+  "trade_license_verification" jsonb,
+  "legal_name" text,
+  "api_response_payload" jsonb DEFAULT '[]'::jsonb,
+  "onboarding_complete" bool DEFAULT false NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS public."merchant_ratings" (
@@ -759,7 +926,8 @@ CREATE TABLE IF NOT EXISTS public."merchant_ratings" (
   "rating" numeric(2,1),
   "comments" text,
   "created_at" timestamptz DEFAULT now(),
-  "updated_at" timestamptz DEFAULT now()
+  "updated_at" timestamptz DEFAULT now(),
+  "store_id" uuid
 );
 
 CREATE TABLE IF NOT EXISTS public."merchant_referrals" (
@@ -868,7 +1036,7 @@ CREATE TABLE IF NOT EXISTS public."merchant_subscriptions" (
   "last_billed_at" timestamptz,
   "cancellation_reason" text,
   "trial_end" timestamptz,
-  "loyalty_redemption_enabled" bool DEFAULT false,
+  "loyalty_redemption_enabled" bool DEFAULT true,
   "loyalty_addon_price" numeric DEFAULT 10.00,
   "total_recurring_amount" numeric,
   "last_notified_at" timestamptz,
@@ -877,7 +1045,17 @@ CREATE TABLE IF NOT EXISTS public."merchant_subscriptions" (
   "razorpay_payment_id" text,
   "razorpay_status" text,
   "razorpay_current_period_end" timestamptz,
-  "cancelled_at" timestamptz
+  "cancelled_at" timestamptz,
+  "razorpay_token_id" text,
+  "last_billed_period" date,
+  "pending_tier_id" int4,
+  "pending_plan_name" varchar(50),
+  "pending_amount" numeric(12,2),
+  "pending_effective_date" date,
+  "failed_attempts" int4 DEFAULT 0 NOT NULL,
+  "first_failed_at" timestamptz,
+  "billing_email" varchar(255),
+  "tier_change_locked_until" timestamptz
 );
 
 CREATE TABLE IF NOT EXISTS public."merchant_usage" (
@@ -926,6 +1104,19 @@ CREATE TABLE IF NOT EXISTS public."performance_traces" (
   "metadata" jsonb,
   "created_at" timestamptz DEFAULT now(),
   "phone" text
+);
+
+CREATE TABLE IF NOT EXISTS public."pincode_directory" (
+  "id" int8 DEFAULT nextval('pincode_directory_id_seq'::regclass) NOT NULL,
+  "pincode" text NOT NULL,
+  "locality" text NOT NULL,
+  "city" text,
+  "district" text,
+  "state" text,
+  "latitude" float8,
+  "longitude" float8,
+  "source" text DEFAULT 'india_post'::text,
+  "merchant_id" uuid
 );
 
 CREATE TABLE IF NOT EXISTS public."pinned_deals" (
@@ -1112,7 +1303,8 @@ CREATE TABLE IF NOT EXISTS public."subscription_tiers" (
   "max_dotd_per_month" int4 DEFAULT 0,
   "is_multi_store" bool DEFAULT false,
   "modified_at" timestamp DEFAULT now(),
-  "razorpay_plan_id" text
+  "razorpay_plan_id" text,
+  "sort_order" int4 DEFAULT 100
 );
 
 CREATE TABLE IF NOT EXISTS public."test_cases" (
@@ -1261,7 +1453,11 @@ CREATE TABLE IF NOT EXISTS public."user_profiles" (
   "location_state" text,
   "allow_location" bool DEFAULT false,
   "referral_code" text,
-  "auth_uid" uuid
+  "auth_uid" uuid,
+  "locality_name" text,
+  "pincode" text,
+  "city" text,
+  "state" text
 );
 
 CREATE TABLE IF NOT EXISTS public."web_login_requests" (
@@ -1280,10 +1476,15 @@ CREATE TABLE IF NOT EXISTS public."web_login_requests" (
 
 -- PRIMARY KEYS
 ALTER TABLE public."VEDIC_profiles" ADD CONSTRAINT "VEDIC_profiles_pkey" PRIMARY KEY (id);
+ALTER TABLE public.app_banners ADD CONSTRAINT app_banners_pkey PRIMARY KEY (id);
+ALTER TABLE public.app_config ADD CONSTRAINT app_config_pkey PRIMARY KEY (key);
 ALTER TABLE public.app_configs ADD CONSTRAINT app_configs_pkey PRIMARY KEY (config_key);
 ALTER TABLE public.app_files ADD CONSTRAINT app_files_pkey PRIMARY KEY (id);
 ALTER TABLE public.app_folders ADD CONSTRAINT app_folders_pkey PRIMARY KEY (id);
 ALTER TABLE public.apps ADD CONSTRAINT apps_pkey PRIMARY KEY (id);
+ALTER TABLE public.banner_acks ADD CONSTRAINT banner_acks_pkey PRIMARY KEY (banner_id, user_id);
+ALTER TABLE public.billing_run_items ADD CONSTRAINT billing_run_items_pkey PRIMARY KEY (id);
+ALTER TABLE public.billing_runs ADD CONSTRAINT billing_runs_pkey PRIMARY KEY (id);
 ALTER TABLE public.campaign_drafts ADD CONSTRAINT campaign_drafts_pkey PRIMARY KEY (id);
 ALTER TABLE public.campaign_interactions ADD CONSTRAINT campaign_interactions_pkey PRIMARY KEY (interaction_id);
 ALTER TABLE public.campaign_templates ADD CONSTRAINT campaign_templates_pkey PRIMARY KEY (id);
@@ -1298,6 +1499,7 @@ ALTER TABLE public.contractor_codes ADD CONSTRAINT contractor_codes_pkey PRIMARY
 ALTER TABLE public.deal_shares ADD CONSTRAINT deal_shares_pkey PRIMARY KEY (id);
 ALTER TABLE public.dealpro_test_plan_results ADD CONSTRAINT dealpro_test_plan_results_pkey PRIMARY KEY (id);
 ALTER TABLE public.dealpro_test_plan_runs ADD CONSTRAINT dealpro_test_plan_runs_pkey PRIMARY KEY (id);
+ALTER TABLE public.deals_listing_cache ADD CONSTRAINT deals_listing_cache_pkey PRIMARY KEY (cache_key);
 ALTER TABLE public.diagrams ADD CONSTRAINT diagrams_pkey PRIMARY KEY (id);
 ALTER TABLE public.favorites ADD CONSTRAINT favorites_pkey PRIMARY KEY (id);
 ALTER TABLE public.fcm_tokens ADD CONSTRAINT fcm_tokens_pkey PRIMARY KEY (id);
@@ -1314,6 +1516,11 @@ ALTER TABLE public.fin_tax_records ADD CONSTRAINT fin_tax_records_pkey PRIMARY K
 ALTER TABLE public.folder_permissions ADD CONSTRAINT folder_permissions_pkey PRIMARY KEY (id);
 ALTER TABLE public.friendships ADD CONSTRAINT friendships_pkey PRIMARY KEY (id);
 ALTER TABLE public.geocode_cache ADD CONSTRAINT geocode_cache_pkey PRIMARY KEY (id);
+ALTER TABLE public.hairai_fcm_tokens ADD CONSTRAINT hairai_fcm_tokens_pkey PRIMARY KEY (id);
+ALTER TABLE public.hairai_feedback ADD CONSTRAINT hairai_feedback_pkey PRIMARY KEY (id);
+ALTER TABLE public.hairai_purchases ADD CONSTRAINT hairai_purchases_pkey PRIMARY KEY (id);
+ALTER TABLE public.hairai_transformations ADD CONSTRAINT hairai_transformations_pkey PRIMARY KEY (id);
+ALTER TABLE public.hairai_users ADD CONSTRAINT hairai_users_pkey PRIMARY KEY (id);
 ALTER TABLE public.hoardings ADD CONSTRAINT hoardings_pkey PRIMARY KEY (id);
 ALTER TABLE public.invite_codes ADD CONSTRAINT invite_codes_pkey PRIMARY KEY (id);
 ALTER TABLE public.kanban_task_attachments ADD CONSTRAINT kanban_task_attachments_pkey PRIMARY KEY (id);
@@ -1341,6 +1548,7 @@ ALTER TABLE public.merchant_usage ADD CONSTRAINT merchant_usage_pkey PRIMARY KEY
 ALTER TABLE public.milestone_claims ADD CONSTRAINT milestone_claims_pkey PRIMARY KEY (id);
 ALTER TABLE public.notification_logs ADD CONSTRAINT notification_logs_pkey PRIMARY KEY (id);
 ALTER TABLE public.performance_traces ADD CONSTRAINT performance_traces_pkey PRIMARY KEY (id);
+ALTER TABLE public.pincode_directory ADD CONSTRAINT pincode_directory_pkey PRIMARY KEY (id);
 ALTER TABLE public.pinned_deals ADD CONSTRAINT pinned_deals_pkey PRIMARY KEY (id);
 ALTER TABLE public.platform_errors ADD CONSTRAINT platform_errors_pkey PRIMARY KEY (id);
 ALTER TABLE public.points_transactions ADD CONSTRAINT points_transactions_pkey PRIMARY KEY (id);
@@ -1389,6 +1597,10 @@ ALTER TABLE public.fin_invoices ADD CONSTRAINT fin_invoices_app_id_invoice_numbe
 ALTER TABLE public.folder_permissions ADD CONSTRAINT uq_folder_permission UNIQUE (folder_id, user_id);
 ALTER TABLE public.friendships ADD CONSTRAINT unique_friendship UNIQUE (requester_id, addressee_id);
 ALTER TABLE public.geocode_cache ADD CONSTRAINT geocode_cache_query_key_key UNIQUE (query_key);
+ALTER TABLE public.hairai_fcm_tokens ADD CONSTRAINT hairai_fcm_tokens_device_token_key UNIQUE (device_token);
+ALTER TABLE public.hairai_purchases ADD CONSTRAINT hairai_purchases_purchase_token_key UNIQUE (purchase_token);
+ALTER TABLE public.hairai_users ADD CONSTRAINT hairai_users_firebase_uid_key UNIQUE (firebase_uid);
+ALTER TABLE public.hairai_users ADD CONSTRAINT hairai_users_phone_key UNIQUE (phone);
 ALTER TABLE public.hoardings ADD CONSTRAINT hoardings_hoarding_no_key UNIQUE (hoarding_no);
 ALTER TABLE public.invite_codes ADD CONSTRAINT invite_codes_code_key UNIQUE (code);
 ALTER TABLE public.merchant_bank_details ADD CONSTRAINT merchant_bank_details_merchant_id_key UNIQUE (merchant_id);
@@ -1441,6 +1653,7 @@ ALTER TABLE public.app_files ADD CONSTRAINT app_files_app_id_fkey FOREIGN KEY (a
 ALTER TABLE public.app_files ADD CONSTRAINT app_files_folder_id_fkey FOREIGN KEY (folder_id) REFERENCES app_folders(id) ON DELETE CASCADE;
 ALTER TABLE public.app_folders ADD CONSTRAINT app_folders_app_id_fkey FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE;
 ALTER TABLE public.app_folders ADD CONSTRAINT app_folders_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES app_folders(id) ON DELETE CASCADE;
+ALTER TABLE public.billing_run_items ADD CONSTRAINT billing_run_items_run_id_fkey FOREIGN KEY (run_id) REFERENCES billing_runs(id) ON DELETE CASCADE;
 ALTER TABLE public.campaign_drafts ADD CONSTRAINT campaign_drafts_merchant_id_fkey FOREIGN KEY (merchant_id) REFERENCES merchant_profiles(id) ON DELETE CASCADE;
 ALTER TABLE public.campaign_interactions ADD CONSTRAINT campaign_interactions_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES campaigns(campaign_id);
 ALTER TABLE public.campaign_interactions ADD CONSTRAINT campaign_interactions_merchant_id_fkey FOREIGN KEY (merchant_id) REFERENCES merchant_profiles(id);
@@ -1481,6 +1694,10 @@ ALTER TABLE public.fin_tax_records ADD CONSTRAINT fin_tax_records_app_id_fkey FO
 ALTER TABLE public.folder_permissions ADD CONSTRAINT folder_permissions_folder_id_fkey FOREIGN KEY (folder_id) REFERENCES app_folders(id) ON DELETE CASCADE;
 ALTER TABLE public.friendships ADD CONSTRAINT friendships_addressee_id_fkey FOREIGN KEY (addressee_id) REFERENCES user_profiles(id) ON DELETE CASCADE;
 ALTER TABLE public.friendships ADD CONSTRAINT friendships_requester_id_fkey FOREIGN KEY (requester_id) REFERENCES user_profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.hairai_fcm_tokens ADD CONSTRAINT hairai_fcm_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES hairai_users(id) ON DELETE CASCADE;
+ALTER TABLE public.hairai_feedback ADD CONSTRAINT hairai_feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES hairai_users(id) ON DELETE CASCADE;
+ALTER TABLE public.hairai_purchases ADD CONSTRAINT hairai_purchases_user_id_fkey FOREIGN KEY (user_id) REFERENCES hairai_users(id) ON DELETE CASCADE;
+ALTER TABLE public.hairai_transformations ADD CONSTRAINT hairai_transformations_user_id_fkey FOREIGN KEY (user_id) REFERENCES hairai_users(id) ON DELETE CASCADE;
 ALTER TABLE public.invite_codes ADD CONSTRAINT invite_codes_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 ALTER TABLE public.invite_codes ADD CONSTRAINT invite_codes_used_by_fkey FOREIGN KEY (used_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 ALTER TABLE public.kanban_task_attachments ADD CONSTRAINT kanban_task_attachments_task_id_fkey FOREIGN KEY (task_id) REFERENCES kanban_tasks(id) ON DELETE CASCADE;
@@ -1527,12 +1744,16 @@ ALTER TABLE public.user_permission_overrides ADD CONSTRAINT user_permission_over
 ALTER TABLE public.web_login_requests ADD CONSTRAINT web_login_requests_merchant_id_fkey FOREIGN KEY (merchant_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 -- INDEXES
+CREATE INDEX idx_app_banners_active ON public.app_banners USING btree (is_active);
 CREATE INDEX idx_app_files_app_id ON public.app_files USING btree (app_id);
 CREATE INDEX idx_app_files_folder_id ON public.app_files USING btree (folder_id);
 CREATE INDEX idx_app_files_storage_path ON public.app_files USING btree (storage_path);
 CREATE INDEX idx_app_folders_app_id ON public.app_folders USING btree (app_id);
 CREATE INDEX idx_app_folders_parent_id ON public.app_folders USING btree (parent_id);
 CREATE INDEX idx_app_folders_path ON public.app_folders USING btree (app_id, path);
+CREATE INDEX idx_banner_acks_user ON public.banner_acks USING btree (user_id);
+CREATE INDEX idx_bri_merchant ON public.billing_run_items USING btree (merchant_id);
+CREATE INDEX idx_bri_run ON public.billing_run_items USING btree (run_id);
 CREATE INDEX campaign_drafts_merchant_idx ON public.campaign_drafts USING btree (merchant_id);
 CREATE INDEX campaign_drafts_updated_at_idx ON public.campaign_drafts USING btree (updated_at);
 CREATE INDEX idx_campaign_interactions_claim_no ON public.campaign_interactions USING btree (claim_no);
@@ -1551,12 +1772,14 @@ CREATE INDEX idx_interactions_merchant ON public.campaign_interactions USING btr
 CREATE INDEX idx_campaign_templates_category ON public.campaign_templates USING btree (category);
 CREATE INDEX idx_campaign_templates_merchant ON public.campaign_templates USING btree (merchant_id);
 CREATE INDEX idx_campaign_templates_type ON public.campaign_templates USING btree (template_type);
+CREATE UNIQUE INDEX campaigns_merchant_dedup_key_uniq ON public.campaigns USING btree (merchant_id, client_dedup_key) WHERE (client_dedup_key IS NOT NULL);
 CREATE INDEX idx_camp_campaign_id ON public.campaigns USING btree (campaign_id);
 CREATE INDEX idx_camp_created ON public.campaigns USING btree (created_at DESC);
 CREATE INDEX idx_camp_deal_of_day ON public.campaigns USING btree (start_date DESC) WHERE ((is_deal_of_the_day = true) AND (status = 'active'::campaign_status));
 CREATE INDEX idx_camp_merchant ON public.campaigns USING btree (merchant_id, created_at DESC);
 CREATE INDEX idx_camp_merchant_status ON public.campaigns USING btree (merchant_id, status);
 CREATE INDEX idx_camp_status_time ON public.campaigns USING btree (status, created_at DESC);
+CREATE INDEX idx_campaigns_active_store ON public.campaigns USING btree (store_id) WHERE (status = 'active'::campaign_status);
 CREATE INDEX idx_campaigns_dates ON public.campaigns USING btree (start_date, end_date);
 CREATE INDEX idx_campaigns_deal_of_day_active ON public.campaigns USING btree (is_deal_of_the_day) WHERE (status = 'active'::campaign_status);
 CREATE INDEX idx_campaigns_latlong ON public.campaigns USING btree (latlong);
@@ -1585,6 +1808,7 @@ CREATE INDEX dealpro_test_plan_results_test_idx ON public.dealpro_test_plan_resu
 CREATE INDEX dealpro_test_plan_results_user_idx ON public.dealpro_test_plan_results USING btree (user_id);
 CREATE INDEX dealpro_test_plan_runs_status_idx ON public.dealpro_test_plan_runs USING btree (status);
 CREATE INDEX dealpro_test_plan_runs_triggered_at_idx ON public.dealpro_test_plan_runs USING btree (triggered_at DESC);
+CREATE INDEX idx_deals_listing_cache_expires ON public.deals_listing_cache USING btree (expires_at);
 CREATE INDEX diagrams_owner_idx ON public.diagrams USING btree (owner_id);
 CREATE INDEX diagrams_updated_idx ON public.diagrams USING btree (updated_at DESC);
 CREATE INDEX idx_favorites_consumer ON public.favorites USING btree (user_id);
@@ -1620,6 +1844,15 @@ CREATE INDEX idx_friendships_addressee ON public.friendships USING btree (addres
 CREATE INDEX idx_friendships_requester ON public.friendships USING btree (requester_id, status);
 CREATE INDEX idx_geocode_cache_expires ON public.geocode_cache USING btree (expires_at);
 CREATE INDEX idx_geocode_cache_key ON public.geocode_cache USING btree (query_key);
+CREATE INDEX idx_hairai_fcm_token ON public.hairai_fcm_tokens USING btree (device_token);
+CREATE INDEX idx_hairai_fcm_user ON public.hairai_fcm_tokens USING btree (user_id) WHERE (is_active = true);
+CREATE INDEX idx_hairai_feedback_user ON public.hairai_feedback USING btree (user_id, created_at DESC);
+CREATE INDEX idx_hairai_purchases_token ON public.hairai_purchases USING btree (purchase_token);
+CREATE INDEX idx_hairai_purchases_user ON public.hairai_purchases USING btree (user_id, created_at DESC);
+CREATE INDEX idx_hairai_tx_status ON public.hairai_transformations USING btree (status);
+CREATE INDEX idx_hairai_tx_user_created ON public.hairai_transformations USING btree (user_id, created_at DESC);
+CREATE INDEX idx_hairai_users_firebase_uid ON public.hairai_users USING btree (firebase_uid);
+CREATE INDEX idx_hairai_users_phone ON public.hairai_users USING btree (phone);
 CREATE INDEX invite_codes_code_idx ON public.invite_codes USING btree (code);
 CREATE INDEX idx_kanban_attachments_task ON public.kanban_task_attachments USING btree (task_id, created_at);
 CREATE INDEX idx_kanban_comments_task ON public.kanban_task_comments USING btree (task_id, created_at);
@@ -1639,7 +1872,9 @@ CREATE INDEX idx_merchant_consumer_referral ON public.merchant_profiles USING bt
 CREATE INDEX idx_merchant_merchant_referral ON public.merchant_profiles USING btree (merchant_referral_code);
 CREATE INDEX idx_mprof_phone ON public.merchant_profiles USING btree (phone);
 CREATE INDEX idx_mprof_role ON public.merchant_profiles USING btree (role);
+CREATE INDEX idx_merchant_ratings_merchant ON public.merchant_ratings USING btree (merchant_id);
 CREATE INDEX idx_merchant_ratings_merchant_id ON public.merchant_ratings USING btree (merchant_id);
+CREATE INDEX idx_merchant_ratings_store_id ON public.merchant_ratings USING btree (store_id);
 CREATE INDEX idx_merchant_req_parent ON public.merchant_requirements USING btree (parent_id);
 CREATE INDEX idx_merchant_req_type ON public.merchant_requirements USING btree (item_type);
 CREATE INDEX idx_rewards_log_merchant ON public.merchant_rewards_log USING btree (merchant_id);
@@ -1647,7 +1882,11 @@ CREATE INDEX idx_merchant_staff_merchant ON public.merchant_staff USING btree (m
 CREATE INDEX idx_merchant_staff_user ON public.merchant_staff USING btree (user_id);
 CREATE INDEX idx_staff_invites_code ON public.merchant_staff_invites USING btree (invite_code);
 CREATE INDEX idx_staff_invites_merchant ON public.merchant_staff_invites USING btree (merchant_id);
+CREATE INDEX idx_merchant_stores_city_trgm ON public.merchant_stores USING gin (city gin_trgm_ops);
+CREATE INDEX idx_merchant_stores_lat_lng ON public.merchant_stores USING btree (latitude, longitude);
+CREATE INDEX idx_merchant_stores_locality_trgm ON public.merchant_stores USING gin (locality gin_trgm_ops);
 CREATE INDEX idx_merchant_stores_merchant_id ON public.merchant_stores USING btree (merchant_id);
+CREATE INDEX idx_merchant_stores_pincode_prefix ON public.merchant_stores USING btree (pincode varchar_pattern_ops);
 CREATE INDEX idx_sub_merchant_id ON public.merchant_subscriptions USING btree (merchant_id);
 CREATE INDEX merchant_subscriptions_is_test_idx ON public.merchant_subscriptions USING btree (is_test_subscription) WHERE (is_test_subscription = true);
 CREATE UNIQUE INDEX merchant_subscriptions_razorpay_sub_uidx ON public.merchant_subscriptions USING btree (razorpay_subscription_id);
@@ -1658,6 +1897,8 @@ CREATE INDEX idx_notification_logs_type_status ON public.notification_logs USING
 CREATE INDEX idx_perf_traces_action ON public.performance_traces USING btree (action_name, created_at DESC);
 CREATE INDEX idx_perf_traces_app ON public.performance_traces USING btree (app_key, created_at DESC);
 CREATE INDEX idx_perf_traces_created_at ON public.performance_traces USING btree (created_at DESC);
+CREATE INDEX idx_pincode_directory_pincode_lower_locality ON public.pincode_directory USING btree (pincode, lower(locality));
+CREATE INDEX idx_pincode_directory_prefix ON public.pincode_directory USING btree (pincode text_pattern_ops);
 CREATE INDEX idx_pinned_deals_campaign_id ON public.pinned_deals USING btree (campaign_id);
 CREATE INDEX idx_pinned_deals_created_at ON public.pinned_deals USING btree (created_at DESC);
 CREATE INDEX idx_pinned_deals_merchant_id ON public.pinned_deals USING btree (merchant_id);
@@ -1683,6 +1924,8 @@ CREATE INDEX razorpay_webhook_events_sub_idx ON public.razorpay_webhook_events U
 CREATE INDEX idx_reward_point_config_action_tier ON public.reward_point_config USING btree (action, tier) WHERE (is_active = true);
 CREATE INDEX signup_drafts_updated_at_idx ON public.signup_drafts USING btree (updated_at);
 CREATE INDEX idx_stores_merchant ON public.stores USING btree (merchant_id);
+CREATE UNIQUE INDEX subscription_tiers_sort_order_unique ON public.subscription_tiers USING btree (sort_order) WHERE (is_active = true);
+CREATE UNIQUE INDEX subscription_tiers_tier_key_uidx ON public.subscription_tiers USING btree (tier_key);
 CREATE INDEX idx_test_cases_app_id ON public.test_cases USING btree (app_id);
 CREATE INDEX idx_test_cases_created_by ON public.test_cases USING btree (created_by);
 CREATE INDEX idx_test_cases_module ON public.test_cases USING btree (module);
@@ -1716,6 +1959,22 @@ CREATE INDEX idx_wlr_expires ON public.web_login_requests USING btree (expires_a
 CREATE INDEX idx_wlr_merchant_status ON public.web_login_requests USING btree (merchant_id, status);
 
 -- FUNCTIONS
+CREATE OR REPLACE FUNCTION public.app_config_get(p_key text)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$ SELECT value FROM public.app_config WHERE key = p_key $function$
+;
+
+CREATE OR REPLACE FUNCTION public.app_secret_get(p_name text)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'vault'
+AS $function$ SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = p_name LIMIT 1 $function$
+;
+
 CREATE OR REPLACE FUNCTION public.authorize_claim_v2(p_claim_id text, p_merchant_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -1832,6 +2091,41 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.campaign_create_gate(p_user_id text, p_merchant_id text, p_store_id text)
+ RETURNS TABLE(is_merchant boolean, is_staff boolean, has_access boolean, store_ok boolean)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  with staff as (
+    select exists(
+      select 1 from merchant_staff ms
+      where ms.user_id = p_user_id::uuid and ms.status = 'active'
+    ) as ok
+  )
+  select
+    exists(
+      select 1 from merchant_profiles mp
+      where mp.id = p_user_id::uuid and mp.role = 'merchant'
+    ) as is_merchant,
+    (select ok from staff) as is_staff,
+    (
+      (select ok from staff)
+      or exists(
+        select 1 from merchant_subscriptions s
+        where s.merchant_id = p_merchant_id
+          and s.status = 'active'
+          and s.current_period_end >= now()
+      )
+    ) as has_access,
+    exists(
+      select 1 from merchant_stores st
+      where st.id = p_store_id::uuid
+        and st.merchant_id::text = p_merchant_id
+    ) as store_ok;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.cleanup_old_fcm_tokens()
  RETURNS void
  LANGUAGE plpgsql
@@ -1891,6 +2185,20 @@ CREATE OR REPLACE FUNCTION public.diagrams_set_updated_at()
 AS $function$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.edge_function_url(p_function text)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT CASE
+           WHEN public.app_config_get('project_ref') IS NULL THEN NULL
+           ELSE format('https://%s.supabase.co/functions/v1/%s',
+                       public.app_config_get('project_ref'), p_function)
+         END
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.expire_ended_campaigns()
  RETURNS void
  LANGUAGE plpgsql
@@ -1903,7 +2211,9 @@ BEGIN
   SET status = 'expired'
   WHERE status = 'active'
     AND end_date IS NOT NULL
-    AND end_date < CURRENT_DATE;
+    -- Strictly-less-than the IST "today": a deal valid till Aug 12 expires at
+    -- Aug 13 00:00 IST, and this is safe to evaluate at any hour of the day.
+    AND end_date < (now() AT TIME ZONE 'Asia/Kolkata')::date;
 
   GET DIAGNOSTICS expired_count = ROW_COUNT;
 
@@ -2171,6 +2481,17 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.hairai_set_updated_at()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -2257,6 +2578,35 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.merchant_is_active_actor(p_user_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  with sig as (
+    select
+      exists (
+        select 1 from public.merchant_stores where merchant_id = p_user_id
+      ) as owns_store,
+      exists (
+        select 1 from public.merchant_staff
+        where user_id = p_user_id and role in ('manager','staff') and status = 'active'
+      ) as active_member,
+      exists (
+        select 1 from public.merchant_staff
+        where user_id = p_user_id and role in ('manager','staff') and status = 'suspended'
+      ) as suspended_member
+  )
+  select case
+    when owns_store or active_member then true   -- a real merchant / active staff
+    when suspended_member then false             -- disabled employee, no own store
+    else true                                    -- normal/new owner
+  end
+  from sig;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.notify_upcoming_trial_ends()
  RETURNS void
  LANGUAGE plpgsql
@@ -2265,54 +2615,46 @@ AS $function$
 DECLARE
   r RECORD;
   edge_function_url TEXT;
-  service_role_key TEXT;
+  service_role_key  TEXT;
 BEGIN
-  edge_function_url := 'https://gkulyxglzqlhpqxlwjqw.supabase.co/functions/v1/send-trial-email';
-  service_role_key := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrdWx5eGdsenFsaHBxeGx3anF3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODg2MDgyMiwiZXhwIjoyMDg0NDM2ODIyfQ.9XiwXcNaci-ELD3Z95dIuF_InFc_GQOiO3ZmS-Ma7jw';
+  edge_function_url := public.edge_function_url('send-trial-email');
+  service_role_key  := public.app_secret_get('service_role_key');
+
+  IF edge_function_url IS NULL OR coalesce(service_role_key,'') = '' THEN
+    RAISE EXCEPTION
+      'notify_upcoming_trial_ends: missing config. Set app_config.project_ref and the service_role_key Vault secret.';
+  END IF;
 
   FOR r IN
     SELECT
-      ms.id AS subscription_id,
+      ms.id                AS subscription_id,
       ms.merchant_id,
       ms.plan_name,
       ms.current_period_end,
       COALESCE(ms.total_recurring_amount, st.subscription_fee, 0) AS total_recurring_amount,
-      COALESCE(st.tier_name, ms.plan_name) AS tier_name,
-      COALESCE(st.currency, 'INR') AS currency
+      COALESCE(st.tier_name, ms.plan_name)                        AS tier_name,
+      COALESCE(st.currency, 'INR')                                 AS currency
     FROM public.merchant_subscriptions ms
     LEFT JOIN public.subscription_tiers st ON st.tier_key = ms.plan_name
     WHERE ms.status = 'active'
-      AND ms.cancel_at_period_end = false
-      AND ms.current_period_end IS NOT NULL
-      AND ms.current_period_end >= (NOW() + INTERVAL '2 days 12 hours')
-      AND ms.current_period_end < (NOW() + INTERVAL '3 days 12 hours')
-      AND ms.last_notified_at IS NULL
+      AND ms.current_period_end >= now() + INTERVAL '2.5 days'
+      AND ms.current_period_end <  now() + INTERVAL '3.5 days'
   LOOP
     PERFORM net.http_post(
-      url := edge_function_url,
-      body := json_build_object(
-        'merchant_id', r.merchant_id,
-        'subscription_id', r.subscription_id,
-        'total_recurring_amount', r.total_recurring_amount,
-        'plan_name', r.plan_name,
-        'tier_name', r.tier_name,
-        'currency', r.currency,
-        'trial_end', r.current_period_end
-      )::jsonb,
-      headers := json_build_object(
-        'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || service_role_key
-      )::jsonb
-    );
-
-    INSERT INTO public.user_notifications (user_id, type, title, body, merchant_id)
-    VALUES (
-      r.merchant_id::uuid,
-      'trial_expiry_3day',
-      'Your DealPro trial ends in 3 days!',
-      'Your first payment of ' || r.currency || r.total_recurring_amount::text ||
-        ' will be processed soon. Enjoy your remaining trial days with ' || r.tier_name || ' plan.',
-      r.merchant_id::uuid
+      url     := edge_function_url,
+      headers := jsonb_build_object(
+                   'Content-Type', 'application/json',
+                   'Authorization', 'Bearer ' || service_role_key
+                 ),
+      body    := jsonb_build_object(
+                   'subscription_id',         r.subscription_id,
+                   'merchant_id',             r.merchant_id,
+                   'plan_name',               r.plan_name,
+                   'tier_name',               r.tier_name,
+                   'currency',                r.currency,
+                   'total_recurring_amount',  r.total_recurring_amount,
+                   'current_period_end',      r.current_period_end
+                 )
     );
   END LOOP;
 END;
@@ -2328,13 +2670,13 @@ DECLARE
   referrer_merchant_id VARCHAR(255);
   ref_count INT;
   threshold INT;
+  fn_url  TEXT;
+  svc_key TEXT;
 BEGIN
-  -- Only process if the new merchant used an invite code
   IF NEW.invite_code IS NULL OR NEW.invite_code = '' THEN
     RETURN NEW;
   END IF;
 
-  -- Find the referrer by their merchant_referral_code matching the invite_code
   SELECT id INTO referrer_merchant_id
   FROM public.merchant_profiles
   WHERE merchant_referral_code = NEW.invite_code
@@ -2346,52 +2688,57 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Insert into merchant_referrals with status = 'qualified'
+  -- Record the referral (one row per referee).
   INSERT INTO public.merchant_referrals (referrer_id, referee_id, referral_code_used, status, qualified_at)
   VALUES (referrer_merchant_id, NEW.id, NEW.invite_code, 'qualified', now())
   ON CONFLICT (referee_id) DO NOTHING;
 
-  -- Count qualified referrals for this referrer in the current calendar month
+  -- Count this referrer's qualified referrals for the current calendar month.
   SELECT COUNT(*) INTO ref_count
   FROM public.merchant_referrals
   WHERE referrer_id = referrer_merchant_id
     AND status = 'qualified'
     AND qualified_at >= date_trunc('month', now())
-    AND qualified_at < date_trunc('month', now()) + INTERVAL '1 month';
+    AND qualified_at <  date_trunc('month', now()) + INTERVAL '1 month';
 
-  -- Fetch the configurable threshold
   SELECT (config_value->>'count')::INT INTO threshold
-  FROM public.app_configs
-  WHERE config_key = 'referral_reward_threshold';
+  FROM public.app_configs WHERE config_key = 'referral_reward_threshold';
+  IF threshold IS NULL THEN threshold := 20; END IF;
 
-  IF threshold IS NULL THEN
-    threshold := 20; -- fallback default
-  END IF;
+  -- Threshold hit and not already rewarded this month → dispatch the reward.
+  IF ref_count >= threshold
+     AND NOT EXISTS (
+       SELECT 1 FROM public.merchant_rewards_log
+       WHERE merchant_id = referrer_merchant_id
+         AND reward_month = date_trunc('month', now())::DATE
+     )
+  THEN
+    fn_url  := public.edge_function_url('process-referral-reward');
+    svc_key := public.app_secret_get('service_role_key');
 
-  -- If referrer hit the threshold, grant free month (only once per month)
-  IF ref_count >= threshold THEN
-    -- Check if already rewarded this month
-    IF NOT EXISTS (
-      SELECT 1 FROM public.merchant_rewards_log
-      WHERE merchant_id = referrer_merchant_id
-        AND reward_month = date_trunc('month', now())::DATE
-    ) THEN
-      -- Call the edge function via pg_net to defer Google Play billing + update DB
-      PERFORM net.http_post(
-        url := 'https://gkulyxglzqlhpqxlwjqw.supabase.co/functions/v1/process-referral-reward',
-        headers := jsonb_build_object(
-          'Content-Type', 'application/json',
-          'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)
-        ),
-        body := jsonb_build_object(
-          'merchant_id', referrer_merchant_id,
-          'subscription_id', (
-            SELECT id FROM public.merchant_subscriptions
-            WHERE merchant_id = referrer_merchant_id AND status = 'active'
-            ORDER BY created_at DESC LIMIT 1
+    IF fn_url IS NOT NULL AND svc_key IS NOT NULL THEN
+      -- pg_net is async, but wrap defensively so nothing here can abort the signup.
+      BEGIN
+        PERFORM net.http_post(
+          url     := fn_url,
+          headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'Authorization', 'Bearer ' || svc_key
+          ),
+          body    := jsonb_build_object(
+            'merchant_id', referrer_merchant_id,
+            'subscription_id', (
+              SELECT id FROM public.merchant_subscriptions
+              WHERE merchant_id = referrer_merchant_id AND status = 'active'
+              ORDER BY created_at DESC LIMIT 1
+            )
           )
-        )
-      );
+        );
+      EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING '[process_merchant_referral] reward dispatch failed for %: %', referrer_merchant_id, SQLERRM;
+      END;
+    ELSE
+      RAISE WARNING '[process_merchant_referral] edge_function_url/service_role_key not configured — skipping reward dispatch for %', referrer_merchant_id;
     END IF;
   END IF;
 
@@ -2414,6 +2761,37 @@ BEGIN
       AND NEW.plan_name IS NOT NULL;
     
     RETURN NEW;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.rls_auto_enable()
+ RETURNS event_trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+DECLARE
+  cmd record;
+BEGIN
+  FOR cmd IN
+    SELECT *
+    FROM pg_event_trigger_ddl_commands()
+    WHERE command_tag IN ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
+      AND object_type IN ('table','partitioned table')
+  LOOP
+     IF cmd.schema_name IS NOT NULL AND cmd.schema_name IN ('public') AND cmd.schema_name NOT IN ('pg_catalog','information_schema') AND cmd.schema_name NOT LIKE 'pg_toast%' AND cmd.schema_name NOT LIKE 'pg_temp%' THEN
+      BEGIN
+        EXECUTE format('alter table if exists %s enable row level security', cmd.object_identity);
+        RAISE LOG 'rls_auto_enable: enabled RLS on %', cmd.object_identity;
+      EXCEPTION
+        WHEN OTHERS THEN
+          RAISE LOG 'rls_auto_enable: failed to enable RLS on %', cmd.object_identity;
+      END;
+     ELSE
+        RAISE LOG 'rls_auto_enable: skip % (either system schema or not in enforced list: %.)', cmd.object_identity, cmd.schema_name;
+     END IF;
+  END LOOP;
 END;
 $function$
 ;
@@ -2569,9 +2947,13 @@ CREATE OR REPLACE TRIGGER contractor_codes_set_modified BEFORE UPDATE ON public.
 CREATE OR REPLACE TRIGGER dealpro_test_plan_results_set_updated_at BEFORE UPDATE ON public.dealpro_test_plan_results FOR EACH ROW EXECUTE FUNCTION trg_set_updated_at_dealpro_test_plan_results();
 CREATE OR REPLACE TRIGGER diagrams_set_updated_at BEFORE UPDATE ON public.diagrams FOR EACH ROW EXECUTE FUNCTION diagrams_set_updated_at();
 CREATE OR REPLACE TRIGGER trigger_update_fcm_tokens_updated_at BEFORE UPDATE ON public.fcm_tokens FOR EACH ROW EXECUTE FUNCTION update_fcm_tokens_updated_at();
+CREATE OR REPLACE TRIGGER trg_hairai_fcm_updated_at BEFORE UPDATE ON public.hairai_fcm_tokens FOR EACH ROW EXECUTE FUNCTION hairai_set_updated_at();
+CREATE OR REPLACE TRIGGER trg_hairai_purchases_updated_at BEFORE UPDATE ON public.hairai_purchases FOR EACH ROW EXECUTE FUNCTION hairai_set_updated_at();
+CREATE OR REPLACE TRIGGER trg_hairai_tx_updated_at BEFORE UPDATE ON public.hairai_transformations FOR EACH ROW EXECUTE FUNCTION hairai_set_updated_at();
+CREATE OR REPLACE TRIGGER trg_hairai_users_updated_at BEFORE UPDATE ON public.hairai_users FOR EACH ROW EXECUTE FUNCTION hairai_set_updated_at();
 CREATE OR REPLACE TRIGGER update_hoardings_modtime BEFORE UPDATE ON public.hoardings FOR EACH ROW EXECUTE FUNCTION update_modified_column();
-CREATE OR REPLACE TRIGGER trg_invite_codes_single_use_guard BEFORE INSERT ON public.invite_codes FOR EACH ROW EXECUTE FUNCTION invite_codes_single_use_guard();
 CREATE OR REPLACE TRIGGER trg_invite_codes_single_use_guard BEFORE UPDATE ON public.invite_codes FOR EACH ROW EXECUTE FUNCTION invite_codes_single_use_guard();
+CREATE OR REPLACE TRIGGER trg_invite_codes_single_use_guard BEFORE INSERT ON public.invite_codes FOR EACH ROW EXECUTE FUNCTION invite_codes_single_use_guard();
 CREATE OR REPLACE TRIGGER update_merchant_images_modtime BEFORE UPDATE ON public.merchant_images FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE OR REPLACE TRIGGER trg_auto_create_owner AFTER INSERT ON public.merchant_profiles FOR EACH ROW EXECUTE FUNCTION auto_create_merchant_owner();
 CREATE OR REPLACE TRIGGER trg_process_merchant_referral AFTER INSERT ON public.merchant_profiles FOR EACH ROW EXECUTE FUNCTION process_merchant_referral();
@@ -2588,9 +2970,15 @@ CREATE OR REPLACE TRIGGER trg_tier_config_updated BEFORE UPDATE ON public.tier_c
 
 -- RLS
 ALTER TABLE public."VEDIC_profiles" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_banners ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_configs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_files ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_folders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.apps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.banner_acks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.billing_run_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.billing_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.campaign_drafts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.campaign_interactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.campaign_templates ENABLE ROW LEVEL SECURITY;
@@ -2605,9 +2993,11 @@ ALTER TABLE public.contractor_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.deal_shares ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dealpro_test_plan_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dealpro_test_plan_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.deals_listing_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.diagrams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.favorites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fcm_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.feature_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fin_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fin_attachments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fin_budgets ENABLE ROW LEVEL SECURITY;
@@ -2620,8 +3010,16 @@ ALTER TABLE public.fin_tax_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.folder_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.friendships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.geocode_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.hairai_fcm_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.hairai_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.hairai_purchases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.hairai_transformations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.hairai_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.hoardings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invite_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kanban_task_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kanban_task_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kanban_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.localities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_addon_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_audit_logs ENABLE ROW LEVEL SECURITY;
@@ -2635,6 +3033,7 @@ ALTER TABLE public.merchant_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_ratings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_referrals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_requirements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.merchant_rewards_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_staff ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_staff_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_stores ENABLE ROW LEVEL SECURITY;
@@ -2642,7 +3041,10 @@ ALTER TABLE public.merchant_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.milestone_claims ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notification_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.performance_traces ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pincode_directory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pinned_deals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.platform_errors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.points_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.product_favorites_user ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
@@ -2664,6 +3066,7 @@ ALTER TABLE public.user_activity_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_app_registry ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_permission_overrides ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.web_login_requests ENABLE ROW LEVEL SECURITY;
 
@@ -2745,6 +3148,7 @@ CREATE POLICY merchant_insert_own ON public.merchant_subscriptions AS PERMISSIVE
 CREATE POLICY merchant_select_own ON public.merchant_subscriptions AS PERMISSIVE FOR SELECT TO public USING (((merchant_id)::text = ( SELECT (auth.uid())::text AS uid)));
 CREATE POLICY merchant_update_own ON public.merchant_subscriptions AS PERMISSIVE FOR UPDATE TO public USING (((merchant_id)::text = ( SELECT (auth.uid())::text AS uid))) WITH CHECK (((merchant_id)::text = ( SELECT (auth.uid())::text AS uid)));
 CREATE POLICY "Users read own milestone claims" ON public.milestone_claims AS PERMISSIVE FOR SELECT TO public USING ((auth.uid() = user_id));
+CREATE POLICY "pincode_directory public read" ON public.pincode_directory AS PERMISSIVE FOR SELECT TO anon, authenticated USING (true);
 CREATE POLICY "Users can pin deals" ON public.pinned_deals AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.uid() = user_id));
 CREATE POLICY "Users can unpin deals" ON public.pinned_deals AS PERMISSIVE FOR DELETE TO public USING ((auth.uid() = user_id));
 CREATE POLICY "Users can view their own pinned deals" ON public.pinned_deals AS PERMISSIVE FOR SELECT TO public USING ((auth.uid() = user_id));

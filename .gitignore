@@ -82,3 +82,6 @@ prod-schema.*.sql
 # trail is releases/RELEASES.md; Play Console holds the authoritative bundles.
 releases/*.aab
 releases/*.apk
+
+# DEV edge-function secrets, filled in temporarily then deleted
+dev-secrets.env

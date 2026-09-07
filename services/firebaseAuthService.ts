@@ -32,6 +32,18 @@ class FirebaseAuthService {
   private verificationId: string | null = null;
   private emailIdToken: string | null = null;
   private autoVerified = false;
+  private autoVerifyCallback: ((smsCode: string | null) => void) | null = null;
+
+  /**
+   * Called if Firebase completes verification by itself AFTER the code screen
+   * is already showing. `smsCode` is the code Firebase auto-read, when it has
+   * one. At that point the user is already verified and that code is spent, so
+   * submitting it would return INVALID_CODE — the UI should fill it in and let
+   * the user complete the flow instead of failing them.
+   */
+  onAutoVerified(cb: ((smsCode: string | null) => void) | null): void {
+    this.autoVerifyCallback = cb;
+  }
   private autoVerifyHandle: PluginListenerHandle | null = null;
 
 
@@ -52,6 +64,7 @@ class FirebaseAuthService {
     console.log('[FirebaseAuth] Sending OTP to:', phoneNumber);
     this.teardownAutoVerify();
     this.autoVerified = false;
+    this.autoVerifyCallback = null;
 
     try {
       // Set up listeners BEFORE triggering signInWithPhoneNumber.
@@ -131,9 +144,14 @@ class FirebaseAuthService {
               resolve('__AUTO_VERIFIED__');
               return;
             }
-            // The code screen is already up. Do not touch verificationId and do
-            // not complete sign-in — the user finishes with the code they were
-            // sent, exactly as before.
+            // The code screen is already up and Firebase has verified anyway, so
+            // the SMS code is spent. Submitting it would be a guaranteed 400, which
+            // is what stranded users before. Mark verified and hand the UI the code
+            // so it can prefill the box; the user still presses Verify.
+            this.autoVerified = true;
+            this.verificationId = '__AUTO_VERIFIED__';
+            const cb = this.autoVerifyCallback;
+            if (cb) cb(event?.verificationCode ?? null);
           }
         );
 
