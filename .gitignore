@@ -76,3 +76,6 @@ nul
 # Schema dumps — contain live service_role keys embedded in webhook triggers
 prod-schema.sql
 prod-schema.*.sql
+
+# DEV edge-function secrets, filled in temporarily then deleted
+dev-secrets.env

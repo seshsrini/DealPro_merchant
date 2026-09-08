@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, Key, AlertTriangle, Phone, ArrowLeft, RefreshCw } from 'lucide-react';
 import { firebaseAuthService } from './services/firebaseAuthService';
+import { isDevOtpBypassEnabled } from './utils/devOtpBypass';
 
 interface OtpVerificationModalProps {
   isOpen: boolean;
@@ -30,6 +31,13 @@ export const OtpVerificationModal: React.FC<OtpVerificationModalProps> = ({
   useEffect(() => {
     if (isOpen && phoneNumber && !hasSentRef.current) {
       hasSentRef.current = true;
+      // DEV demo builds only: skip the SMS/code round-trip entirely and report
+      // success, so the normal login/registration path runs. Inert unless the
+      // DEV flag AND the DEV Supabase project both match — see utils/devOtpBypass.
+      if (isDevOtpBypassEnabled()) {
+        onVerificationSuccess();
+        return;
+      }
       sendOtp();
     }
     if (!isOpen) {
