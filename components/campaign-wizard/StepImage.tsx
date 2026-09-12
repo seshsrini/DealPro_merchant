@@ -685,7 +685,7 @@ export async function generatePriceTagImage(
       }
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
 
-      // Compact price-tag pill, top-left. Nothing else is drawn.
+      // Compact price-tag pill, BOTTOM-left. Nothing else is drawn.
       const disc = tag.discountPct?.trim();
       const price = tag.offerPrice?.trim();
       if (disc || price) {
@@ -705,12 +705,15 @@ export async function generatePriceTagImage(
         const boxW = maxW + boxPad * 2;
         const boxH = lines.reduce((a, l) => a + l.h, 0) + boxPad * 2;
         const pad = SIZE * 0.045;
+        // Anchor to the BOTTOM-left so every additional photo matches the cover's
+        // bottom price band (was top-left, which looked inconsistent per photo).
+        const boxY = SIZE - pad - boxH;
         ctx.fillStyle = 'rgba(15,23,42,0.82)';
         ctx.beginPath();
-        ctx.roundRect(pad, pad, boxW, boxH, SIZE * 0.03);
+        ctx.roundRect(pad, boxY, boxW, boxH, SIZE * 0.03);
         ctx.fill();
         const tx = pad + boxPad;
-        let ty = pad + boxPad;
+        let ty = boxY + boxPad;
         ctx.textAlign = 'left';
         lines.forEach(l => {
           ctx.font = l.f;
