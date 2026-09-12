@@ -20,6 +20,28 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.09.12.1838 — versionCode 1789252733
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.09.12.1838-vc1789252733.aab` |
+| SHA-256 | `1f86026ddec6d4246a920d4aa689ba212b5ce2ab83dedd6c24d1d8575f4ef8ed` |
+| Size | 22,298,326 bytes |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
+| targetSdk / minSdk | 36 / 23 |
+| Commit | `8101537` |
+| Play status | pending upload |
+
+**Additional deal photos: price tag now baked at bottom-left, not top-left.**
+`generatePriceTagImage` (used for the 2nd+ photos of a deal) drew its price pill
+in the top-left corner while the cover photo's price band sits at the bottom, so a
+multi-photo deal showed the price bottom-left on photo 1 and top-left on the rest.
+The pill is now anchored bottom-left to match. It is baked into the image pixels
+at publish time, so this affects **newly published deals only** — images already
+uploaded keep their baked position.
+
+---
+
 ## 2026.08.30.0702 — versionCode 1788087736
 
 | | |
