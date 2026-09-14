@@ -16,7 +16,7 @@ const LOCKED_PLAN_FEE = 199;
  * lookup failure must never wrongly lock a paying merchant out of Catalogue.
  */
 export function useCatalogueAccessLocked(
-  user: { id: string; role?: string } | null | undefined,
+  user: { id: string; role?: string; current_tier_id?: number | null; hasActiveSubscription?: boolean } | null | undefined,
 ): boolean {
   const [locked, setLocked] = useState(false);
 
@@ -44,7 +44,9 @@ export function useCatalogueAccessLocked(
       }
     })();
     return () => { cancelled = true; };
-  }, [user?.id, user?.role]);
+  // current_tier_id / hasActiveSubscription are in the deps so an in-session
+  // upgrade re-runs this and unlocks Catalogue the moment payment lands — no reload.
+  }, [user?.id, user?.role, user?.current_tier_id, user?.hasActiveSubscription]);
 
   return locked;
 }
