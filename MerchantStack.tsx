@@ -27,6 +27,8 @@ import { AIAssistantChat } from './AIAssistantChat'; // Import AI Assistant Chat
 import { FeatureTour } from './components/FeatureTour'; // Import Feature Tour
 import { CampaignTour } from './components/CampaignTour'; // Import Campaign Tour
 import { CampaignWizard } from './CampaignWizard';
+import { AnnouncementWizard } from './AnnouncementWizard';
+import { AnnouncementsList } from './AnnouncementsList';
 import { DotdWizard } from './DotdWizard';
 import { MerchantDealOfDay } from './MerchantDealOfDay';
 import { ProductWizard } from './ProductWizard';
@@ -153,6 +155,25 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
         setView={setView}
         refreshDeals={refreshDeals}
         theme={theme}
+      />
+    );
+  }
+  else if (view === 'announcement_wizard') {
+    currentView = (
+      <AnnouncementWizard
+        user={user}
+        theme={theme}
+        onBack={() => setView('merchant_deals')}
+        onCreated={() => setView('announcements_list')}
+      />
+    );
+  }
+  else if (view === 'announcements_list') {
+    currentView = (
+      <AnnouncementsList
+        user={user}
+        theme={theme}
+        onBack={() => setView('merchant_deals')}
       />
     );
   }

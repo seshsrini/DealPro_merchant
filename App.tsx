@@ -967,7 +967,7 @@ const AppContent: React.FC = () => {
               </PermissionsProvider>
             ) : null}
           </main>
-          {user.isLoggedIn && user.role === 'merchant' && !['verify_phone', 'merchant_onboarding', 'privacy_policy', 'terms_of_service'].includes(view) && (
+          {user.isLoggedIn && user.role === 'merchant' && !['verify_phone', 'merchant_onboarding', 'privacy_policy', 'terms_of_service', 'announcement_wizard', 'announcements_list'].includes(view) && (
             <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} catalogueLocked={catalogueLocked} />
           )}
 

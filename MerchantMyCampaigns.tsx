@@ -5,6 +5,7 @@ import { addCampaignService } from './services/addCampaignService';
 import { mDashboardService } from './services/mDashboardService';
 import { merchantService } from './services/merchantService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
+import { fetchAnnouncementUsage, type AnnouncementUsage } from './services/announcementService';
 import { mrpFromDiscount } from './components/campaign-wizard/StepImage';
 import { PLAY_COMPLIANT } from './services/playCompliance';
 import { resilient, peekCache } from './services/resilientData';
@@ -179,6 +180,11 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
     has_subscription: false,
     next_reset: null,
   });
+
+  // Announcement allowance/usage (plan-based, resets monthly like deals). Loaded
+  // once via the create-announcement `check` mode; fails open (0/0, no plan).
+  const [announcementUsage, setAnnouncementUsage] = useState<AnnouncementUsage>({ used: 0, limit: 0, hasSubscription: false });
+  useEffect(() => { fetchAnnouncementUsage().then(setAnnouncementUsage).catch(() => {}); }, [deals]);
 
   // Auto-Renew state
   const [renewDeal, setRenewDeal] = useState<Deal | null>(null);
@@ -529,6 +535,50 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
           </button>
         );
       })()}
+
+      {/* Announcements — sits right beside New Deal. Plan-gated: greyed out when
+          the plan doesn't include announcements (₹199) or the monthly allowance
+          is spent. The server re-checks both; this is just upfront UX. */}
+      {(() => {
+        const notIncluded = announcementUsage.limit <= 0;
+        const atLimit = announcementUsage.limit > 0 && announcementUsage.used >= announcementUsage.limit;
+        const disabled = notIncluded || atLimit;
+        const sub = notIncluded
+          ? 'Upgrade your plan to send announcements'
+          : atLimit
+            ? `${announcementUsage.used}/${announcementUsage.limit} used · resets next cycle`
+            : `${announcementUsage.used}/${announcementUsage.limit} used this month`;
+        return (
+          <button
+            onClick={() => (notIncluded ? setView('merchant_subscriptions') : setView('announcement_wizard'))}
+            disabled={atLimit}
+            className={`w-full relative overflow-hidden rounded-2xl p-4 border-2 transition-all flex items-center gap-4 ${
+              disabled
+                ? 'bg-slate-300 border-slate-300 cursor-not-allowed opacity-60 shadow-none'
+                : 'bg-gradient-to-r from-indigo-600 to-fuchsia-600 border-indigo-500 active:translate-y-0.5 active:shadow-none shadow-lg shadow-indigo-600/30'
+            }`}
+          >
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${disabled ? 'bg-slate-400/40' : 'bg-white/20'}`}>
+              <Megaphone className="w-6 h-6 text-white" />
+            </div>
+            <div className="text-left flex-1">
+              <h3 className="text-base font-bold text-white">Announcements</h3>
+              <p className={`text-xs ${disabled ? 'text-slate-100' : 'text-indigo-100'}`}>{sub}</p>
+            </div>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${disabled ? 'bg-slate-400/40' : 'bg-white/20'}`}>
+              <ArrowLeft className="w-4 h-4 text-white rotate-180" />
+            </div>
+          </button>
+        );
+      })()}
+
+      {/* View all announcements */}
+      <button
+        onClick={() => setView('announcements_list')}
+        className={`w-full -mt-1 flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 ${isDark ? 'text-indigo-400' : 'text-indigo-600'} active:opacity-70`}
+      >
+        <Megaphone className="w-3.5 h-3.5" /> View all announcements
+      </button>
 
       {/* Campaigns List */}
       <div ref={campaignListRef} className="space-y-4">
