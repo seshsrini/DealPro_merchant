@@ -10,6 +10,36 @@ const cors = {
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
+const RADIUS_KM = 5;
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6371, toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat), dLng = toRad(bLng - aLng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+/** Every pincode within RADIUS_KM of any of the given store locations, resolved
+ *  from the localities registry. Used to reach consumers near the store even
+ *  when their exact pincode wasn't one of the merchant's picked areas. */
+async function radiusPincodes(admin: any, stores: any[]): Promise<string[]> {
+  const out = new Set<string>();
+  for (const s of stores) {
+    const lat = Number(s.latitude), lng = Number(s.longitude);
+    if (s.pincode) out.add(String(s.pincode).trim());
+    if (!lat || !lng) continue; // missing/0,0 coords → pincode only
+    const prefix = String(s.pincode || '').slice(0, 3);
+    const q = admin.from('localities').select('pincode, latitude, longitude').limit(3000);
+    const { data: locs } = prefix ? await q.like('pincode', `${prefix}%`) : await q;
+    for (const l of locs || []) {
+      if (l.latitude != null && l.longitude != null && l.pincode &&
+          haversineKm(lat, lng, Number(l.latitude), Number(l.longitude)) <= RADIUS_KM) {
+        out.add(String(l.pincode).trim());
+      }
+    }
+  }
+  return [...out].filter(Boolean);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
@@ -111,6 +141,19 @@ Deno.serve(async (req) => {
       if (!city) return json({ error: 'City audience needs a city.' }, 400);
     }
 
+    // For area audiences, expand to every pincode within RADIUS_KM of the
+    // relevant store(s) — the selected store, or all of the merchant's stores
+    // when "All stores" is chosen — plus the merchant's explicitly picked areas.
+    // This is what makes announcements reach nearby consumers like local deals do.
+    let matchPincodes: string[] = [];
+    if (targetType === 'area') {
+      const { data: stores } = storeId
+        ? await admin.from('merchant_stores').select('latitude, longitude, pincode').eq('id', storeId)
+        : await admin.from('merchant_stores').select('latitude, longitude, pincode').eq('merchant_id', merchantId);
+      const radius = await radiusPincodes(admin, stores || []);
+      matchPincodes = [...new Set([...pincodes, ...radius])].filter(Boolean);
+    }
+
     // send_to is server-enforced to send_from + 2 days (3-day inclusive window),
     // never trusted from the client.
     const sendFrom = String(b.send_from ?? '').slice(0, 10);
@@ -133,6 +176,7 @@ Deno.serve(async (req) => {
       target_city: targetType === 'city' ? city : null,
       target_localities: targetType === 'area' ? localities : null,
       target_pincodes: targetType === 'area' ? pincodes : null,
+      match_pincodes: targetType === 'area' ? matchPincodes : null,
     }).select().single();
     if (insErr) return json({ error: insErr.message }, 500);
 
