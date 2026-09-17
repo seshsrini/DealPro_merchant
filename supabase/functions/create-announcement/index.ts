@@ -40,6 +40,81 @@ async function radiusPincodes(admin: any, stores: any[]): Promise<string[]> {
   return [...out].filter(Boolean);
 }
 
+// ─── Content Moderation ──────────────────────────────────────────────
+// Same word-list gate used for merchant deals (create-campaign), so
+// announcements are held to the identical standard. English + Hindi/Hinglish
+// + regional Indian languages. Authoritative server-side check; the wizard
+// also runs an AI check for instant feedback.
+const MODERATION_LISTS: Record<string, string[]> = {
+  profanity: [
+    'fuck', 'fucking', 'fucker', 'fck', 'f u c k', 'shit', 'shitty', 'bullshit',
+    'bitch', 'bitchy', 'damn', 'damned', 'crap', 'crappy', 'piss', 'pissed',
+    'bastard', 'ass', 'asshole', 'arsehole', 'arse', 'dumbass', 'jackass',
+    'wtf', 'stfu', 'lmfao',
+    'chutiya', 'chutiye', 'madarchod', 'mc', 'bhenchod', 'bc', 'bhosdike',
+    'bhosdiwale', 'gaand', 'gandu', 'lund', 'lauda', 'laude', 'randi',
+    'harami', 'haramkhor', 'kutiya', 'kutte', 'sala', 'saala', 'saale',
+    'ullu', 'gadha', 'bewakoof', 'kamina', 'kamine', 'kameena', 'kameene',
+    'tatti', 'hagne', 'jhant', 'jhatu', 'chut', 'bhadwa', 'bhadwe',
+    'sule', 'magne', 'mundaige', 'bolimaga',
+    'thevdiya', 'sunni', 'punda', 'oombu',
+    'dengey', 'pooku', 'modda', 'lanja', 'lanjakodaka',
+  ],
+  sexual: [
+    'porn', 'porno', 'pornography', 'xxx', 'nude', 'nudes', 'naked', 'sex',
+    'sexy', 'sexual', 'orgasm', 'erotic', 'erotica', 'dildo', 'vibrator',
+    'masturbat', 'penis', 'vagina', 'boobs', 'tits', 'nipple', 'blowjob',
+    'handjob', 'anal', 'cumshot', 'hentai', 'milf', 'stripper', 'escort',
+    'prostitut', 'brothel', 'hookup', 'onlyfans',
+    'chod', 'chodna', 'chudai', 'muth', 'muthhal', 'nanga', 'nangi',
+  ],
+  hate_speech: [
+    'nigger', 'nigga', 'faggot', 'fag', 'dyke', 'tranny', 'retard', 'retarded',
+    'spastic', 'cripple',
+    'chamaar', 'chamar', 'bhangi', 'chuhra', 'mlechha', 'kaffir', 'kafir',
+    'kill all', 'death to', 'go back to', 'gas the', 'hang all',
+  ],
+  harassment: [
+    'i will kill', 'i\'ll kill', 'gonna kill', 'want to kill',
+    'i will hurt', 'gonna hurt', 'beat you up', 'i will beat you',
+    'threaten', 'threat', 'stalk', 'stalking',
+    'rape', 'rapist', 'molest',
+    'bomb', 'bombing', 'attack', 'shoot', 'shooting',
+    'kys', 'kill yourself', 'go die',
+  ],
+};
+
+function normalizeForModeration(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[@]/g, 'a').replace(/[1!|]/g, 'i').replace(/[3]/g, 'e')
+    .replace(/[0]/g, 'o').replace(/[5\$]/g, 's').replace(/[7]/g, 't')
+    .replace(/[^a-z\s']/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function moderateText(text: string): string | null {
+  if (!text || text.trim().length === 0) return null;
+  const normalized = normalizeForModeration(text);
+  for (const [category, terms] of Object.entries(MODERATION_LISTS)) {
+    for (const term of terms) {
+      const termNorm = normalizeForModeration(term);
+      const hit = termNorm.includes(' ')
+        ? normalized.includes(termNorm)
+        : new RegExp(`\\b${termNorm}\\b`).test(normalized);
+      if (hit) return category;
+    }
+  }
+  return null;
+}
+
+const MODERATION_MESSAGES: Record<string, string> = {
+  profanity: 'Your announcement contains inappropriate language. Please remove profanity and resubmit.',
+  sexual: 'Your announcement contains sexual content which is not allowed. Please revise and resubmit.',
+  hate_speech: 'Your announcement contains hateful or discriminatory language. Please revise and resubmit.',
+  harassment: 'Your announcement contains threatening or harassing language. Please revise and resubmit.',
+};
+// ─── End Content Moderation ──────────────────────────────────────────
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
@@ -104,6 +179,10 @@ Deno.serve(async (req) => {
     const description = String(b.description ?? '').trim();
     if (!title || title.length > 30) return json({ error: 'Title is required and must be 30 characters or fewer.' }, 400);
     if (!description || description.length > 200) return json({ error: 'Description is required and must be 200 characters or fewer.' }, 400);
+
+    // Content moderation — reject profane / sexual / hateful / harassing text.
+    const badCategory = moderateText(title) || moderateText(description);
+    if (badCategory) return json({ error: MODERATION_MESSAGES[badCategory] || MODERATION_MESSAGES.profanity }, 400);
 
     // Store selection + optional contact display. store_id null => all stores.
     const ownStores = new Set(
