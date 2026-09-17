@@ -7,6 +7,7 @@ import {
   fetchStores, fetchNearbyAreas, fetchLinkableDeals, uploadAnnouncementImage, createAnnouncement,
   type NearbyArea, type LinkableDeal, type TargetingOptions, type MerchantStore,
 } from './services/announcementService';
+import { addCampaignService } from './services/addCampaignService';
 
 interface Props {
   user: any;
@@ -99,7 +100,12 @@ export const AnnouncementWizard: React.FC<Props> = ({ user, theme, onBack, onCre
     const f = e.target.files?.[0];
     if (!f) return;
     setError(null); setUploading(true);
-    try { setImageUrl(await uploadAnnouncementImage(f)); }
+    try {
+      // Scan the photo for inappropriate content before it's uploaded anywhere.
+      const mod = await addCampaignService.moderateImage(f);
+      if (mod.flagged) { setError(mod.reason || 'This image looks inappropriate for a public announcement. Please choose another.'); return; }
+      setImageUrl(await uploadAnnouncementImage(f));
+    }
     catch (err: any) { setError(err?.message || 'Image upload failed.'); }
     finally { setUploading(false); }
   };
@@ -115,6 +121,9 @@ export const AnnouncementWizard: React.FC<Props> = ({ user, theme, onBack, onCre
     if (showContact && !effContactStoreId) { setError('Choose which store\'s address to show.'); return; }
     setError(null); setSubmitting(true);
     try {
+      // Profanity / inappropriate-language check on title + description.
+      const mod = await addCampaignService.moderateContent(title.trim(), '', description.trim());
+      if (mod.flagged) { setError(mod.reason || 'Please remove inappropriate language and try again.'); setSubmitting(false); return; }
       await createAnnouncement({
         title: title.trim(),
         description: description.trim(),
