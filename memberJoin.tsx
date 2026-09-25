@@ -228,6 +228,9 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
   const geocodeDebounceRef = useRef<Record<number, ReturnType<typeof setTimeout> | null>>({});
   const pincodeDebounceRef = useRef<Record<number, ReturnType<typeof setTimeout> | null>>({}); // New debounce ref for pincode
   const localityDebounceRef = useRef<Record<number, ReturnType<typeof setTimeout> | null>>({}); // New debounce ref for locality search
+  // Duplicate-shop check: same business name + address in the same pincode.
+  const [storeIdentityTaken, setStoreIdentityTaken] = useState<Record<number, boolean | null>>({});
+  const storeIdentityDebounceRef = useRef<Record<number, ReturnType<typeof setTimeout> | null>>({});
 
   // State for locality autocomplete
   const [localitySuggestions, setLocalitySuggestions] = useState<Record<number, DBLocality[]>>({});
@@ -437,7 +440,35 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
     ...merchantStores.map(s => s.state), 
     ...merchantStores.map(s => s.pincode),
     validatePhoneNumber, selectedCountry.code
-  ]); 
+  ]);
+
+  // Realtime duplicate-shop check: same business name + street address in the
+  // same pincode, owned by another merchant. Debounced per store; fails open.
+  useEffect(() => {
+    if (regRole !== 'merchant') return;
+    merchantStores.forEach((store, index) => {
+      const name = (store.store_name || '').trim();
+      const street = (store.street || '').trim();
+      const pin = (store.pincode || '').trim();
+      if (storeIdentityDebounceRef.current[index]) clearTimeout(storeIdentityDebounceRef.current[index]!);
+      // Only check once there's enough to be meaningful.
+      if (!name || street.length < 4 || pin.length !== 6) {
+        setStoreIdentityTaken(prev => (prev[index] == null ? prev : { ...prev, [index]: null }));
+        return;
+      }
+      storeIdentityDebounceRef.current[index] = setTimeout(async () => {
+        const taken = await userService.validateStoreIdentity(name, street, pin);
+        setStoreIdentityTaken(prev => ({ ...prev, [index]: taken }));
+      }, 500);
+    });
+    return () => { Object.values(storeIdentityDebounceRef.current).forEach(t => t && clearTimeout(t)); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    regRole,
+    ...merchantStores.map(s => s.store_name),
+    ...merchantStores.map(s => s.street),
+    ...merchantStores.map(s => s.pincode),
+  ]);
 
 
   // Pincode Lookup Logic using Nominatim (OpenStreetMap) via locationsearchService
@@ -1059,6 +1090,10 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
         udyamTaken === true || fssaiTaken === true || tradeLicenseTaken === true) {
       return false;
     }
+    // Block if any store is a duplicate (same name + address in the same pincode).
+    if (Object.values(storeIdentityTaken).some(v => v === true)) {
+      return false;
+    }
 
     if (regRole === 'user') {
       // Locality validation: If user started typing locality, all fields must be resolved
@@ -1471,6 +1506,11 @@ export const MemberJoin: React.FC<MemberJoinProps> = ({
                   onChange={(e) => handleStoreChange(index, 'street', e.target.value)}
                   required
                 />
+                {storeIdentityTaken[index] === true && (
+                  <p className="text-xs text-red-500 -mt-1">
+                    A shop with this name already exists at this address. If this is your business, please contact support.
+                  </p>
+                )}
 
                 {/* Locality input with autocomplete */}
                 <div className="relative">
