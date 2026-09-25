@@ -13,6 +13,8 @@ const corsHeaders = {
 };
 
 const isString = (value: any): boolean => typeof value === 'string';
+// Normalize free text for comparison: lowercase, strip punctuation, collapse spaces.
+const norm = (s: any): string => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -34,23 +36,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { field, value } = body;
 
-    // Validation
-    const allowedFields = ['gstin', 'pan', 'udyam_no', 'fssai_no', 'trade_license_no', 'legal_name'];
-    if (!isString(field) || !allowedFields.includes(field)) {
-      return new Response(JSON.stringify({ error: `Invalid field. Must be one of: ${allowedFields.join(', ')}.` }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      });
-    }
-
-    if (!isString(value) || value.trim().length === 0) {
-      return new Response(JSON.stringify({ error: 'Value is required.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      });
-    }
-
-    // Resolve the caller so we never flag their OWN saved profile as a conflict.
+    // Resolve the caller so we never flag their OWN saved data as a conflict.
     let selfId: string | null = null;
     try {
       const authHeader = req.headers.get('Authorization') || '';
@@ -62,9 +48,44 @@ Deno.serve(async (req) => {
       }
     } catch { /* ignore — fall back to no self-exclusion */ }
 
-    const dbFail = () => new Response(JSON.stringify({ error: 'Database query failed.' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500,
+    const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status,
     });
+    const dbFail = () => json({ error: 'Database query failed.' }, 500);
+
+    // ── Combined store-identity check: same business name AND same address in the
+    //    same pincode, registered by a DIFFERENT merchant. Catches someone
+    //    re-registering an existing shop even without a shared GST/PAN. This is a
+    //    different request shape (name+address+pincode), handled before the
+    //    single-field `value` guard below.
+    if (field === 'store_identity') {
+      const name = norm(body.name);
+      const address = norm(body.address);
+      const pincode = String(body.pincode ?? '').trim();
+      if (!name || !address || !pincode) {
+        return json({ error: 'name, address and pincode are required.' }, 400);
+      }
+      // Pincode-scoped fetch keeps it cheap; normalize + compare in JS so
+      // punctuation/spacing/case differences don't cause misses or false hits.
+      const { data: stores, error } = await supabase
+        .from('merchant_stores')
+        .select('merchant_id, store_name, address')
+        .eq('pincode', pincode)
+        .limit(1000);
+      if (error) { console.error('[validate-merchant-field] store_identity DB error:', error); return dbFail(); }
+      const isTaken = (stores || []).some((s: any) =>
+        s.merchant_id !== selfId && norm(s.store_name) === name && norm(s.address) === address);
+      return json({ isTaken });
+    }
+
+    // ── Single-field uniqueness checks.
+    const allowedFields = ['gstin', 'pan', 'udyam_no', 'fssai_no', 'trade_license_no', 'legal_name'];
+    if (!isString(field) || !allowedFields.includes(field)) {
+      return json({ error: `Invalid field. Must be one of: ${allowedFields.join(', ')}, store_identity.` }, 400);
+    }
+    if (!isString(value) || value.trim().length === 0) {
+      return json({ error: 'Value is required.' }, 400);
+    }
 
     let isTaken = false;
 
@@ -88,10 +109,7 @@ Deno.serve(async (req) => {
       isTaken = !!(data && data.length > 0);
     }
 
-    return new Response(JSON.stringify({ isTaken }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    });
+    return json({ isTaken });
 
   } catch (error: any) {
     console.error('[validate-merchant-field] Error:', error.message);

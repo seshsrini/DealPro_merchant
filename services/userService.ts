@@ -245,6 +245,26 @@ export const userService = {
   },
 
   /**
+   * Realtime duplicate-shop check: is there already a store with the SAME
+   * business name AND address in the same pincode, owned by another merchant?
+   * Catches re-registration of an existing shop even without a shared GST/PAN.
+   * Fails open (returns false) so a check outage never blocks signup.
+   */
+  validateStoreIdentity: async (name: string, address: string, pincode: string): Promise<boolean> => {
+    try {
+      if (!name?.trim() || !address?.trim() || !pincode?.trim()) return false;
+      const { data, error } = await supabase.functions.invoke('validate-merchant-field', {
+        body: { field: 'store_identity', name, address, pincode },
+      });
+      if (error) { console.error('[userService] store_identity validation failed:', error); return false; }
+      return data?.isTaken || false;
+    } catch (e: any) {
+      console.error('[userService] store_identity validation failed (client-side catch):', e);
+      return false;
+    }
+  },
+
+  /**
    * Logs user activity via an Edge Function.
    * @param log ActivityLog object.
    */
