@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import { merchantSubscriptionService } from '../services/merchantSubscriptionService';
 import { subscriptionService } from '../services/subscriptionService';
 
-// The Rs.199 (Starter) plan does NOT include the product Catalogue feature; every
-// other plan does. We identify that plan by its PRICE from subscription_tiers —
-// not the numeric tier id, which differs between the DEV and PROD Supabase
-// projects and would risk locking the wrong plan in one environment.
-const LOCKED_PLAN_FEE = 199;
+// The Basic / Starter plan does NOT include the product Catalogue feature; every
+// other plan does. We identify it by its tier_key FAMILY ('basic_monthly',
+// 'basic_yearly', …) rather than a single price — price alone breaks once yearly
+// plans exist (₹199 monthly vs ₹1990 yearly would be the same plan). tier_key is
+// stable across the DEV/PROD projects (unlike the numeric tier id). Prices are
+// kept only as a defensive fallback.
+const LOCKED_TIER_PREFIX = 'basic';
+const LOCKED_PLAN_FEES = [199, 1990];
 
 /**
  * Returns true when the merchant's ACTIVE plan is the ₹199 tier, so the caller
@@ -38,7 +41,8 @@ export function useCatalogueAccessLocked(
         }
         const tiers = await subscriptionService.getSubscriptionTiers();
         const tier = tiers.find((t) => t.tier_key === tierKey);
-        if (!cancelled) setLocked(Number(tier?.subscription_fee) === LOCKED_PLAN_FEE);
+        const isBasic = tierKey.startsWith(LOCKED_TIER_PREFIX) || LOCKED_PLAN_FEES.includes(Number(tier?.subscription_fee));
+        if (!cancelled) setLocked(isBasic);
       } catch {
         if (!cancelled) setLocked(false); // fail-open
       }

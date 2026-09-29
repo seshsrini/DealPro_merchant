@@ -67,16 +67,17 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   // immediately on a cold resume instead of showing a 10s "Loading plans…" wall.
   const [tiers, setTiers] = useState<SubscriptionTier[]>(() => subscriptionService.peekCachedTiers() || []);
   const [loading, setLoading] = useState(() => (subscriptionService.peekCachedTiers()?.length ?? 0) === 0);
+  // Monthly / Yearly billing-cycle toggle for the plan table.
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [error, setError] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selectedTierId, setSelectedTierId] = useState<number | null>(null);
-  // Test-only bypass: activate a pro_test subscription with no payment. Shown
-  // when VITE_ALLOW_TEST_SUBSCRIPTION=true (internal builds) OR the signed-in
-  // account is the designated app-review account (VITE_REVIEWER_PHONES) — so the
-  // Google Play reviewer can subscribe, but real merchants never see it. The
-  // server enforces the same allow-list.
-  const allowTestBypass = String(import.meta.env.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true'
-    || isReviewerAccount(user);
+  // Reviewer-only. The blanket VITE_ALLOW_TEST_SUBSCRIPTION escape hatch was
+  // removed deliberately: it exposed this button to every merchant in any build
+  // where the flag was left on. The ONLY way to see it is to be signed in as a
+  // number on the reviewer allow-list, and the server enforces the same list
+  // independently, so a tampered client gains nothing.
+  const allowTestBypass = isReviewerAccount(user);
   const [testBypassing, setTestBypassing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);
@@ -482,9 +483,9 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           </div>
         </div>
 
-        {/* Test escape hatch — shown in the hosted (PLAY_COMPLIANT) view while
-            VITE_ALLOW_TEST_SUBSCRIPTION=true, so testers activate a no-charge PROD
-            subscription without going through live Razorpay. Gone at launch. */}
+        {/* Test escape hatch in the hosted (PLAY_COMPLIANT) view — reviewer
+            accounts only, so a reviewer can reach the subscribed state without
+            a live Razorpay payment. */}
         {allowTestBypass && !active && (
           <button
             onClick={handleTestBypass}
@@ -565,9 +566,9 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         </div>
       </div>
 
-      {/* Test-only bypass — visible while VITE_ALLOW_TEST_SUBSCRIPTION=true, gone
-          from real prod builds. Activates a pro_test subscription with no payment
-          and clears any stuck payment-pending overlay. */}
+      {/* Test bypass — reviewer accounts only. Activates a pro_test
+          subscription with no payment and clears any stuck payment-pending
+          overlay. */}
       {allowTestBypass && (
         <button
           onClick={handleTestBypass}
@@ -807,6 +808,27 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
         </div>
       ) : (
         <div className={`rounded-xl border overflow-visible ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+          {/* Monthly / Yearly toggle (only when yearly plans exist) */}
+          {tiers.some((tt) => tt.billing_frequency === 'yearly') && (
+            <div className={`flex items-center justify-center gap-2 px-4 py-3 border-b ${isDark ? 'border-slate-800 bg-slate-900/40' : 'border-slate-200 bg-slate-50'}`}>
+              <div className={`inline-flex rounded-full p-0.5 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}>
+                {(['monthly', 'yearly'] as const).map((cyc) => (
+                  <button
+                    key={cyc}
+                    onClick={() => setBillingCycle(cyc)}
+                    className={`px-4 h-8 rounded-full text-xs font-semibold transition-all ${
+                      billingCycle === cyc ? 'bg-blue-600 text-white shadow' : (isDark ? 'text-slate-300' : 'text-slate-600')
+                    }`}
+                  >
+                    {cyc === 'monthly' ? 'Monthly' : 'Yearly'}
+                  </button>
+                ))}
+              </div>
+              {billingCycle === 'yearly' && (
+                <span className="text-[10px] font-bold text-emerald-500 whitespace-nowrap">Save ~17% · 2 months free</span>
+              )}
+            </div>
+          )}
           {/* Table Header */}
           <div className={`grid grid-cols-12 gap-3 px-4 py-3 border-b ${isDark ? 'bg-slate-800/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
             <div className="col-span-3">
@@ -824,18 +846,20 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
             <div className="col-span-3"></div>
           </div>
 
-          {/* Table Rows — monthly plans first, then a Yearly section */}
+          {/* Table Rows — filtered by the Monthly / Yearly toggle */}
           {(() => {
             const monthly = tiers.filter((tt) => tt.billing_frequency !== 'yearly');
             const yearly = tiers.filter((tt) => tt.billing_frequency === 'yearly');
-            const ordered = [...monthly, ...yearly];
-            return ordered.map((tier, index) => (
+            const ordered = billingCycle === 'yearly' ? yearly : monthly;
+            const baseKey = (k: string) => (k || '').replace(/_(monthly|yearly)$/, '');
+            return ordered.map((tier, index) => {
+              // For a yearly plan, savings vs paying its monthly sibling for 12 months.
+              const sibling = billingCycle === 'yearly'
+                ? monthly.find((mm) => baseKey(mm.tier_key) === baseKey(tier.tier_key))
+                : undefined;
+              const yearlySavings = sibling ? (Number(sibling.subscription_fee) * 12 - Number(tier.subscription_fee)) : 0;
+              return (
               <React.Fragment key={tier.id}>
-                {yearly.length > 0 && index === monthly.length && (
-                  <div className={`px-4 py-2 text-[10px] font-bold uppercase tracking-wider ${isDark ? 'bg-slate-800/40 text-slate-400 border-t border-slate-800' : 'bg-slate-50 text-slate-500 border-t border-slate-200'}`}>
-                    Yearly Plans
-                  </div>
-                )}
                 <div
                   className={`grid grid-cols-12 gap-3 px-4 py-4 items-center transition-colors ${
                     index !== ordered.length - 1 ? (isDark ? 'border-b border-slate-800/50' : 'border-b border-slate-100') : ''
@@ -849,6 +873,12 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 <p className="text-sm font-semibold text-emerald-500">
                   {tier.currency} {tier.subscription_fee}
                 </p>
+                <p className={`text-[9px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {billingCycle === 'yearly' ? '/yr' : '/mo'}
+                </p>
+                {yearlySavings > 0 && (
+                  <p className="text-[9px] font-bold text-emerald-500">save {tier.currency}{yearlySavings}</p>
+                )}
               </div>
               {(tier.max_campaigns_per_month ?? 0) >= 999 && (tier.max_dotd_per_month ?? 0) >= 999 ? (
                 // Both deals and DOTD are unlimited — show ONE "Unlimited" spanning
@@ -907,7 +937,8 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               </div>
                 </div>
               </React.Fragment>
-            ));
+              );
+            });
           })()}
         </div>
       )}
