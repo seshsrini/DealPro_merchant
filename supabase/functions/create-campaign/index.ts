@@ -298,7 +298,7 @@ Deno.serve(async (req) => {
       if (sub?.plan_name) {
         const { data: tier } = await admin
           .from('subscription_tiers')
-          .select('max_campaigns_per_month, max_dotd_per_month')
+          .select('max_campaigns_per_month, max_dotd_per_month, billing_frequency')
           .eq('tier_key', sub.plan_name)
           .maybeSingle();
         const limit = isDotd ? tier?.max_dotd_per_month : tier?.max_campaigns_per_month;
@@ -328,10 +328,20 @@ Deno.serve(async (req) => {
           let ny = wy, nm = wm + 1;
           if (nm > 11) { nm = 0; ny += 1; }
           let windowStartTs = new Date(Date.UTC(wy, wm, clampDay(wy, wm, anchorDay)) - IST_OFFSET_MS).toISOString();
-          const windowEndTs = new Date(Date.UTC(ny, nm, clampDay(ny, nm, anchorDay)) - IST_OFFSET_MS).toISOString();
+          let windowEndTs = new Date(Date.UTC(ny, nm, clampDay(ny, nm, anchorDay)) - IST_OFFSET_MS).toISOString();
           if (sub.current_period_start) {
             const cycleStartTs = new Date(sub.current_period_start).toISOString();
             if (new Date(cycleStartTs).getTime() > new Date(windowStartTs).getTime()) windowStartTs = cycleStartTs;
+          }
+          // Yearly plans: DEALS use the full annual billing cycle (a yearly pool),
+          // not a monthly window. DOTD stays monthly. Derived from current_period_end
+          // (the only date Razorpay refreshes each cycle; current_period_start is null
+          // for Razorpay subs) so it resets on the yearly billing date.
+          if (!isDotd && tier?.billing_frequency === 'yearly' && sub.current_period_end) {
+            const cend = new Date(sub.current_period_end);
+            const cstart = new Date(cend); cstart.setUTCFullYear(cstart.getUTCFullYear() - 1);
+            windowStartTs = cstart.toISOString();
+            windowEndTs = cend.toISOString();
           }
           let q = admin.from('campaigns').select('*', { count: 'exact', head: true })
             .eq('merchant_id', merchant_id)
