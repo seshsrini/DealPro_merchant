@@ -588,7 +588,7 @@ Deno.serve(async (req) => {
       // 2. Get tier limits
       const { data: tierData, error: tierError } = await supabaseAdmin
         .from('subscription_tiers')
-        .select('max_campaigns_per_month, max_dotd_per_month')
+        .select('max_campaigns_per_month, max_dotd_per_month, billing_frequency')
         .eq('tier_key', subscription.plan_name)
         .single();
 
@@ -653,6 +653,18 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Yearly plans: DEALS pool over the full annual billing cycle; DOTD stays on
+      // the monthly window above. current_period_start is null for Razorpay subs,
+      // so derive the annual window from current_period_end (refreshed each cycle).
+      let dealWindowStartTs = windowStartTs;
+      let dealWindowEndTs = windowEndTs;
+      if (tierData?.billing_frequency === 'yearly' && subscription.current_period_end) {
+        const cend = new Date(subscription.current_period_end);
+        const cstart = new Date(cend); cstart.setUTCFullYear(cstart.getUTCFullYear() - 1);
+        dealWindowStartTs = cstart.toISOString();
+        dealWindowEndTs = cend.toISOString();
+      }
+
       console.log('[manage-subscription] Billing-cycle count window:', {
         merchant_id: user.id,
         anchorDay,
@@ -669,8 +681,8 @@ Deno.serve(async (req) => {
         .select('*', { count: 'exact', head: true })
         .eq('merchant_id', user.id)
         .not('is_deal_of_the_day', 'is', true)
-        .gte('created_at', windowStartTs)
-        .lt('created_at', windowEndTs);
+        .gte('created_at', dealWindowStartTs)
+        .lt('created_at', dealWindowEndTs);
 
       console.log('[manage-subscription] Campaign count result:', { campaignsCount, error: campaignsError });
 
@@ -700,10 +712,10 @@ Deno.serve(async (req) => {
           dotd_used: dotdCount || 0,
           dotd_limit: tierData.max_dotd_per_month,
           has_subscription: true,
-          // Exact moment the allowance refreshes = end of the current billing-cycle
-          // window (the merchant's billing date), NOT the 1st of the month. The UI
-          // shows this so "wait until … to reset" always names the billing date.
-          next_reset: windowEndTs,
+          // Exact moment the DEAL allowance refreshes = end of the current cycle
+          // window (monthly plans → month end; yearly plans → the annual billing
+          // date). The UI shows this so "wait until … to reset" names the real date.
+          next_reset: dealWindowEndTs,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );
