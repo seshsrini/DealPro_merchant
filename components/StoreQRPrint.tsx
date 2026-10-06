@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { ArrowLeft, Printer, Download } from 'lucide-react';
+import { PLAY_LISTING_CONSUMER, playListingWithReferral } from '../utils/appLinks';
 import { AppView } from '../types';
 import { supabase } from '../services/supabaseClient';
 
@@ -36,7 +37,10 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
     if (canvasRef.current && referralCode !== '------') {
       QRCode.toCanvas(
         canvasRef.current,
-        referralCode,
+        // Encode the consumer-app DOWNLOAD link (Play listing) with the referral
+        // code riding along — so a consumer scanning the printed poster lands on
+        // the Play Store to install DealFynd, not on a raw unusable code.
+        playListingWithReferral(PLAY_LISTING_CONSUMER, referralCode),
         {
           width: 220,
           margin: 2,
@@ -164,13 +168,13 @@ export const StoreQRPrint: React.FC<StoreQRPrintProps> = ({ user, setView, theme
             <strong>download DealFynd app</strong><br/>
             and discover amazing local deals!
           </div>
-          <div class="footer">www.dealpro.app</div>
+          <div class="footer">vedicjaalam.com</div>
         </div>
         <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"><\/script>
         <script>
           QRCode.toCanvas(
             document.getElementById('print-qr'),
-            '${referralCode}',
+            '${playListingWithReferral(PLAY_LISTING_CONSUMER, referralCode)}',
             { width: 600, margin: 2, color: { dark: '#0f172a', light: '#ffffff' }, errorCorrectionLevel: 'H' },
             function() { setTimeout(function() { window.print(); }, 300); }
           );
