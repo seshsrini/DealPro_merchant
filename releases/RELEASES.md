@@ -20,6 +20,43 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.10.21.0110 — versionCode 1792559402
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.10.21.0110-vc1792559402.aab` |
+| SHA-256 | `28f77568fcc7a58392cbb3fc96d78d130aae0241c77de3ead3aca44f8b6c291f` |
+| Size | 22,306,520 bytes |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
+| targetSdk / minSdk | 36 / 23 |
+| Commit | `b8c623f` |
+| Play status | pending upload |
+
+**GST on subscriptions (18%).** Plans are now charged as base price + GST:
+₹199 → ₹234.82, ₹399 → ₹470.82, ₹599 → ₹706.82 monthly; ₹1,990 → ₹2,348.20,
+₹3,990 → ₹4,708.20, ₹5,990 → ₹7,068.20 yearly. Merchants with their first store
+in Karnataka (supplier state) see CGST 9% + SGST 9%; other states see IGST 18%;
+unknown state is treated as intra-state. The charge itself comes from new
+GST-priced Razorpay plans linked on `subscription_tiers` — no client sends an
+amount.
+
+- **Payments & Invoices** shows each payment's breakup: plan price, GST 18%
+  (CGST + SGST or IGST) and total paid, in 2-decimal INR (`PaymentPlans.tsx`,
+  new `m_gst_*` keys in all 9 languages).
+- The Play-compliant **My Subscription** view still shows no prices (unchanged,
+  by design). The non-compliant price displays show the GST-inclusive total.
+- Server side (deployed 2026-10-20/21, already live — not part of this bundle):
+  `razorpay-webhook` writes the full breakup to `merchant_payments` (base, CGST,
+  SGST, IGST, GST total, place of supply, SAC, plain GSTIN when verified) and the
+  GST-inclusive recurring amount to `merchant_subscriptions`;
+  `verify-subscription`, `merchant-subscription` and `get-merchant-payments`
+  updated to match. Also shipped with those functions: yearly plans count the
+  deal allowance over the full year, and the activation message says DealFynd.
+- Requires `zzz_subscription_gst.sql` on the project (applied to PROD and DEV).
+
+Not recorded here: bundles `2026.09.17.0739` and `2026.10.06.0652` were built
+but have no entries; add them if they were uploaded to Play.
+
 ## 2026.09.12.1838 — versionCode 1789252733
 
 | | |
