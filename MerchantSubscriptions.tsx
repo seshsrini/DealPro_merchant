@@ -31,6 +31,15 @@ import {
   Shield,
 } from 'lucide-react';
 
+// Displayed price of a tier: the GST-inclusive total (what Razorpay debits)
+// when the tier row carries it, else the base subscription_fee (older caches).
+const tierPrice = (tier: SubscriptionTier | undefined | null): number => {
+  const total = Number(tier?.total_amount);
+  return Number.isFinite(total) && total > 0 ? total : Number(tier?.subscription_fee || 0);
+};
+const tierHasGst = (tier: SubscriptionTier | undefined | null) => Number(tier?.total_amount) > 0;
+const money = (n: number) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 interface MerchantSubscriptionsProps {
   user: User;
   setView: (view: AppView) => void;
@@ -119,7 +128,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
     : null;
   const currentTier = tiers.find(t => t.id === currentTierId);
   const recurringAmount = currentSubscription?.total_recurring_amount
-    || currentTier?.subscription_fee
+    || (currentTier ? tierPrice(currentTier) : null)
     || null;
 
   // Plan changes are NOT locked: an upgrade is a full instant payment and a
@@ -364,7 +373,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
           } else if ((res as any).upgraded) {
             setNoticeMsg(t('m_change_upgraded')
               .replace('{plan}', tierToConfirm.tier_name)
-              .replace('{amount}', String((res as any).new_amount ?? tierToConfirm.subscription_fee)));
+              .replace('{amount}', money(Number((res as any).new_amount ?? tierPrice(tierToConfirm)))));
           } else {
             setNoticeMsg(t('m_change_downgraded').replace('{plan}', tierToConfirm.tier_name));
           }
@@ -701,8 +710,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               {recurringAmount && (
                 <div className="text-right">
                   <p className="text-xl font-bold text-emerald-500">
-                    ₹{recurringAmount}
+                    ₹{money(Number(recurringAmount))}
                   </p>
+                  {tierHasGst(currentTier) && (
+                    <p className={`text-[9px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_incl_gst')}</p>
+                  )}
                   <p className={`text-[10px] ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>/month after trial</p>
                 </div>
               )}
@@ -857,7 +869,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               const sibling = billingCycle === 'yearly'
                 ? monthly.find((mm) => baseKey(mm.tier_key) === baseKey(tier.tier_key))
                 : undefined;
-              const yearlySavings = sibling ? (Number(sibling.subscription_fee) * 12 - Number(tier.subscription_fee)) : 0;
+              const yearlySavings = sibling ? Math.round((tierPrice(sibling) * 12 - tierPrice(tier)) * 100) / 100 : 0;
               return (
               <React.Fragment key={tier.id}>
                 <div
@@ -871,13 +883,16 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
               </div>
               <div className="col-span-2">
                 <p className="text-sm font-semibold text-emerald-500">
-                  {tier.currency} {tier.subscription_fee}
+                  {tier.currency} {tierHasGst(tier) ? money(tierPrice(tier)) : tier.subscription_fee}
                 </p>
                 <p className={`text-[9px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   {billingCycle === 'yearly' ? '/yr' : '/mo'}
                 </p>
+                {tierHasGst(tier) && (
+                  <p className={`text-[9px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_incl_gst')}</p>
+                )}
                 {yearlySavings > 0 && (
-                  <p className="text-[9px] font-bold text-emerald-500">save {tier.currency}{yearlySavings}</p>
+                  <p className="text-[9px] font-bold text-emerald-500">save {tier.currency}{tierHasGst(tier) ? money(yearlySavings) : yearlySavings}</p>
                 )}
               </div>
               {(tier.max_campaigns_per_month ?? 0) >= 999 && (tier.max_dotd_per_month ?? 0) >= 999 ? (
@@ -1061,8 +1076,11 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                 <div>
                   <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_price')}</p>
                   <p className="text-lg font-semibold text-emerald-500">
-                    {tierToConfirm.currency} {tierToConfirm.subscription_fee}
+                    {tierToConfirm.currency} {tierHasGst(tierToConfirm) ? money(tierPrice(tierToConfirm)) : tierToConfirm.subscription_fee}
                   </p>
+                  {tierHasGst(tierToConfirm) && (
+                    <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t('m_incl_gst')}</p>
+                  )}
                 </div>
                 <div>
                   <p className={`text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_billing')}</p>

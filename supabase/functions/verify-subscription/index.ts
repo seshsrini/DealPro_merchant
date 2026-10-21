@@ -93,6 +93,44 @@ function notifyMerchant(admin: any, merchantId: string, type: string, title: str
   return task;
 }
 
+// ── GST on subscriptions ─────────────────────────────────────────────────────
+// subscription_tiers.subscription_fee is the BASE (pre-GST) price; the Razorpay
+// plan (what is actually debited) is base + GST. subscription_gst_breakup
+// (service_role RPC) returns the merchant's CGST+SGST / IGST split. If the RPC
+// is missing (migration not applied) we fall back to the base fee.
+const SUB_GST_COLS = ['base_amount', 'gst_rate_percent', 'cgst_amount', 'sgst_amount', 'igst_amount', 'gst_amount', 'total_amount', 'billing_state', 'supply_type'];
+const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+async function fetchGstBreakup(admin: any, merchantId: string, tierKey: string): Promise<Record<string, unknown> | null> {
+  try {
+    const { data, error } = await admin
+      .rpc('subscription_gst_breakup', { p_merchant_id: merchantId, p_tier_key: tierKey })
+      .single();
+    if (error || !data) {
+      console.warn('[verify-subscription] subscription_gst_breakup unavailable — using base fee:', error?.message || 'no row');
+      return null;
+    }
+    const r = data as Record<string, unknown>;
+    const total = Number(r.total_amount);
+    if (!Number.isFinite(total) || total <= 0) return null;
+    return {
+      total_recurring_amount: total,
+      base_amount: num(r.base_amount),
+      gst_rate_percent: num(r.gst_rate_percent),
+      cgst_amount: num(r.cgst_amount),
+      sgst_amount: num(r.sgst_amount),
+      igst_amount: num(r.igst_amount),
+      gst_amount: num(r.gst_amount),
+      total_amount: total,
+      billing_state: (r.buyer_state as string) ?? null,
+      supply_type: r.supply_type === 'inter' ? 'inter' : 'intra',
+    };
+  } catch (e) {
+    console.warn('[verify-subscription] subscription_gst_breakup threw — using base fee:', (e as any)?.message);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ error: 'POST only' }, 405);
@@ -160,32 +198,43 @@ Deno.serve(async (req) => {
     .eq('tier_key', tier_key)
     .maybeSingle();
 
-  // The tier fee is the full recurring amount — no paid loyalty add-on.
-  const totalRecurringAmount = tier?.subscription_fee ?? 0;
+  // Recurring amount = GST-inclusive total (base fee + GST) — what Razorpay
+  // debits each cycle. No paid loyalty add-on. Falls back to the base fee if
+  // the GST RPC isn't available yet.
+  const gst = await fetchGstBreakup(supabaseAdmin, merchant_id, tier?.tier_key ?? tier_key);
+  const totalRecurringAmount = gst ? gst.total_recurring_amount : (tier?.subscription_fee ?? 0);
 
   // ---- Upsert pending_activation -------------------------------------------
   // merchant_subscriptions.plan_name is the tier_key (other edge functions
   // join on tier_key = plan_name). The webhook flips status -> 'active' and
   // fills current_period_start/end from subscription.charged.
-  const { error: upsertErr } = await supabaseAdmin
+  const row: Record<string, unknown> = {
+    merchant_id,
+    plan_name: tier?.tier_key ?? tier_key,
+    total_recurring_amount: totalRecurringAmount,
+    status: 'pending_activation',
+    billing_type: 'razorpay',
+    current_period_start: null,
+    current_period_end: null,
+    // Loyalty (redemption partner) is now a free feature for every merchant.
+    loyalty_redemption_enabled: true,
+    loyalty_addon_price: null,
+    razorpay_subscription_id,
+    razorpay_payment_id,
+    // GST breakup columns (base_amount … supply_type) when available.
+    ...(gst ? Object.fromEntries(SUB_GST_COLS.map((c) => [c, gst[c]])) : {}),
+  };
+  let { error: upsertErr } = await supabaseAdmin
     .from('merchant_subscriptions')
-    .upsert(
-      {
-        merchant_id,
-        plan_name: tier?.tier_key ?? tier_key,
-        total_recurring_amount: totalRecurringAmount,
-        status: 'pending_activation',
-        billing_type: 'razorpay',
-        current_period_start: null,
-        current_period_end: null,
-        // Loyalty (redemption partner) is now a free feature for every merchant.
-        loyalty_redemption_enabled: true,
-        loyalty_addon_price: null,
-        razorpay_subscription_id,
-        razorpay_payment_id,
-      },
-      { onConflict: 'razorpay_subscription_id' }
-    );
+    .upsert(row, { onConflict: 'razorpay_subscription_id' });
+  // Schema lag: retry without the GST breakup columns if they aren't there yet.
+  if (upsertErr && SUB_GST_COLS.some((c) => c in row && (upsertErr!.message || '').includes(c))) {
+    console.warn('[verify-subscription] GST columns missing — retrying without them:', upsertErr.message);
+    for (const c of SUB_GST_COLS) delete row[c];
+    ({ error: upsertErr } = await supabaseAdmin
+      .from('merchant_subscriptions')
+      .upsert(row, { onConflict: 'razorpay_subscription_id' }));
+  }
 
   if (upsertErr) {
     console.error('[verify-subscription] DB upsert failed', upsertErr);

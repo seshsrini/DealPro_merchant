@@ -136,6 +136,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   const [gstReverifyNonce, setGstReverifyNonce] = useState(0);
   const [hasExistingStores, setHasExistingStores] = useState(false);
   const [lastSubscriptionFee, setLastSubscriptionFee] = useState(0);
+  const [lastFeeInclGst, setLastFeeInclGst] = useState(false);
   const [lastSubscriptionId, setLastSubscriptionId] = useState<number | null>(null);
   const [lastTierKey, setLastTierKey] = useState<string | null>(null);
 
@@ -520,8 +521,10 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     subscriptionId?: number,
     tierKey?: string,
     alreadyActive?: boolean,
+    gstIncluded?: boolean,
   ) => {
     setLastSubscriptionFee(subscriptionFee || 0);
+    setLastFeeInclGst(!!gstIncluded);
     setLastSubscriptionId(subscriptionId || null);
     setLastTierKey(tierKey || null);
     if (alreadyActive) {
@@ -689,6 +692,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
           <StepPayment
             user={user}
             subscriptionFee={lastSubscriptionFee}
+            gstIncluded={lastFeeInclGst}
             tierKey={lastTierKey}
             onComplete={handlePaymentComplete}
             theme={theme}

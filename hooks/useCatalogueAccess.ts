@@ -9,6 +9,7 @@ import { subscriptionService } from '../services/subscriptionService';
 // stable across the DEV/PROD projects (unlike the numeric tier id). Prices are
 // kept only as a defensive fallback.
 const LOCKED_TIER_PREFIX = 'basic';
+// Pre-GST BASE fees (subscription_tiers.subscription_fee), not the GST-inclusive total_amount.
 const LOCKED_PLAN_FEES = [199, 1990];
 
 /**

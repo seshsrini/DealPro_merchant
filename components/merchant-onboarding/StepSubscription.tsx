@@ -10,6 +10,15 @@ import { localSubscriptionStore } from '../../services/LocalSubscriptionStore';
 import { supabase } from '../../services/supabaseClient';
 import { floatIn } from './floatIn';
 
+// Displayed price of a tier: the GST-inclusive total (what Razorpay debits)
+// when the tier row carries it, else the base subscription_fee (older caches).
+const tierPrice = (tier: SubscriptionTier): number => {
+  const total = Number(tier.total_amount);
+  return Number.isFinite(total) && total > 0 ? total : Number(tier.subscription_fee || 0);
+};
+const tierHasGst = (tier: SubscriptionTier) => Number(tier.total_amount) > 0;
+const money = (n: number) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 interface StepSubscriptionProps {
   user: User;
   setUser: (user: User) => void;
@@ -17,7 +26,9 @@ interface StepSubscriptionProps {
   // (test bypass / dev trial path). Tells the parent to skip the payment
   // step and jump straight to congrats. Default false → the payment step
   // handles Razorpay.
-  onComplete: (subscriptionFee?: number, subscriptionId?: number, tierKey?: string, alreadyActive?: boolean) => void;
+  /** subscriptionFee = amount shown on StepPayment: the GST-inclusive total when the
+   *  tier carries it (gstIncluded = true), else the base fee. */
+  onComplete: (subscriptionFee?: number, subscriptionId?: number, tierKey?: string, alreadyActive?: boolean, gstIncluded?: boolean) => void;
   onBack: () => void;
   theme: 'light' | 'dark';
   trialExpired?: boolean; // true when shown because trial period ended
@@ -51,7 +62,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
     if (!tierToConfirm || !user.id) return;
     setShowConfirm(false);
     setError(null);
-    onComplete(tierToConfirm.subscription_fee, undefined, tierToConfirm.tier_key);
+    onComplete(tierPrice(tierToConfirm), undefined, tierToConfirm.tier_key, undefined, tierHasGst(tierToConfirm));
   }, [tierToConfirm, user.id, onComplete]);
 
   const handleTestBypass = useCallback(async () => {
@@ -346,10 +357,15 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
                   {tier.tier_name}
                 </h3>
                 <span className="text-lg font-bold text-emerald-500">
-                  {tier.currency}{tier.subscription_fee}
+                  {tier.currency}{tierHasGst(tier) ? money(tierPrice(tier)) : tier.subscription_fee}
                   <span className={`text-xs font-normal ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                     /{tier.billing_frequency}
                   </span>
+                  {tierHasGst(tier) && (
+                    <span className={`block text-[10px] font-normal text-right ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                      incl. GST
+                    </span>
+                  )}
                 </span>
               </div>
 
@@ -391,11 +407,12 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
             </h3>
             <p className={`text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               You're selecting <strong>{tierToConfirm.tier_name}</strong> at{' '}
-              <strong>{tierToConfirm.currency}{tierToConfirm.subscription_fee}/{tierToConfirm.billing_frequency}</strong>
+              <strong>{tierToConfirm.currency}{tierHasGst(tierToConfirm) ? money(tierPrice(tierToConfirm)) : tierToConfirm.subscription_fee}/{tierToConfirm.billing_frequency}</strong>
+              {tierHasGst(tierToConfirm) && ' (incl. GST)'}
             </p>
             {!trialExpired && (
               <p className={`text-xs mb-3 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                You&apos;ll be charged {tierToConfirm.currency}{tierToConfirm.subscription_fee} today, then automatically each {tierToConfirm.billing_frequency} until you cancel.
+                You&apos;ll be charged {tierToConfirm.currency}{tierHasGst(tierToConfirm) ? `${money(tierPrice(tierToConfirm))} (incl. GST)` : tierToConfirm.subscription_fee} today, then automatically each {tierToConfirm.billing_frequency} until you cancel.
               </p>
             )}
             <div className={`space-y-2 mb-6 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
