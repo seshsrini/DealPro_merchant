@@ -20,17 +20,21 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
-## 2026.10.21.0924 — versionCode 1792589056
+## 2026.10.21.1032 — versionCode 1792593158
 
 | | |
 |---|---|
-| File | `dealfynd-merchant-2026.10.21.0924-vc1792589056.aab` |
-| SHA-256 | `f82eba906849b1d53a0300973c5fd242c42d36196c04d3ef68d8929294c6d43d` |
-| Size | 22,261,725 bytes |
+| File | `dealfynd-merchant-2026.10.21.1032-vc1792593158.aab` |
+| SHA-256 | `76a0d23ec6201a0c2429fc267b995ebf4cd587360ef87321b05cf4d3fb7640a1` |
+| Size | 22,261,722 bytes |
 | Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
 | targetSdk / minSdk | 36 / **24** |
-| Commit | `1714677` |
+| Commit | `4a3c4ec` (code identical to `1714677`) |
 | Play status | pending upload |
+
+**Rebuild of 2026.10.21.0924 with a new versionCode** — Play refused a second
+production upload of 1792589056 ("version code has already been used"). Same
+code and settings.
 
 **minSdk raised 23 → 24 (Android 7.0).** Play's automatic protection requires
 minSdk 24+; `2026.10.21.0110` was rejected at upload for minSdk 23. Android 6.0
@@ -60,6 +64,12 @@ amount.
 
 Not recorded here: bundles `2026.09.17.0739` and `2026.10.06.0652` were built
 but have no entries; add them if they were uploaded to Play.
+
+## 2026.10.21.0924 — versionCode 1792589056 — superseded
+
+Accepted by Play (uploaded 2026-10-21), so its version code can't be uploaded
+again; superseded for production by `2026.10.21.1032` (identical code).
+SHA-256 `f82eba906849b1d53a0300973c5fd242c42d36196c04d3ef68d8929294c6d43d`, commit `1714677`, targetSdk 36 / minSdk 24.
 
 ## 2026.10.21.0110 — versionCode 1792559402 — REJECTED, do not upload
 
