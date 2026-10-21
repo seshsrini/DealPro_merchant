@@ -20,17 +20,21 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
-## 2026.10.21.0110 — versionCode 1792559402
+## 2026.10.21.0924 — versionCode 1792589056
 
 | | |
 |---|---|
-| File | `dealfynd-merchant-2026.10.21.0110-vc1792559402.aab` |
-| SHA-256 | `28f77568fcc7a58392cbb3fc96d78d130aae0241c77de3ead3aca44f8b6c291f` |
-| Size | 22,306,520 bytes |
+| File | `dealfynd-merchant-2026.10.21.0924-vc1792589056.aab` |
+| SHA-256 | `f82eba906849b1d53a0300973c5fd242c42d36196c04d3ef68d8929294c6d43d` |
+| Size | 22,261,725 bytes |
 | Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
-| targetSdk / minSdk | 36 / 23 |
-| Commit | `b8c623f` |
+| targetSdk / minSdk | 36 / **24** |
+| Commit | `1714677` |
 | Play status | pending upload |
+
+**minSdk raised 23 → 24 (Android 7.0).** Play's automatic protection requires
+minSdk 24+; `2026.10.21.0110` was rejected at upload for minSdk 23. Android 6.0
+devices can no longer install or update.
 
 **GST on subscriptions (18%).** Plans are now charged as base price + GST:
 ₹199 → ₹234.82, ₹399 → ₹470.82, ₹599 → ₹706.82 monthly; ₹1,990 → ₹2,348.20,
@@ -56,6 +60,12 @@ amount.
 
 Not recorded here: bundles `2026.09.17.0739` and `2026.10.06.0652` were built
 but have no entries; add them if they were uploaded to Play.
+
+## 2026.10.21.0110 — versionCode 1792559402 — REJECTED, do not upload
+
+Rejected by Play at upload: "Play automatic protection requires a minimum SDK
+version of 24 or higher" (minSdk was 23). Superseded by `2026.10.21.0924`, which
+has identical app code. SHA-256 `28f77568fcc7a58392cbb3fc96d78d130aae0241c77de3ead3aca44f8b6c291f`, commit `b8c623f`.
 
 ## 2026.09.12.1838 — versionCode 1789252733
 
