@@ -6,7 +6,9 @@ import { floatIn } from './floatIn';
 
 interface StepPaymentProps {
   user: User;
+  /** Amount to show — GST-inclusive total when gstIncluded, else the base fee. */
   subscriptionFee: number;
+  gstIncluded?: boolean;
   tierKey: string | null;
   onComplete: () => void;
   theme: 'light' | 'dark';
@@ -18,9 +20,14 @@ interface StepPaymentProps {
 // first charge succeeds, App.tsx's activation polling flips
 // user.hasActiveSubscription and the useEffect below auto-advances to congrats.
 export const StepPayment: React.FC<StepPaymentProps> = ({
-  user, subscriptionFee, tierKey, onComplete, theme,
+  user, subscriptionFee, gstIncluded = false, tierKey, onComplete, theme,
 }) => {
   const isDark = theme === 'dark';
+  // 2-decimal INR when the amount includes GST (e.g. 234.82); plain otherwise.
+  const feeLabel = gstIncluded
+    ? Number(subscriptionFee || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : String(subscriptionFee);
+  const gstNote = gstIncluded ? ' (incl. GST)' : '';
   const [visible, setVisible] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [pending, setPending] = useState(false);
@@ -90,12 +97,15 @@ export const StepPayment: React.FC<StepPaymentProps> = ({
         <div className="flex items-baseline justify-between">
           <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Your plan</span>
           <span className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            ₹{subscriptionFee}
+            ₹{feeLabel}
             <span className={`text-sm font-normal ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>/month</span>
           </span>
         </div>
+        {gstIncluded && (
+          <p className={`text-[11px] text-right ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>incl. GST</p>
+        )}
         <div className={`mt-3 pt-3 border-t text-xs leading-relaxed ${isDark ? 'border-slate-700 text-slate-400' : 'border-slate-200 text-slate-500'}`}>
-          You&apos;ll be charged ₹{subscriptionFee} today and automatically every month via Autopay until you cancel or change your plan.
+          You&apos;ll be charged ₹{feeLabel}{gstNote} today and automatically every month via Autopay until you cancel or change your plan.
         </div>
       </div>
 
@@ -123,7 +133,7 @@ export const StepPayment: React.FC<StepPaymentProps> = ({
           ) : (
             <>
               <CreditCard className="w-5 h-5" />
-              Pay ₹{subscriptionFee}/month
+              Pay ₹{feeLabel}/month
             </>
           )}
         </button>
@@ -158,7 +168,7 @@ export const StepPayment: React.FC<StepPaymentProps> = ({
               <div className="flex items-center justify-between text-sm">
                 <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Total today</span>
                 <span className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  ₹{subscriptionFee}/month
+                  ₹{feeLabel}/month{gstNote}
                 </span>
               </div>
             </div>

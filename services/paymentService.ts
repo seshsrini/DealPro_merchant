@@ -7,7 +7,17 @@ export interface MerchantPayment {
   transaction_id: string | null;   // Razorpay payment id (pay_…) — the confirmation code
   order_id: string | null;
   amount_base: number | null;
-  amount_total: number | null;
+  amount_total: number | null;     // what was actually debited (GST-inclusive)
+  // GST breakup (merchant_payments). Numeric columns may arrive as strings —
+  // coerce with Number() before use.
+  gst_rate_percent?: number | null;
+  cgst_amount?: number | null;
+  sgst_amount?: number | null;
+  igst_amount?: number | null;
+  gst_amount?: number | null;
+  hsn_sac_code?: string | null;
+  billing_state?: string | null;
+  supply_type?: 'intra' | 'inter' | null;
   currency: string | null;
   payment_method: string | null;
   payment_status: string | null;   // captured | pending | failed

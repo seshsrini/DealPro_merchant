@@ -115,6 +115,122 @@ async function razorpayRefund(paymentId: string): Promise<{ id: string } | null>
   return json;
 }
 
+// ── GST on subscriptions ─────────────────────────────────────────────────────
+// subscription_tiers.subscription_fee is the BASE (pre-GST) price; Razorpay
+// plans are priced at base + GST (18%). The DB RPC subscription_gst_breakup
+// (service_role only) resolves the merchant's billing state and returns the
+// CGST+SGST (intra-state, supplier = Karnataka) or IGST (inter-state) split.
+// Every caller below degrades gracefully if the RPC / columns are missing
+// (migration not applied yet) — a webhook must never fail because of GST.
+interface GstBreakup {
+  base_amount: number;
+  gst_rate_percent: number;
+  supply_type: 'intra' | 'inter';
+  cgst_amount: number;
+  sgst_amount: number;
+  igst_amount: number;
+  gst_amount: number;
+  total_amount: number;
+  buyer_state: string | null;
+  hsn_sac_code: string | null;
+}
+
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+async function fetchGstBreakup(admin: any, merchantId: string, tierKey: string): Promise<GstBreakup | null> {
+  try {
+    const { data, error } = await admin
+      .rpc('subscription_gst_breakup', { p_merchant_id: merchantId, p_tier_key: tierKey })
+      .single();
+    if (error || !data) {
+      console.warn('[razorpay-webhook] subscription_gst_breakup unavailable — falling back to pre-GST amounts:', error?.message || 'no row');
+      return null;
+    }
+    const r = data as Record<string, unknown>;
+    const total = Number(r.total_amount);
+    if (!Number.isFinite(total) || total <= 0) return null;
+    return {
+      base_amount: num(r.base_amount),
+      gst_rate_percent: num(r.gst_rate_percent),
+      supply_type: r.supply_type === 'inter' ? 'inter' : 'intra',
+      cgst_amount: num(r.cgst_amount),
+      sgst_amount: num(r.sgst_amount),
+      igst_amount: num(r.igst_amount),
+      gst_amount: num(r.gst_amount),
+      total_amount: total,
+      buyer_state: (r.buyer_state as string) ?? null,
+      hsn_sac_code: (r.hsn_sac_code as string) ?? null,
+    };
+  } catch (e) {
+    console.warn('[razorpay-webhook] subscription_gst_breakup threw — falling back:', (e as any)?.message);
+    return null;
+  }
+}
+
+// Re-split an amount that was actually debited (GST-inclusive) using the
+// breakup's rate + supply type, so base + GST always equals the debit.
+function splitDebited(debited: number, ref: GstBreakup): GstBreakup {
+  const rate = ref.gst_rate_percent;
+  const base = round2(debited / (1 + rate / 100));
+  const gst = round2(debited - base);
+  const cgst = ref.supply_type === 'intra' ? round2(gst / 2) : 0;
+  const sgst = ref.supply_type === 'intra' ? round2(gst - cgst) : 0;
+  const igst = ref.supply_type === 'inter' ? gst : 0;
+  return { ...ref, base_amount: base, gst_amount: gst, cgst_amount: cgst, sgst_amount: sgst, igst_amount: igst, total_amount: debited };
+}
+
+// merchant_subscriptions breakup columns (added by the GST migration).
+const SUB_GST_COLS = ['base_amount', 'gst_rate_percent', 'cgst_amount', 'sgst_amount', 'igst_amount', 'gst_amount', 'total_amount', 'billing_state', 'supply_type'];
+function subscriptionGstColumns(b: GstBreakup): Record<string, unknown> {
+  return {
+    base_amount: b.base_amount,
+    gst_rate_percent: b.gst_rate_percent,
+    cgst_amount: b.cgst_amount,
+    sgst_amount: b.sgst_amount,
+    igst_amount: b.igst_amount,
+    gst_amount: b.gst_amount,
+    total_amount: b.total_amount,
+    billing_state: b.buyer_state,
+    supply_type: b.supply_type,
+  };
+}
+
+// merchant_profiles.gstin is AES-encrypted client-side, so it can't be copied
+// into merchant_payments.merchant_gstin (varchar 15) blindly. Use it only if it
+// is a plain, valid GSTIN; otherwise look for the plain GSTIN inside the raw KYC
+// provider response saved by verify-business-document (gstin_verification):
+//   Sandbox → data.data.gstin · Surepass/Deepvue → data.gstin (or data.gstin_number)
+//   · Surepass echo / mock → data.id_number.
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+function asGstin(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().toUpperCase();
+  return GSTIN_RE.test(s) ? s : null;
+}
+async function resolveMerchantGstin(admin: any, merchantId: string): Promise<string | null> {
+  try {
+    const { data, error } = await admin
+      .from('merchant_profiles')
+      .select('gstin, gstin_verification')
+      .eq('id', merchantId)
+      .maybeSingle();
+    if (error || !data) return null;
+    const direct = asGstin(data.gstin);
+    if (direct) return direct;
+    const v = data.gstin_verification as any;
+    if (!v || typeof v !== 'object') return null;
+    return asGstin(v?.data?.data?.gstin)
+      || asGstin(v?.data?.gstin)
+      || asGstin(v?.data?.gstin_number)
+      || asGstin(v?.data?.id_number)
+      || asGstin(v?.gstin)
+      || null;
+  } catch {
+    return null;
+  }
+}
+
 interface RazorpaySubscriptionEntity {
   id: string;
   status: string;
@@ -251,6 +367,28 @@ Deno.serve(async (req: Request) => {
       : null,
   };
 
+  // GST breakup per tier, memoised so one event never calls the RPC twice.
+  const breakupCache = new Map<string, Promise<GstBreakup | null>>();
+  const gstBreakupFor = (tierKey: string) => {
+    if (!breakupCache.has(tierKey)) breakupCache.set(tierKey, fetchGstBreakup(supabase, merchantId, tierKey));
+    return breakupCache.get(tierKey)!;
+  };
+  // Recurring amount = GST-inclusive total (what Razorpay debits each cycle).
+  // Falls back to the base fee if the GST RPC isn't available yet.
+  const applyRecurringAmount = async (tierKey: string, fee: unknown) => {
+    const b = await gstBreakupFor(tierKey);
+    if (b) {
+      patch.total_recurring_amount = b.total_amount;
+      Object.assign(patch, subscriptionGstColumns(b));
+    } else if (fee != null) {
+      patch.total_recurring_amount = fee;
+    }
+  };
+
+  // Tier the charge is for — resolved in subscription.charged (plan_id first, as
+  // it reflects a parked downgrade; then notes; then the stored plan).
+  let chargedTierKey: string | null = null;
+
   if (tierKeyFromNotes && !existingSub?.plan_name) {
     const { data: tier } = await supabase
       .from('subscription_tiers')
@@ -262,7 +400,7 @@ Deno.serve(async (req: Request) => {
       // (merchant-subscription, manage-subscription) join on
       // tier_key.eq.plan_name to look up tier limits.
       patch.plan_name = tier.tier_key;
-      if (tier.subscription_fee != null) patch.total_recurring_amount = tier.subscription_fee;
+      await applyRecurringAmount(tier.tier_key, tier.subscription_fee);
       patch.billing_type = 'razorpay';
     }
   }
@@ -292,14 +430,16 @@ Deno.serve(async (req: Request) => {
           .eq('razorpay_plan_id', subEntity.plan_id)
           .maybeSingle();
         if (planTier?.tier_key) {
+          chargedTierKey = planTier.tier_key;
           patch.plan_name = planTier.tier_key;
-          if (planTier.subscription_fee != null) patch.total_recurring_amount = planTier.subscription_fee;
+          await applyRecurringAmount(planTier.tier_key, planTier.subscription_fee);
           patch.pending_tier_id = null;
           patch.pending_plan_name = null;
           patch.pending_amount = null;
           patch.pending_effective_date = null;
         }
       }
+      if (!chargedTierKey) chargedTierKey = tierKeyFromNotes || existingSub?.plan_name || null;
       break;
     }
     case 'subscription.completed':
@@ -324,9 +464,18 @@ Deno.serve(async (req: Request) => {
       return new Response('ok (unhandled)', { status: 200 });
   }
 
-  const { error: upsertErr } = await supabase
+  let { error: upsertErr } = await supabase
     .from('merchant_subscriptions')
     .upsert(patch, { onConflict: 'razorpay_subscription_id' });
+  // Schema lag: if the GST breakup columns aren't there yet, retry without them
+  // rather than 500-ing (which would block activation behind Razorpay retries).
+  if (upsertErr && SUB_GST_COLS.some((c) => c in patch && (upsertErr!.message || '').includes(c))) {
+    console.warn('[razorpay-webhook] GST columns missing on merchant_subscriptions — retrying without them:', upsertErr.message);
+    for (const c of SUB_GST_COLS) delete patch[c];
+    ({ error: upsertErr } = await supabase
+      .from('merchant_subscriptions')
+      .upsert(patch, { onConflict: 'razorpay_subscription_id' }));
+  }
   if (upsertErr) {
     console.error('[razorpay-webhook] Upsert failed:', upsertErr);
     // Returning 500 makes Razorpay retry — desired so we don't drop state.
@@ -338,7 +487,9 @@ Deno.serve(async (req: Request) => {
   // confirmed in-app, so gate on the prior status being active) and a halt
   // (Razorpay's retries exhausted → payment failed → access revoked).
   if (event.event === 'subscription.charged' && existingSub?.status === 'active') {
-    const amt = (payEntity && typeof payEntity.amount === 'number') ? ` for ₹${payEntity.amount / 100}` : '';
+    const amt = (payEntity && typeof payEntity.amount === 'number')
+      ? ` for ₹${(payEntity.amount / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (incl. GST)`
+      : '';
     notifyMerchant(supabase, merchantId, 'payment_success', 'Subscription renewed',
       `Your DealFynd plan renewed${amt}. You're set for another month.`);
   } else if (event.event === 'subscription.halted') {
@@ -352,25 +503,61 @@ Deno.serve(async (req: Request) => {
   // retries never double-count; non-fatal so a ledger hiccup can't block
   // subscription activation (the upsert above is the critical write).
   if (event.event === 'subscription.charged' && payEntity?.id && typeof payEntity.amount === 'number') {
-    const rupees = payEntity.amount / 100; // Razorpay sends paise
-    // Matches the EXISTING merchant_payments schema (GST-invoice ledger). We record
-    // the gross charge for analytics; the GST split (cgst/sgst/igst) is left at the
-    // table defaults and can be computed by a dedicated invoicing flow later.
+    const rupees = round2(payEntity.amount / 100); // Razorpay sends paise
+    // Matches the EXISTING merchant_payments schema (GST-invoice ledger).
+    // amount_total = what Razorpay actually debited (source of truth). The GST
+    // split comes from subscription_gst_breakup for the charged tier; if the
+    // breakup total doesn't match the debit (old pre-GST plan, offer discount,
+    // proration) the split is re-derived FROM the debit so base + GST == debit.
+    // If the RPC is unavailable we keep the old behaviour (base = total).
     // order_id is NOT NULL and subscription charges have no separate order, so we
     // use the payment id. Idempotent on transaction_id (unique).
-    const { error: payErr } = await supabase
+    const ledger: Record<string, unknown> = {
+      merchant_id: merchantId,
+      subscription_id: existingSub?.id ?? null,
+      transaction_id: payEntity.id,
+      order_id: payEntity.id,
+      amount_base: rupees,
+      amount_total: rupees,
+      currency: payEntity.currency || 'INR',
+      payment_method: payEntity.method ?? null,
+      payment_status: 'captured',
+    };
+    const breakup = chargedTierKey ? await gstBreakupFor(chargedTierKey) : null;
+    if (breakup) {
+      let b = breakup;
+      if (Math.abs(breakup.total_amount - rupees) > 0.009) {
+        console.warn(`[razorpay-webhook] Debited ₹${rupees} != GST breakup total ₹${breakup.total_amount} for tier ${chargedTierKey} (payment ${payEntity.id}) — deriving the GST split from the debited amount.`);
+        b = splitDebited(rupees, breakup);
+      }
+      Object.assign(ledger, {
+        amount_base: b.base_amount,
+        gst_rate_percent: b.gst_rate_percent,
+        cgst_amount: b.cgst_amount,
+        sgst_amount: b.sgst_amount,
+        igst_amount: b.igst_amount,
+        gst_amount: b.gst_amount,
+        supply_type: b.supply_type,
+        billing_state: b.buyer_state ? String(b.buyer_state).slice(0, 50) : null,
+        hsn_sac_code: b.hsn_sac_code,
+      });
+      const gstin = await resolveMerchantGstin(supabase, merchantId);
+      if (gstin) ledger.merchant_gstin = gstin;
+    } else {
+      console.warn(`[razorpay-webhook] No GST breakup for payment ${payEntity.id} (tier ${chargedTierKey ?? 'unknown'}) — recording amount_base = amount_total.`);
+    }
+    let { error: payErr } = await supabase
       .from('merchant_payments')
-      .upsert({
-        merchant_id: merchantId,
-        subscription_id: existingSub?.id ?? null,
-        transaction_id: payEntity.id,
-        order_id: payEntity.id,
-        amount_base: rupees,
-        amount_total: rupees,
-        currency: payEntity.currency || 'INR',
-        payment_method: payEntity.method ?? null,
-        payment_status: 'captured',
-      }, { onConflict: 'transaction_id', ignoreDuplicates: true });
+      .upsert(ledger, { onConflict: 'transaction_id', ignoreDuplicates: true });
+    // Schema lag: gst_amount / supply_type are new columns — retry without them.
+    if (payErr && /gst_amount|supply_type/.test(payErr.message || '')) {
+      console.warn('[razorpay-webhook] merchant_payments GST columns missing — retrying without them:', payErr.message);
+      delete ledger.gst_amount;
+      delete ledger.supply_type;
+      ({ error: payErr } = await supabase
+        .from('merchant_payments')
+        .upsert(ledger, { onConflict: 'transaction_id', ignoreDuplicates: true }));
+    }
     if (payErr) console.error('[razorpay-webhook] merchant_payments ledger insert failed (non-fatal):', payErr.message);
 
     // ── Referral reward: handled by the OFFER model, not here ──────────────

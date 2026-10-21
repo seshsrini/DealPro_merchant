@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
 
   const { data, error } = await supabaseAdmin
     .from('merchant_payments')
-    .select('id, transaction_id, order_id, amount_base, amount_total, currency, payment_method, payment_status, failure_reason, created_at')
+    .select('id, transaction_id, order_id, amount_base, amount_total, gst_rate_percent, cgst_amount, sgst_amount, igst_amount, gst_amount, hsn_sac_code, billing_state, supply_type, currency, payment_method, payment_status, failure_reason, created_at')
     .eq('merchant_id', user.id)
     .gte('created_at', since.toISOString())
     .order('created_at', { ascending: false })
@@ -44,8 +44,18 @@ Deno.serve(async (req) => {
     return json({ error: 'Could not load payment activity.' }, 500);
   }
 
-  const payments = data || [];
-  const captured = payments.filter((p) => p.payment_status === 'captured');
+  // GST: older ledger rows (written before gst_amount existed) may carry a
+  // base/total split but no gst_amount — derive it so the UI breakup is right.
+  const payments = (data || []).map((p: any) => {
+    const base = Number(p.amount_base || 0);
+    const total = Number(p.amount_total || 0);
+    const gst = Number(p.gst_amount || 0);
+    if (!gst && total > base) {
+      return { ...p, gst_amount: Math.round((total - base) * 100) / 100 };
+    }
+    return p;
+  });
+  const captured = payments.filter((p: any) => p.payment_status === 'captured');
   const totalPaid = captured.reduce((sum, p) => sum + Number(p.amount_total || 0), 0);
 
   return json({

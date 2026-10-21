@@ -22,7 +22,7 @@ interface PaymentPlansProps {
 
 const inr = (n: number, currency = 'INR') => {
   try {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: currency || 'INR', maximumFractionDigits: 2 }).format(n);
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: currency || 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
   } catch {
     return `₹${Number(n || 0).toFixed(2)}`;
   }
@@ -36,6 +36,24 @@ const fmtDate = (iso: string) => {
   }
 };
 
+// GST breakup for one payment row. Numeric columns can arrive as strings, so
+// everything is coerced. Returns null when there's nothing to break up (legacy
+// rows recorded before GST, where base == total and no tax columns are set).
+function gstBreakup(p: MerchantPayment) {
+  const total = Number(p.amount_total || 0);
+  const base = Number(p.amount_base || 0);
+  const cgst = Number(p.cgst_amount || 0);
+  const sgst = Number(p.sgst_amount || 0);
+  const igst = Number(p.igst_amount || 0);
+  let gst = Number(p.gst_amount || 0);
+  if (!gst) gst = cgst + sgst + igst;
+  if (!gst && total > base) gst = Math.round((total - base) * 100) / 100;
+  if (!gst || !base) return null;
+  const rate = Number(p.gst_rate_percent || 0) || Math.round((gst / base) * 100);
+  const inter = p.supply_type === 'inter' || (igst > 0 && !cgst && !sgst);
+  return { base, gst, total, rate, cgst, sgst, igst, inter };
+}
+
 // Realistic preview data so the merchant can see how the screen looks once their
 // Razorpay subscription charges start flowing in. Clearly marked as a sample.
 function buildSampleData(): { payments: MerchantPayment[]; summary: MerchantPaymentSummary } {
@@ -48,8 +66,10 @@ function buildSampleData(): { payments: MerchantPayment[]; summary: MerchantPaym
   };
   const codes = ['pay_T3Tzo8GulUSIff', 'pay_T2Rk9mP1aXbQ7d', 'pay_SzL4hN8vY2wErC', 'pay_Sx0GqD6tU9oP3a', 'pay_RpM7bV2kJ4nZ1s', 'pay_Qn8cW5xH3gL0tB'];
   const rows: MerchantPayment[] = [];
-  // Most recent 3 cycles on Platinum (₹399), older 3 on Basic (₹199), with one failed retry.
+  // Most recent 3 cycles on Platinum (₹399 + 18% GST = ₹470.82), older 3 on Basic
+  // (₹199 + 18% GST = ₹234.82), with one failed retry. Intra-state (CGST + SGST).
   const plan = [399, 399, 399, 199, 199, 199];
+  const gstOf: Record<number, number> = { 399: 71.82, 199: 35.82 };
   for (let i = 0; i < 6; i++) {
     const failed = i === 2; // one failed cycle for realism
     rows.push({
@@ -57,7 +77,15 @@ function buildSampleData(): { payments: MerchantPayment[]; summary: MerchantPaym
       transaction_id: failed ? null : codes[i],
       order_id: `order_sample_${i}`,
       amount_base: plan[i],
-      amount_total: plan[i],
+      amount_total: Math.round((plan[i] + gstOf[plan[i]]) * 100) / 100,
+      gst_rate_percent: 18,
+      cgst_amount: gstOf[plan[i]] / 2,
+      sgst_amount: gstOf[plan[i]] / 2,
+      igst_amount: 0,
+      gst_amount: gstOf[plan[i]],
+      hsn_sac_code: null,
+      billing_state: 'Karnataka',
+      supply_type: 'intra',
       currency: 'INR',
       payment_method: i % 2 === 0 ? 'upi' : 'card',
       payment_status: failed ? 'failed' : 'captured',
@@ -71,7 +99,7 @@ function buildSampleData(): { payments: MerchantPayment[]; summary: MerchantPaym
     summary: {
       total_count: rows.length,
       captured_count: captured.length,
-      total_paid: captured.reduce((s, r) => s + Number(r.amount_total || 0), 0),
+      total_paid: Math.round(captured.reduce((s, r) => s + Number(r.amount_total || 0), 0) * 100) / 100,
       currency: 'INR',
       last_payment_at: rows[0].created_at,
       window_months: 12,
@@ -172,6 +200,8 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView, theme
           <div className="space-y-2.5">
             {payments.map((p) => {
               const pill = statusPill(p.payment_status);
+              const gb = gstBreakup(p);
+              const cur = p.currency || 'INR';
               return (
                 <div key={p.id} className={`rounded-xl border p-4 ${card}`}>
                   <div className="flex items-start justify-between gap-3">
@@ -181,6 +211,15 @@ export const PaymentPlans: React.FC<PaymentPlansProps> = ({ user, setView, theme
                         <p className={`text-base font-bold ${head}`}>{inr(Number(p.amount_total || 0), p.currency || 'INR')}</p>
                       </div>
                       <p className={`text-[11px] mt-1 ${sub}`}>{fmtDate(p.created_at)}{p.payment_method ? ` · ${p.payment_method.toUpperCase()}` : ''}</p>
+                      {gb && (
+                        <p className={`text-[11px] mt-1 leading-snug ${sub}`}>
+                          {t('m_gst_plan')} {inr(gb.base, cur)} · {t('m_gst_label')} {gb.rate}% {inr(gb.gst, cur)}{' '}
+                          ({gb.inter
+                            ? `IGST ${inr(gb.igst || gb.gst, cur)}`
+                            : `CGST ${inr(gb.cgst, cur)} + SGST ${inr(gb.sgst, cur)}`})
+                          {' '}· {t('m_gst_total')} {inr(gb.total, cur)}
+                        </p>
+                      )}
                     </div>
                     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${pill.cls}`}>
                       {pill.icon}{pill.label}

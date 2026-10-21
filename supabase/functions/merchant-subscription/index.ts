@@ -89,6 +89,46 @@ function notifyMerchant(admin: any, merchantId: string, type: string, title: str
   return task;
 }
 
+// ── GST on subscriptions ─────────────────────────────────────────────────────
+// subscription_tiers.subscription_fee is the BASE (pre-GST) price; Razorpay
+// plans (what is actually debited) are base + GST. Stored amounts
+// (total_recurring_amount / pending_amount) and quoted amounts use the
+// GST-inclusive total from the subscription_gst_breakup RPC (service_role).
+// Falls back to the base fee if the RPC is missing (migration not applied).
+const SUB_GST_COLS = ['base_amount', 'gst_rate_percent', 'cgst_amount', 'sgst_amount', 'igst_amount', 'gst_amount', 'total_amount', 'billing_state', 'supply_type'];
+const gstNum = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+async function fetchGstBreakup(admin: any, merchantId: string, tierKey: string): Promise<Record<string, unknown> | null> {
+  try {
+    const { data, error } = await admin
+      .rpc('subscription_gst_breakup', { p_merchant_id: merchantId, p_tier_key: tierKey })
+      .single();
+    if (error || !data) {
+      console.warn('[merchant-subscription] subscription_gst_breakup unavailable — using base fee:', error?.message || 'no row');
+      return null;
+    }
+    const r = data as Record<string, unknown>;
+    const total = Number(r.total_amount);
+    if (!Number.isFinite(total) || total <= 0) return null;
+    return {
+      base_amount: gstNum(r.base_amount),
+      gst_rate_percent: gstNum(r.gst_rate_percent),
+      cgst_amount: gstNum(r.cgst_amount),
+      sgst_amount: gstNum(r.sgst_amount),
+      igst_amount: gstNum(r.igst_amount),
+      gst_amount: gstNum(r.gst_amount),
+      total_amount: total,
+      billing_state: (r.buyer_state as string) ?? null,
+      supply_type: r.supply_type === 'inter' ? 'inter' : 'intra',
+    };
+  } catch (e) {
+    console.warn('[merchant-subscription] subscription_gst_breakup threw — using base fee:', (e as any)?.message);
+    return null;
+  }
+}
+
+const fmtInr = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -232,11 +272,16 @@ Deno.serve(async (req) => {
         .select('subscription_fee, billing_frequency')
         .eq('tier_key', sub.plan_name)
         .maybeSingle();
+      // Direction is decided on BASE (pre-GST) fees — GST is a flat % so the
+      // order is the same, and base fees are what the tiers are priced on.
       const curFee = Number(curTier?.subscription_fee || 0);
       const newFee = Number(newTier.subscription_fee || 0);
       const isUpgrade = newFee > curFee;
-      // The tier fee is the full recurring amount — no paid loyalty add-on.
-      const recurringAmount = newFee;
+      // Recurring amount = GST-inclusive total for the new tier (base + GST) —
+      // no paid loyalty add-on. Falls back to the base fee if the RPC is missing.
+      const newGst = await fetchGstBreakup(supabaseAdmin, user.id, newTier.tier_key);
+      const recurringAmount = newGst ? Number(newGst.total_amount) : newFee;
+      const recurringLabel = `₹${fmtInr(recurringAmount)}${newGst ? ' (incl. GST)' : ''}`;
 
       const now = new Date();
 
@@ -264,7 +309,7 @@ Deno.serve(async (req) => {
             tier_key: newTier.tier_key,
             tier_name: newTier.tier_name,
             new_amount: recurringAmount,
-            message: `Upgrading to ${newTier.tier_name}: you'll pay ₹${recurringAmount} now, your billing date moves to today, and your deal limits refresh right away. Continue to pay.`,
+            message: `Upgrading to ${newTier.tier_name}: you'll pay ${recurringLabel} now, your billing date moves to today, and your deal limits refresh right away. Continue to pay.`,
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
         }
 
@@ -319,6 +364,10 @@ Deno.serve(async (req) => {
       const patch: Record<string, unknown> = isUpgrade
         ? { plan_name: newTier.tier_key, total_recurring_amount: recurringAmount, pending_tier_id: null, pending_plan_name: null, pending_amount: null, pending_effective_date: null }
         : { pending_tier_id: newTier.id, pending_plan_name: newTier.tier_key, pending_amount: recurringAmount, pending_effective_date: sub.current_period_end };
+      // An in-place upgrade changes the current recurring amount, so keep the
+      // stored GST breakup in step. (A downgrade only parks pending_amount; the
+      // webhook rewrites the breakup when the new plan is actually charged.)
+      if (isUpgrade && newGst) Object.assign(patch, newGst);
       patch.updated_at = now.toISOString();
 
       // Resilience: the lock + pending_* scheduling fields + total_recurring_amount
@@ -330,6 +379,7 @@ Deno.serve(async (req) => {
       const OPTIONAL_COLS = [
         'tier_change_locked_until', 'pending_tier_id', 'pending_plan_name',
         'pending_amount', 'pending_effective_date', 'total_recurring_amount',
+        ...SUB_GST_COLS,
       ];
       let updErr: any;
       for (let attempt = 0; attempt <= OPTIONAL_COLS.length; attempt++) {
@@ -359,7 +409,7 @@ Deno.serve(async (req) => {
         effective_date: sub.current_period_end,
         new_amount: recurringAmount,
         message: isUpgrade
-          ? `Upgraded to ${newTier.tier_name} — your new benefits are active now.${isRazorpaySub ? ` Razorpay has charged the prorated difference; the full ₹${recurringAmount} applies from your next billing date.` : ` The new rate (₹${recurringAmount}) applies from your next billing date.`}`
+          ? `Upgraded to ${newTier.tier_name} — your new benefits are active now.${isRazorpaySub ? ` Razorpay has charged the prorated difference; the full ${recurringLabel} applies from your next billing date.` : ` The new rate (${recurringLabel}) applies from your next billing date.`}`
           : `You'll move to ${newTier.tier_name} on your next billing date — you keep your current plan until then.`,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }

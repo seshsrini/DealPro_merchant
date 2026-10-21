@@ -79,7 +79,12 @@ export interface SubscriptionTier {
   tier_name: string;
   description: string | null;
   currency: string;
-  subscription_fee: number;
+  subscription_fee: number;        // BASE price, before GST
+  // GST (generated columns on subscription_tiers; absent on older caches).
+  // total_amount = subscription_fee + gst_amount = what Razorpay debits.
+  gst_rate_percent?: number | null;
+  gst_amount?: number | null;
+  total_amount?: number | null;
   billing_frequency: string;
   trial_period_days: number;
   is_active: boolean;
