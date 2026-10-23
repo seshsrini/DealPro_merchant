@@ -6,18 +6,8 @@ import { toMerchantMessage } from '../../services/friendlyError';
 import { floatIn } from './floatIn';
 import { useTranslation } from '../../contexts/LanguageContext';
 
-// Validation regex — same as memberJoin.tsx
-const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[A-Z0-9]{1}$/;
-const PAN_REGEX = /^[A-Z]{3}[CFPB][A-Z][0-9]{4}[A-Z]$/;
-const UDYAM_REGEX = /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/i;
-const FSSAI_REGEX = /^[0-9]{14}$/;
-const TRADE_LICENSE_REGEX = /^[A-Z]{2}[A-Z0-9\/\-]{3,20}$/i;
-
-const isGstValid = (v: string) => GST_REGEX.test(v);
-const isPanValid = (v: string) => PAN_REGEX.test(v);
-const isUdyamValid = (v: string) => UDYAM_REGEX.test(v.toUpperCase());
-const isFssaiValid = (v: string) => FSSAI_REGEX.test(v);
-const isTradeLicenseValid = (v: string) => TRADE_LICENSE_REGEX.test(v.toUpperCase());
+// Validation shared with the store list, Review step and final submit.
+import { isGstValid, isPanValid, isUdyamValid, isFssaiValid, isTradeLicenseValid } from './signupValidation';
 
 type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
 

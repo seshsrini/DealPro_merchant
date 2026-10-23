@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useReducer, useCallback } from 'react';
+import React, { useState, useEffect, useReducer, useCallback, useRef } from 'react';
 import { AppView, StoreLocation, User } from './types';
 import { merchantOnboardingService } from './services/merchantOnboardingService';
 import { merchantSubscriptionService } from './services/merchantSubscriptionService';
@@ -6,6 +6,7 @@ import { encryptionService, auditLogger } from './services/encryptionService';
 import { biometricService } from './services/biometricService';
 import { signupDraftService } from './services/draftService';
 import { PLAY_COMPLIANT } from './services/playCompliance';
+import { useTranslation } from './contexts/LanguageContext';
 import { Loader2 } from 'lucide-react';
 
 // Step components
@@ -21,6 +22,7 @@ import { StepReviewDetails } from './components/merchant-onboarding/StepReviewDe
 import { StepSubscription } from './components/merchant-onboarding/StepSubscription';
 import { StepPayment } from './components/merchant-onboarding/StepPayment';
 import { StepCongrats } from './components/merchant-onboarding/StepCongrats';
+import { signupMissing, hasAddressDetail } from './components/merchant-onboarding/signupValidation';
 
 // --- Types ---
 type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
@@ -117,6 +119,13 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   setView, user, setUser, theme, onAwaitWebSubscription,
 }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
+  // Resume support: autosave starts only after the saved draft has loaded AND the
+  // start step is resolved, so an empty initial state can never overwrite a draft.
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [startResolved, setStartResolved] = useState(false);
+  const [showResume, setShowResume] = useState(false);
+  const submittedRef = useRef(false);
   const [state, dispatch] = useReducer(wizardReducer, initialState);
   const [currentStep, setCurrentStep] = useState(0);
   const [editingStoreIndex, setEditingStoreIndex] = useState(0);
@@ -182,7 +191,9 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
           }
           console.log('[MerchantOnboarding] Server signup draft applied (step', draft.current_step, ')');
         }
-      } catch { /* best-effort */ }
+      } catch { /* best-effort */ } finally {
+        setDraftLoaded(true);
+      }
     })();
 
     // If profile is already complete but subscription is missing/expired,
@@ -193,6 +204,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     if (!user.hasActiveSubscription && profileComplete) {
       console.log('[MerchantOnboarding] Profile complete but no active subscription — jumping to subscription step, trialExpired:', (user as any).trialExpired);
       setCurrentStep(10);
+      setStartResolved(true);
       return;
     }
 
@@ -224,6 +236,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         setCurrentStep(prev => Math.max(prev, startStep));
         console.log(`[MerchantOnboarding] Pre-filled from profile, starting at step ${startStep} (${STEP_LABELS[startStep]}), hasStores: ${hasStores}`);
       }
+      setStartResolved(true);
     };
 
     determineStartStep();
@@ -243,9 +256,26 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     } catch {}
   }, [DRAFT_KEY, state, currentStep]);
 
+  // Autosave while the merchant types (the server save is debounced 2 s), with the
+  // step they're ON — so stepping away mid-step resumes on that step with what
+  // they'd typed. Not after the final submit (its draft is deleted then) and not
+  // on the post-signup Plan/Payment/Done steps.
+  const resumeReady = draftLoaded && startResolved;
+  useEffect(() => {
+    if (!resumeReady || submittedRef.current || currentStep >= 10) return;
+    saveDraft();
+  }, [resumeReady, state, currentStep, saveDraft]);
+
+  // Returning mid-signup → "Welcome back, continue where you left off".
+  useEffect(() => {
+    if (resumeReady && currentStep >= 1 && currentStep <= 9) setShowResume(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeReady]);
+
   // Navigation
   const goToStep = (newStep: number) => {
     if (isTransitioning) return;
+    setShowResume(false);
     setSlideDirection(newStep > currentStep ? 'left' : 'right');
     setIsTransitioning(true);
     setTimeout(() => {
@@ -269,18 +299,35 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     }
   };
 
-  // In-progress wizard data is staged in the server-side `signup_drafts` table
-  // via saveDraft() → signupDraftService.scheduleSave. We intentionally do NOT
-  // write to merchant_profiles / merchant_stores step-by-step anymore — that
-  // used to leak partial rows into the real tables, which then made any
-  // abandoned signup look like an "existing merchant with an incomplete profile"
-  // on next login (the user had to refill everything from the first missing
-  // step). The proper commit happens once, at the end, via completeMerchantProfile.
-  //
-  // Kept as a no-op so we don't have to remove every call site — if a step
-  // genuinely needs a side-effect (e.g. uploading an image), wire it there.
-  const saveStepProgress = (_step: number) => {
-    /* intentionally empty — see comment above */
+  // Each completed step is saved into merchant_profiles (patch-merchant-profile)
+  // so partial signups are visible there, alongside the full in-progress state in
+  // signup_drafts (saveDraft). Only name, legal/store name, the business document
+  // and the step number are written per step. Terms/privacy acceptance, stores and
+  // onboarding_complete are written ONLY by the final submit: saving terms+privacy
+  // early made an abandoned signup look "profile complete" to the app gates (which
+  // then skipped store creation), and saving stores early would show unfinished
+  // stores to consumers. Fire-and-forget — a failed save never blocks navigation.
+  const saveStepProgress = (step: number) => {
+    const patch: Parameters<typeof merchantOnboardingService.patchProfile>[0] = { onboardingStep: step };
+    if (step === 1 && state.fullName.trim()) patch.fullName = state.fullName.trim();
+    if (step === 2 && state.storeName.trim()) patch.storeName = state.storeName.trim();
+    if (step === 6 && state.businessType) {
+      patch.businessType = state.businessType;
+      if (state.businessType === 'gstin') {
+        // Same encryption as the final submit.
+        const g = encryptionService.encryptGST(state.gstinValue);
+        const p = encryptionService.encryptPAN(state.panValue);
+        if (g.isValid) patch.gstin = g.encrypted;
+        if (p.isValid) patch.pan = p.encrypted;
+      } else if (state.businessType === 'udyam') {
+        patch.udyamNo = state.udyamValue.toUpperCase();
+      } else if (state.businessType === 'fssai') {
+        patch.fssaiNo = state.fssaiValue;
+      } else if (state.businessType === 'trade_license') {
+        patch.tradeLicenseNo = state.tradeLicenseValue.toUpperCase();
+      }
+    }
+    void merchantOnboardingService.patchProfile(patch);
   };
 
   const handleNext = () => {
@@ -387,6 +434,13 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
 
   // Final submission
   const handleFinalSubmit = async () => {
+    // Same completeness rule as the Review step — never submit a partial signup
+    // (e.g. a draft restored with a missing store or document).
+    if (signupMissing(state).length > 0) {
+      console.warn('[MerchantOnboarding] Final submit blocked — missing:', signupMissing(state));
+      goToStep(7);
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
 
@@ -406,7 +460,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         auditLogger.logSensitiveDataAccess('ENCRYPT_FOR_ONBOARDING', 'PAN');
       }
 
-      const filteredStores = state.stores.filter(s => s.city || s.street || s.pincode);
+      const filteredStores = state.stores.filter(hasAddressDetail);
       await merchantOnboardingService.completeMerchantProfile({
         userId: user.id,
         fullName: state.fullName,
@@ -442,6 +496,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
 
       // Clear draft (localStorage + server-side signup_drafts)
       localStorage.removeItem(DRAFT_KEY);
+      submittedRef.current = true; // stop autosave from re-creating the draft
       try { await signupDraftService.delete(); } catch { /* best-effort */ }
 
       // Update user state with ALL profile-completeness fields
@@ -507,6 +562,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
   const handleTermsNext = () => {
     dispatch({ type: 'SET_FIELD', field: 'termsAccepted', value: true });
     saveDraft();
+    saveStepProgress(8); // records the step only — acceptance is saved at final submit
     goToStep(9); // Privacy step
   };
 
@@ -741,6 +797,21 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
 
         {/* Step Content with Transitions */}
         <div className="flex-1 overflow-y-auto relative">
+          {showResume && (
+            <div
+              role="status"
+              className={`mx-6 mt-3 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm ${
+                isDark ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              }`}
+            >
+              <p className="flex-1">
+                <span className="font-semibold">{t('ob_welcome_back')}</span> {t('ob_resume_hint')}
+              </p>
+              <button type="button" onClick={() => setShowResume(false)} aria-label="Dismiss" className="opacity-60 hover:opacity-100">
+                ✕
+              </button>
+            </div>
+          )}
           <div
             className={`min-h-full flex flex-col transition-all duration-250 ease-in-out ${
               isTransitioning
