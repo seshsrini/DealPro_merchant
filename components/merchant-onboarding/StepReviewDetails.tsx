@@ -2,26 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { ClipboardCheck, Pencil, User, Store, MapPin, ShieldCheck, ArrowRight } from 'lucide-react';
 import { floatIn } from './floatIn';
 import { useTranslation } from '../../contexts/LanguageContext';
+import { StoreLocation } from '../../types';
+import { signupMissing, MISSING_LABEL_KEY, MissingItem, hasAddressDetail, isStoreComplete } from './signupValidation';
 
 // Matches WizardState from MerchantOnboarding.tsx
 interface ReviewState {
   fullName: string;
   storeName: string;
   category: string;
-  stores: Array<{
-    store_name: string;
-    street: string;
-    pincode: string;
-    locality: string;
-    city: string;
-    state: string;
-    landmark: string;
-    coords: { latitude: number; longitude: number } | null;
-    is24hrs: boolean;
-    shift1: string;
-    shift2: string;
-    store_category?: string;
-  }>;
+  stores: StoreLocation[];
   businessType: '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
   gstinValue: string;
   panValue: string;
@@ -86,6 +75,13 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
   const { t } = useTranslation();
   const isDark = theme === 'dark';
   const [visible, setVisible] = useState(false);
+
+  // "Looks good" submits the signup, so it stays disabled until every required
+  // item is valid. Each missing item links to the step that fixes it.
+  const missing = signupMissing(state);
+  const EDIT_STEP: Record<MissingItem, number> = { name: 1, legal_name: 2, store: 4, document: 6 };
+  // Open the store that's actually incomplete (or the first one if none has an address yet).
+  const badStore = state.stores.findIndex((s) => hasAddressDetail(s) && !isStoreComplete(s));
 
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), 50);
@@ -215,6 +211,30 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
         </ReviewCard>
       </div>
 
+      {missing.length > 0 && (
+        <div
+          role="alert"
+          className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+            isDark ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-800'
+          }`}
+        >
+          <p className="font-semibold">{t('ob_missing_title')}</p>
+          <ul className="mt-1.5 space-y-1">
+            {missing.map((m) => (
+              <li key={m}>
+                <button
+                  type="button"
+                  onClick={() => onEditStep(EDIT_STEP[m], m === 'store' ? Math.max(0, badStore) : undefined)}
+                  className="flex items-center gap-1.5 underline-offset-2 hover:underline"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> {t(MISSING_LABEL_KEY[m])}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Navigation */}
       <div style={floatIn(600, visible)} className="pb-safe-bottom pt-4 flex gap-3">
         <button
@@ -227,7 +247,8 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
         </button>
         <button
           onClick={onNext}
-          className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          disabled={missing.length > 0}
+          className="flex-[2] h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:active:scale-100"
         >
           {t('ob_review_looks_good')} <ArrowRight className="w-4 h-4" />
         </button>

@@ -6,6 +6,7 @@ import { addCampaignService } from '../../services/addCampaignService';
 import { Geolocation } from '@capacitor/geolocation';
 import { floatIn } from './floatIn';
 import { useTranslation } from '../../contexts/LanguageContext';
+import { isStoreComplete } from './signupValidation';
 
 const FALLBACK_CATEGORIES = [
   'Grocery', 'Restaurant', 'Electronics', 'Fashion', 'Beauty',
@@ -329,17 +330,8 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
   const isPhoneValid = phoneDigits.length === 10;
   const isPhoneAltValid = !store.store_phone_alt?.trim() || phoneAltDigits.length === 10;
 
-  const isValid = !!(
-    store.store_name?.trim() &&
-    store.store_category &&
-    store.street?.trim() &&
-    store.pincode?.length === 6 &&
-    store.city &&
-    store.state &&
-    isPhoneValid &&
-    isPhoneAltValid &&
-    (store.is24hrs || (store.shift1 && store.shift2))
-  );
+  // Same rule the store list, Review step and final submit use.
+  const isValid = isStoreComplete(store);
 
   return (
     <div className="flex flex-col min-h-full px-6 pt-5">

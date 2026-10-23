@@ -3,6 +3,7 @@ import { MapPin, Plus, ArrowRight, Trash2 } from 'lucide-react';
 import { StoreLocation } from '../../types';
 import { floatIn } from './floatIn';
 import { useTranslation } from '../../contexts/LanguageContext';
+import { isStoreComplete, hasAddressDetail } from './signupValidation';
 
 interface StepAddMoreStoresProps {
   stores: StoreLocation[];
@@ -20,6 +21,9 @@ export const StepAddMoreStores: React.FC<StepAddMoreStoresProps> = ({
 }) => {
   const { t } = useTranslation();
   const isDark = theme === 'dark';
+  // Continue needs every store with an address to be complete (at least one).
+  const withAddress = stores.filter(hasAddressDetail);
+  const hasCompleteStore = withAddress.length > 0 && withAddress.every(isStoreComplete);
   const [visible, setVisible] = useState(false);
   // Index awaiting delete confirmation. Deleting a store the merchant just typed
   // an address into is destructive and there's no undo, so the trash icon arms
@@ -104,6 +108,9 @@ export const StepAddMoreStores: React.FC<StepAddMoreStoresProps> = ({
         {t('ob_stores_add')}
       </button>
 
+      {!hasCompleteStore && (
+        <p className={`mb-3 text-sm ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{t('ob_need_complete_store')}</p>
+      )}
       <div style={floatIn(600, visible)} className="mt-auto pb-safe-bottom flex gap-3">
         {onBack && (
           <button
@@ -117,7 +124,8 @@ export const StepAddMoreStores: React.FC<StepAddMoreStoresProps> = ({
         )}
         <button
           onClick={onNext}
-          className="flex-1 h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          disabled={!hasCompleteStore}
+          className="flex-1 h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:active:scale-100"
         >
           {t('ob_continue')} <ArrowRight className="w-4 h-4" />
         </button>

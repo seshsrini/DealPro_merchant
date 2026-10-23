@@ -2,35 +2,23 @@ import { supabase } from './supabaseClient';
 
 export const merchantOnboardingService = {
   /**
-   * Silently saves partial onboarding progress to merchant_profiles (and optionally
-   * merchant_stores). Safe to call after each wizard step — errors are swallowed
-   * so a network hiccup never blocks navigation.
+   * Saves one signup step into merchant_profiles (via patch-merchant-profile) so
+   * partial signups are visible there. Only name, legal/store name, the business
+   * document and the step number are accepted — terms/privacy, stores and
+   * onboarding_complete are written only by completeMerchantProfile at the end.
+   * Errors are swallowed: a network hiccup never blocks the wizard (signup_drafts
+   * still holds the full in-progress state).
    */
   patchProfile: async (patch: {
     fullName?: string;
     storeName?: string;
-    category?: string;
     businessType?: string;
     gstin?: string | null;
     pan?: string | null;
     udyamNo?: string | null;
     fssaiNo?: string | null;
     tradeLicenseNo?: string | null;
-    termsAccepted?: boolean;
-    privacyAccepted?: boolean;
-    stores?: Array<{
-      store_name: string;
-      address: string;
-      pincode: string;
-      locality: string;
-      city: string;
-      state: string;
-      landmark: string;
-      store_category: string;
-      latitude: number;
-      longitude: number;
-      store_hrs: string;
-    }>;
+    onboardingStep?: number;
   }): Promise<void> => {
     try {
       const { data, error } = await supabase.functions.invoke('patch-merchant-profile', {
