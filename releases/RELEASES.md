@@ -20,6 +20,38 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.10.23.2022 — versionCode 1792801356
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.10.23.2022-vc1792801356.aab` |
+| SHA-256 | `3a5de00c640dd79fcf01e78823b7a7b4a16b2c495e8e9d970bb693a1ddb38759` |
+| Size | 22,264,339 bytes |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
+| targetSdk / minSdk | 36 / 24 |
+| Commit | `bcde15a` |
+| Play status | pending upload |
+
+**Signup: each step saved, resume where you left off, strict gates.** Changes are
+confined to the signup wizard (no login, gating, dashboard, subscription or store
+code touched since `1032`).
+
+- Each completed step is saved into `merchant_profiles` via the narrowed
+  `patch-merchant-profile` (name, legal/store name, business document, plus
+  `onboarding_step` / `onboarding_step_at`). Terms/privacy, stores and
+  `onboarding_complete` remain final-submit-only, so an abandoned signup never
+  looks complete and unfinished stores never reach consumers.
+- The signup draft autosaves while typing (debounced 2 s) with the step the
+  merchant is on; returning merchants land on that step with their input and a
+  "Welcome back" banner. Autosave stops after the final submit.
+- Store list "Continue" requires every store with an address to be complete;
+  Review "Looks good" is disabled with a list of missing items (each links to its
+  step); the final submit re-checks and returns to Review if anything is missing.
+- New labels in all 9 languages.
+- Server side already live (2026-10-23): `patch-merchant-profile` deployed to DEV
+  and PROD (old clients never call it). Optional migration
+  `add_onboarding_step_tracking.sql` adds the step columns; saves work without it.
+
 ## 2026.10.21.1032 — versionCode 1792593158
 
 | | |
@@ -30,7 +62,7 @@ timestamp. Both are therefore unique and monotonic per build.
 | Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
 | targetSdk / minSdk | 36 / **24** |
 | Commit | `4a3c4ec` (code identical to `1714677`) |
-| Play status | pending upload |
+| Play status | **approved — production (2026-10-21)** |
 
 **Rebuild of 2026.10.21.0924 with a new versionCode** — Play refused a second
 production upload of 1792589056 ("version code has already been used"). Same
