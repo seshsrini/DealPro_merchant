@@ -166,7 +166,7 @@ Deno.serve(async (req) => {
     // 2. Check for existing claim for this consumer and campaign
     const { data: existingClaim, error: checkError } = await supabase
       .from('campaign_interactions')
-      .select('interaction_id')
+      .select('interaction_id, claim_no, is_redeemed')
       .eq('consumer_id', consumerId)
       .eq('campaign_id', campaignId)
       .maybeSingle();
@@ -178,7 +178,13 @@ Deno.serve(async (req) => {
 
     if (existingClaim) {
       console.warn(`[redemption/create-claim EF] Duplicate claim attempt: Consumer ${consumerId} already has an interaction for Campaign ${campaignId}.`);
-      return new Response(JSON.stringify({ error: 'You already have an active or redeemed claim for this campaign.' }), {
+      // The caller's OWN existing code (consumerId === authenticated user, checked above),
+      // so "Chat with merchant" can reuse it instead of failing.
+      return new Response(JSON.stringify({
+        error: 'You already have an active or redeemed claim for this campaign.',
+        existingClaimNo: existingClaim.claim_no ?? null,
+        isRedeemed: existingClaim.is_redeemed === true,
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 409, // Conflict status code
       });
@@ -219,9 +225,18 @@ Deno.serve(async (req) => {
       // existence check and this insert. The new unique index catches it — treat
       // as "already claimed" rather than a server error.
       if (error.message && error.message.includes('campaign_interactions_consumer_campaign_unique')) {
+        // Return the winning request's code (the caller's own) so callers can reuse it.
+        const { data: raced } = await supabase
+          .from('campaign_interactions')
+          .select('claim_no, is_redeemed')
+          .eq('consumer_id', consumerId)
+          .eq('campaign_id', campaignId)
+          .maybeSingle();
         return new Response(JSON.stringify({
           error: 'ALREADY_CLAIMED',
-          message: 'You already have an active or redeemed claim for this campaign.'
+          message: 'You already have an active or redeemed claim for this campaign.',
+          existingClaimNo: raced?.claim_no ?? null,
+          isRedeemed: raced?.is_redeemed === true,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 409, // Conflict
