@@ -100,6 +100,11 @@ Deno.serve(async (req) => {
       } else if (data.delivers === false) {
         allowed.delivery_radius_km = null;
       }
+      // WhatsApp chat consent — the timestamp is set here, not trusted from the client.
+      if (typeof data.whatsapp_chat_enabled === 'boolean') {
+        allowed.whatsapp_chat_enabled = data.whatsapp_chat_enabled;
+        allowed.whatsapp_consent_at = data.whatsapp_chat_enabled ? new Date().toISOString() : null;
+      }
 
       if (Object.keys(allowed).length === 0) {
         return new Response(JSON.stringify({ error: 'No valid fields to update' }), {
@@ -108,13 +113,21 @@ Deno.serve(async (req) => {
         });
       }
 
-      const { data: updated, error: updateErr } = await admin
+      const runUpdate = (fields: Record<string, unknown>) => admin
         .from('merchant_stores')
-        .update(allowed)
+        .update(fields)
         .eq('id', storeId)
         .eq('merchant_id', merchantId)
         .select()
         .single();
+      let { data: updated, error: updateErr } = await runUpdate(allowed);
+      // WhatsApp columns not migrated yet → save the rest of the edit anyway.
+      if (updateErr && /whatsapp_/i.test(updateErr.message || '') && 'whatsapp_chat_enabled' in allowed) {
+        console.warn('[manage-stores] WhatsApp columns absent, retrying without them:', updateErr.message);
+        delete allowed.whatsapp_chat_enabled;
+        delete allowed.whatsapp_consent_at;
+        ({ data: updated, error: updateErr } = await runUpdate(allowed));
+      }
 
       if (updateErr) throw updateErr;
 
@@ -152,12 +165,26 @@ Deno.serve(async (req) => {
         delivers: store.delivers || false,
         delivery_radius_km: store.delivers && store.delivery_radius_km != null ? Number(store.delivery_radius_km) : null,
       };
+      const waEnabled = store.whatsapp_chat_enabled === true;
+      const rowWithWa: Record<string, unknown> = {
+        ...row,
+        whatsapp_chat_enabled: waEnabled,
+        whatsapp_consent_at: waEnabled ? new Date().toISOString() : null,
+      };
 
-      const { data: inserted, error: insertErr } = await admin
+      let { data: inserted, error: insertErr } = await admin
         .from('merchant_stores')
-        .insert(row)
+        .insert(rowWithWa)
         .select()
         .single();
+      if (insertErr && /whatsapp_/i.test(insertErr.message || '')) {
+        console.warn('[manage-stores] WhatsApp columns absent, retrying without them:', insertErr.message);
+        ({ data: inserted, error: insertErr } = await admin
+          .from('merchant_stores')
+          .insert(row)
+          .select()
+          .single());
+      }
 
       if (insertErr) throw insertErr;
 

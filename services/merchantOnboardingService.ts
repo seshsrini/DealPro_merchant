@@ -62,6 +62,8 @@ export const merchantOnboardingService = {
       store_hrs: string;
       store_phone?: string;
       store_phone_alt?: string;
+      whatsapp_chat_enabled?: boolean;
+      whatsapp_consent_at?: string | null;
       delivers?: boolean;
       delivery_radius_km?: number | null;
     }>;

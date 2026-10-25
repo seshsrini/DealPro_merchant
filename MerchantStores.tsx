@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ArrowLeft, MapPin, Plus, Edit2, X, Loader2, CheckCircle2,
-  Clock, Navigation, ChevronDown, Store, Trash2, AlertTriangle, Phone, Truck,
+  Clock, Navigation, ChevronDown, Store, Trash2, AlertTriangle, Phone, Truck, MessageCircle,
 } from 'lucide-react';
+import { WhatsAppConsentModal } from './components/WhatsAppConsentModal';
 import { AppView, MerchantStore, User } from './types';
 import { merchantService } from './services/merchantService';
 import { locationsearchService } from './services/locationsearchService';
@@ -50,6 +51,7 @@ interface StoreForm {
   store_phone_alt: string;
   delivers: boolean;
   delivery_radius_km: number | null;
+  whatsapp_chat_enabled: boolean;
 }
 
 const blankForm = (): StoreForm => ({
@@ -59,6 +61,7 @@ const blankForm = (): StoreForm => ({
   shift1: '9:00 AM', shift2: '10:00 PM', is24hrs: false,
   store_category: '', store_phone: '', store_phone_alt: '',
   delivers: false, delivery_radius_km: null,
+  whatsapp_chat_enabled: false,
 });
 
 function parseStoreHrs(hrs?: string): { shift1: string; shift2: string; is24hrs: boolean } {
@@ -91,6 +94,9 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
   const [editingStoreId, setEditingStoreId] = useState<string | null>(null);
   const [form, setForm] = useState<StoreForm>(blankForm());
   const [saving, setSaving] = useState(false);
+  // WhatsApp consent popup: 'toggle' = turning the switch on, 'save' = asked once when adding a store.
+  const [waPrompt, setWaPrompt] = useState<null | 'toggle' | 'save'>(null);
+  const [waDecided, setWaDecided] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pincodeLoading, setPincodeLoading] = useState(false);
@@ -147,6 +153,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
   }, []);
 
   const openAddStore = () => {
+    setWaDecided(false);
     setForm(blankForm());
     setEditingStoreId(null);
     setShowPanel(true);
@@ -173,7 +180,9 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
       store_phone_alt: store.store_phone_alt || '',
       delivers: store.delivers || false,
       delivery_radius_km: store.delivery_radius_km ?? null,
+      whatsapp_chat_enabled: store.whatsapp_chat_enabled === true,
     });
+    setWaDecided(true); // existing store: the switch shows the current answer
     setEditingStoreId(store.id || null);
     setShowPanel(true);
     setError(null);
@@ -408,11 +417,17 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (waOverride?: boolean) => {
     if (!form.address.trim()) { setError(t('m_address_required')); return; }
     if (!form.city.trim()) { setError(t('m_city_required')); return; }
     if (!form.state.trim()) { setError(t('m_state_required')); return; }
     if (!form.store_category) { setError(t('m_category_required')); return; }
+    // Adding a store: ask for WhatsApp consent once, then save with the answer.
+    if (!editingStoreId && !waDecided && waOverride === undefined) {
+      setWaPrompt('save');
+      return;
+    }
+    const whatsappEnabled = waOverride ?? form.whatsapp_chat_enabled;
 
     setSaving(true);
     setError(null);
@@ -438,6 +453,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
           store_phone_alt: form.store_phone_alt || null,
           delivers: form.delivers,
           delivery_radius_km: form.delivers ? form.delivery_radius_km : null,
+          whatsapp_chat_enabled: whatsappEnabled,
         });
         setStores(prev => prev.map(s => s.id === editingStoreId ? updated : s));
         setSuccess(t('m_store_updated'));
@@ -460,6 +476,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
           store_phone_alt: form.store_phone_alt || null,
           delivers: form.delivers,
           delivery_radius_km: form.delivers ? form.delivery_radius_km : null,
+          whatsapp_chat_enabled: whatsappEnabled,
         });
         const newCount = stores.length + 1;
         setStores(prev => [...prev, added]);
@@ -716,6 +733,12 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                       </span>
                     </div>
                   )}
+                  {store.whatsapp_chat_enabled && (
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className={`w-3.5 h-3.5 shrink-0 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                      <span className={`text-xs font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{t('wa_badge_on')}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <Truck className={`w-3.5 h-3.5 shrink-0 ${store.delivers ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-slate-300' : 'text-slate-900')}`} />
                     <span className={`text-xs ${store.delivers ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-slate-300' : 'text-slate-900')}`}>
@@ -877,35 +900,58 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
 
                 {/* Store Phone */}
                 <div>
-                  <label className={labelClass}>Store Phone Number <span className="text-red-500">*</span></label>
+                  <label className={labelClass}>{t('ob_addr_phone_label')} <span className="text-red-500">*</span></label>
                   <input
                     value={form.store_phone}
                     onChange={e => setForm(f => ({ ...f, store_phone: e.target.value.replace(/[^0-9]/g, '').slice(0, 10) }))}
-                    placeholder="e.g. 9876543210"
+                    placeholder={t('ob_addr_phone_ph')}
                     type="tel"
                     inputMode="numeric"
                     maxLength={10}
                     className={inputClass}
                   />
-                  {form.store_phone && form.store_phone.length > 0 && form.store_phone.length < 10 && (
-                    <p className="text-[11px] text-red-500 mt-1">Phone number must be 10 digits</p>
+                  {form.store_phone && form.store_phone.length > 0 && form.store_phone.length < 10 ? (
+                    <p className="text-[11px] text-red-500 mt-1">{t('ob_addr_phone_invalid')}</p>
+                  ) : (
+                    <p className={`text-[11px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('ob_addr_wa_hint')}</p>
                   )}
+                  <div className={`mt-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                    <span className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> {t('wa_toggle_label')}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={form.whatsapp_chat_enabled}
+                      onClick={() => {
+                        if (form.whatsapp_chat_enabled) {
+                          setForm(f => ({ ...f, whatsapp_chat_enabled: false }));
+                          setWaDecided(true);
+                        } else {
+                          setWaPrompt('toggle'); // turning on needs explicit consent
+                        }
+                      }}
+                      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${form.whatsapp_chat_enabled ? 'bg-emerald-500' : isDark ? 'bg-slate-600' : 'bg-slate-300'}`}
+                    >
+                      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${form.whatsapp_chat_enabled ? 'left-[22px]' : 'left-0.5'}`} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Alternate Phone */}
                 <div>
-                  <label className={labelClass}>Alternate Phone (optional)</label>
+                  <label className={labelClass}>{t('ob_addr_phone_alt_label')}</label>
                   <input
                     value={form.store_phone_alt}
                     onChange={e => setForm(f => ({ ...f, store_phone_alt: e.target.value.replace(/[^0-9]/g, '').slice(0, 10) }))}
-                    placeholder="e.g. 9876543210 (optional)"
+                    placeholder={t('ob_addr_phone_alt_ph')}
                     type="tel"
                     inputMode="numeric"
                     maxLength={10}
                     className={inputClass}
                   />
                   {form.store_phone_alt && form.store_phone_alt.length > 0 && form.store_phone_alt.length < 10 && (
-                    <p className="text-[11px] text-red-500 mt-1">Phone number must be 10 digits</p>
+                    <p className="text-[11px] text-red-500 mt-1">{t('ob_addr_phone_invalid')}</p>
                   )}
                 </div>
 
@@ -1118,7 +1164,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                   </button>
                 )}
                 <button
-                  onClick={handleSave}
+                  onClick={() => handleSave()}
                   disabled={saving || !canSave}
                   className={`${forceAddMode ? 'w-full' : 'flex-1'} h-12 rounded-xl text-sm font-semibold text-white bg-slate-900 disabled:opacity-40 flex items-center justify-center gap-2`}
                 >
@@ -1129,6 +1175,26 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
           </div>
         </div>
       )}
+      <WhatsAppConsentModal
+        isOpen={waPrompt !== null}
+        theme={theme}
+        phone={form.store_phone}
+        onYes={() => {
+          const mode = waPrompt;
+          setWaPrompt(null);
+          setWaDecided(true);
+          setForm(f => ({ ...f, whatsapp_chat_enabled: true }));
+          if (mode === 'save') handleSave(true);
+        }}
+        onNo={() => {
+          const mode = waPrompt;
+          setWaPrompt(null);
+          setWaDecided(true);
+          setForm(f => ({ ...f, whatsapp_chat_enabled: false }));
+          if (mode === 'save') handleSave(false);
+        }}
+        onClose={() => setWaPrompt(null)}
+      />
     </div>
   );
 };

@@ -61,6 +61,9 @@ export interface MerchantStore {
   store_phone_alt?: string;
   delivers?: boolean;
   delivery_radius_km?: number | null;
+  /** Consumers may message this store on WhatsApp (store_phone) — merchant consent. */
+  whatsapp_chat_enabled?: boolean;
+  whatsapp_consent_at?: string | null;
   localized_shop_name?: Record<string, string>;
   active_status?: string; // 'active' | 'disabled' (soft delete)
 }
@@ -262,4 +265,7 @@ export interface StoreLocation {
   isPincodeSearching: boolean;
   delivers: boolean;
   delivery_radius_km: number | null;
+  /** WhatsApp chat consent for store_phone. undefined = not asked yet. */
+  whatsapp_chat_enabled?: boolean;
+  whatsapp_consent_at?: string | null;
 }
