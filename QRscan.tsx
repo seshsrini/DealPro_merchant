@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { addCampaignService } from './services/addCampaignService';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
+import { useTranslation } from './contexts/LanguageContext';
 
 interface QRscanProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ interface QRscanProps {
 
 export const QRscan: React.FC<QRscanProps> = ({ isOpen, onClose, user, theme }) => {
   const isDark = theme === 'dark';
+  const { t } = useTranslation();
   const [isScanning, setIsScanning] = useState(false);
   const [scanInput, setScanInput] = useState('');
   const [isProcessingScan, setIsProcessingScan] = useState(false);
@@ -314,6 +316,11 @@ export const QRscan: React.FC<QRscanProps> = ({ isOpen, onClose, user, theme }) 
                       <p className={`text-[10px] font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Or enter code manually</p>
                       <div className={`h-px flex-1 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
                     </div>
+
+                    {/* Codes can now reach merchants over WhatsApp chat — redeem only at checkout. */}
+                    <p className={`rounded-lg px-3 py-2 text-[11px] leading-snug ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-800'}`}>
+                      {t('qr_redeem_note')}
+                    </p>
 
                     <input
                       value={scanInput}

@@ -7,6 +7,7 @@ import { Geolocation } from '@capacitor/geolocation';
 import { floatIn } from './floatIn';
 import { useTranslation } from '../../contexts/LanguageContext';
 import { isStoreComplete } from './signupValidation';
+import { WhatsAppConsentModal } from '../WhatsAppConsentModal';
 
 const FALLBACK_CATEGORIES = [
   'Grocery', 'Restaurant', 'Electronics', 'Fashion', 'Beauty',
@@ -40,6 +41,8 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
   const [localityResults, setLocalityResults] = useState<any[]>([]);
   const [showLocalityDropdown, setShowLocalityDropdown] = useState(false);
   const [visible, setVisible] = useState(false);
+  // WhatsApp consent for this store's number — asked once on Continue, editable via the switch.
+  const [showWaConsent, setShowWaConsent] = useState(false);
   const [storeCategories, setStoreCategories] = useState<string[]>(FALLBACK_CATEGORIES);
   // Pincode autocomplete — suggestions from the pincode_directory table (>=3 digits).
   const [pincodeResults, setPincodeResults] = useState<Array<{ pincode: string; locality: string; city: string | null; state: string | null }>>([]);
@@ -333,6 +336,19 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
   // Same rule the store list, Review step and final submit use.
   const isValid = isStoreComplete(store);
 
+  const setWhatsApp = (enabled: boolean) => {
+    onChange('whatsapp_chat_enabled', enabled);
+    onChange('whatsapp_consent_at', enabled ? new Date().toISOString() : null);
+  };
+  // Continue: ask for WhatsApp consent the first time, then move on.
+  const handleContinue = () => {
+    if (store.whatsapp_chat_enabled === undefined) {
+      setShowWaConsent(true);
+      return;
+    }
+    onNext();
+  };
+
   return (
     <div className="flex flex-col min-h-full px-6 pt-5">
       <div style={floatIn(0, visible)} className="flex items-center gap-3 mb-6">
@@ -552,8 +568,24 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
             maxLength={10}
             className={inputClass}
           />
-          {store.store_phone && !isPhoneValid && (
+          {store.store_phone && !isPhoneValid ? (
             <p className="text-[11px] text-red-500 mt-1">{t('ob_addr_phone_invalid')}</p>
+          ) : (
+            <p className={`text-[11px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('ob_addr_wa_hint')}</p>
+          )}
+          {store.whatsapp_chat_enabled !== undefined && (
+            <label className={`mt-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
+              <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{t('wa_toggle_label')}</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!!store.whatsapp_chat_enabled}
+                onClick={() => setWhatsApp(!store.whatsapp_chat_enabled)}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${store.whatsapp_chat_enabled ? 'bg-emerald-500' : isDark ? 'bg-slate-600' : 'bg-slate-300'}`}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${store.whatsapp_chat_enabled ? 'left-[22px]' : 'left-0.5'}`} />
+              </button>
+            </label>
           )}
         </div>
         <div>
@@ -706,13 +738,22 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
           </button>
         )}
         <button
-          onClick={onNext}
+          onClick={handleContinue}
           disabled={!isValid}
           className="flex-1 h-14 rounded-xl bg-slate-900 text-white text-base font-semibold active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {t('ob_continue')}
         </button>
       </div>
+
+      <WhatsAppConsentModal
+        isOpen={showWaConsent}
+        theme={theme}
+        phone={store.store_phone}
+        onYes={() => { setWhatsApp(true); setShowWaConsent(false); onNext(); }}
+        onNo={() => { setWhatsApp(false); setShowWaConsent(false); onNext(); }}
+        onClose={() => setShowWaConsent(false)}
+      />
     </div>
   );
 };

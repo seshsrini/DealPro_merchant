@@ -489,6 +489,8 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
             store_hrs:      s.is24hrs ? 'Open 24 Hours' : `${s.shift1} - ${s.shift2}`,
             store_phone:    s.store_phone || null,
             store_phone_alt: s.store_phone_alt || null,
+            whatsapp_chat_enabled: s.whatsapp_chat_enabled === true,
+            whatsapp_consent_at: s.whatsapp_chat_enabled === true ? (s.whatsapp_consent_at || new Date().toISOString()) : null,
             delivers:       s.delivers || false,
             delivery_radius_km: s.delivers && s.delivery_radius_km != null ? Number(s.delivery_radius_km) : null,
           })),

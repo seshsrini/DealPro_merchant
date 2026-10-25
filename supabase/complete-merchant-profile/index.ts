@@ -205,10 +205,23 @@ Deno.serve(async (req: Request) => {
       delivers:       s.delivers       || false,
       delivery_radius_km: s.delivers ? (s.delivery_radius_km || null) : null,
     });
+    // WhatsApp chat consent per store (add_store_whatsapp_chat.sql).
+    const withWhatsApp = (s: any) => ({
+      ...extendedStore(s),
+      whatsapp_chat_enabled: s.whatsapp_chat_enabled === true,
+      whatsapp_consent_at: s.whatsapp_chat_enabled === true ? (s.whatsapp_consent_at || new Date().toISOString()) : null,
+    });
 
     let { error: storeError } = await adminClient
       .from('merchant_stores')
-      .insert(stores.map(extendedStore));
+      .insert(stores.map(withWhatsApp));
+    // WhatsApp columns not migrated yet → keep phone/delivery, drop only the consent.
+    if (storeError && /whatsapp_/i.test(storeError.message || '')) {
+      console.warn('[CompleteMerchantProfile] WhatsApp columns absent, retrying without them:', storeError.message);
+      ({ error: storeError } = await adminClient
+        .from('merchant_stores')
+        .insert(stores.map(extendedStore)));
+    }
 
     // Same not-yet-migrated-column resilience as the profile write: if an extended
     // column is missing (PGRST204), retry with just the base columns rather than
