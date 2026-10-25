@@ -20,6 +20,32 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.10.25.1030 — versionCode 1792938627
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.10.25.1030-vc1792938627.aab` |
+| SHA-256 | `d9c356e68e9b5db2d45eebe3e1736fd649d4225ecdacf28a0b97e9131c546b04` |
+| Size | 22,268,238 bytes |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
+| targetSdk / minSdk | 36 / 24 |
+| Commit | `8b6b470` |
+| Play status | pending upload |
+
+**WhatsApp chat opt-in per store.** The store phone is now "Store WhatsApp
+Number" (with a hint). The signup Address step and "add store" in My Stores ask
+"OK to receive WhatsApp messages from DealFynd customers on this number?"; each
+store in My Stores has an on/off switch (turning on asks for consent) and a
+"WhatsApp chat on" badge. QR Scan shows "only redeem a code at checkout". My
+Stores phone labels are now translated. New labels in all 9 languages.
+
+Server side already live (2026-10-25, DEV + PROD): migration
+`add_store_whatsapp_chat.sql` (`merchant_stores.whatsapp_chat_enabled`,
+`whatsapp_consent_at`); `manage-stores` (flag whitelisted, consent time set
+server-side), `complete-merchant-profile` (per-store consent),
+`create-claim` (deployed from this repo — returns the caller's own existing
+code on a duplicate claim; merchant push + race handling kept).
+
 ## 2026.10.23.2022 — versionCode 1792801356
 
 | | |
