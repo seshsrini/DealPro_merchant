@@ -20,7 +20,29 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
-## 2026.10.25.1030 — versionCode 1792938627
+## 2026.10.26.0818 — versionCode 1793017098
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.10.26.0818-vc1793017098.aab` |
+| SHA-256 | `fcea10d3127233351ac5184c017c677f901961348c916bb771c079ad582a53c7` |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
+| targetSdk / minSdk | 36 / 24 |
+| Commit | `c983296` |
+| Play status | pending upload |
+
+Everything in `2026.10.25.1030` (WhatsApp chat opt-in per store) plus:
+
+- **Fix — "Selected store not found" when publishing a deal.** The deal and
+  Deal-of-the-Day wizards could publish with a store id from a cached store list
+  (fresh for 1 h) or a restored draft after the store had been re-created (signup
+  re-submitted, or test data deleted and re-signed with the same phone). Wizards
+  now load stores from the server, re-validate the selection (auto-selecting the
+  only store, otherwise back to store choice), reload on that publish error, and
+  signup clears the cached store list.
+- Store WhatsApp hint shown in dark amber for readability.
+
+## 2026.10.25.1030 — versionCode 1792938627 — superseded by 2026.10.26.0818, do not upload
 
 | | |
 |---|---|
