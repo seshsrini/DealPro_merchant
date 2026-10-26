@@ -151,6 +151,7 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
 
   // Data
   const [merchantStores, setMerchantStores] = useState<any[]>([]);
+  const [storesLoaded, setStoresLoaded] = useState(false);
   const [imageLibrary, setImageLibrary] = useState<{ url: string; name?: string }[]>([]);
   const [isLibraryLoading, setIsLibraryLoading] = useState(true);
 
@@ -190,15 +191,11 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const stores = await merchantService.getMerchantStores(user.id);
+        // Always from the server: the deal is published against these ids, and a
+        // cached list can hold ids of stores that were since re-created.
+        const stores = await merchantService.getMerchantStores(user.id, true);
         setMerchantStores(stores || []);
-        // Validate draft's selectedStoreId against real stores
-        const storeIds = new Set((stores || []).map((s: any) => s.id).filter(Boolean));
-        if (state.selectedStoreId && !storeIds.has(state.selectedStoreId)) {
-          console.warn('[DotdWizard] Draft store_id not found in current stores, clearing selection');
-          dispatch({ type: 'SET_FIELD', field: 'selectedStoreId', value: '' });
-          setCurrentStep(0); // Force back to store selection
-        }
+        setStoresLoaded(true);
       } catch (err) {
         console.error('[DotdWizard] Failed to load stores:', err);
       }
@@ -472,7 +469,29 @@ export const DotdWizard: React.FC<DotdWizardProps> = ({ user, setView, theme }) 
 
   const handlePublishError = (error: string) => {
     setPublishError(error);
+    // Server says the store id no longer exists → reload the list; the effect
+    // below re-selects the merchant's only store or sends them back to choose.
+    if (/selected store not found/i.test(error)) {
+      merchantService.getMerchantStores(user.id, true)
+        .then((s) => setMerchantStores(s || []))
+        .catch(() => {});
+    }
   };
+
+  // Keep the selected store valid against the current list (a restored draft or
+  // an old cache can carry an id of a store that no longer exists).
+  useEffect(() => {
+    if (!storesLoaded) return;
+    const ids = merchantStores.map((s: any) => s.id).filter(Boolean);
+    if (!state.selectedStoreId || ids.includes(state.selectedStoreId)) return;
+    console.warn('[DotdWizard] Selected store no longer exists — resetting selection');
+    if (ids.length === 1) {
+      dispatch({ type: 'SET_FIELD', field: 'selectedStoreId', value: ids[0] });
+    } else {
+      dispatch({ type: 'SET_FIELD', field: 'selectedStoreId', value: '' });
+      setCurrentStep(0); // back to store selection
+    }
+  }, [storesLoaded, merchantStores, state.selectedStoreId]);
 
   const handleModerationBlock = (field: string, message: string) => {
     setModerationAlert(message);
