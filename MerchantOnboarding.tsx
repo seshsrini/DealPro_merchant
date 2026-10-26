@@ -5,6 +5,7 @@ import { merchantSubscriptionService } from './services/merchantSubscriptionServ
 import { encryptionService, auditLogger } from './services/encryptionService';
 import { biometricService } from './services/biometricService';
 import { signupDraftService } from './services/draftService';
+import { clearCachedStores } from './services/merchantStoresCache';
 import { PLAY_COMPLIANT } from './services/playCompliance';
 import { useTranslation } from './contexts/LanguageContext';
 import { Loader2 } from 'lucide-react';
@@ -499,6 +500,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       // Clear draft (localStorage + server-side signup_drafts)
       localStorage.removeItem(DRAFT_KEY);
       submittedRef.current = true; // stop autosave from re-creating the draft
+      clearCachedStores(user.id); // stores were just (re)created with new ids
       try { await signupDraftService.delete(); } catch { /* best-effort */ }
 
       // Update user state with ALL profile-completeness fields
