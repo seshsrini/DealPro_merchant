@@ -571,7 +571,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
           {store.store_phone && !isPhoneValid ? (
             <p className="text-[11px] text-red-500 mt-1">{t('ob_addr_phone_invalid')}</p>
           ) : (
-            <p className={`text-[11px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{t('ob_addr_wa_hint')}</p>
+            <p className={`text-[11px] font-medium mt-1 ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>{t('ob_addr_wa_hint')}</p>
           )}
           {store.whatsapp_chat_enabled !== undefined && (
             <label className={`mt-2 flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 ${isDark ? 'bg-slate-800' : 'bg-slate-50'}`}>
