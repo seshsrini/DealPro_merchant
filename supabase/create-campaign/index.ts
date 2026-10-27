@@ -268,6 +268,12 @@ Deno.serve(async (req) => {
     if (!gate || !gate.is_merchant) {
       return new Response(JSON.stringify({ error: 'Unauthorized: Only merchants can create campaigns.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 });
     }
+    // has_business_doc (require_business_registration.sql): the merchant has GSTIN /
+    // Udyam / FSSAI / Trade Licence on file. Checked as === false so a database that
+    // hasn't run that migration yet (undefined) behaves exactly as before.
+    if (gate.has_business_doc === false) {
+      return new Response(JSON.stringify({ error: 'Business registration required: add your GSTIN, Udyam, FSSAI or Trade Licence in the app before creating deals.', code: 'BUSINESS_REGISTRATION_REQUIRED' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 });
+    }
     if (!gate.has_access) {
       return new Response(JSON.stringify({ error: 'An active subscription is required to create deals.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 });
     }

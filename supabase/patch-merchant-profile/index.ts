@@ -33,7 +33,8 @@ const corsHeaders = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status });
 
-const BUSINESS_TYPES = new Set(['gstin', 'udyam', 'fssai', 'trade_license', 'none']);
+// No 'none' — every merchant must give one of these four.
+const BUSINESS_TYPES = new Set(['gstin', 'udyam', 'fssai', 'trade_license']);
 const UDYAM_RE = /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/;
 const FSSAI_RE = /^[0-9]{14}$/;
 const TRADE_RE = /^[A-Z]{2}[A-Z0-9/\-]{3,20}$/;

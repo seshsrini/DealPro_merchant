@@ -11,7 +11,7 @@ interface ReviewState {
   storeName: string;
   category: string;
   stores: StoreLocation[];
-  businessType: '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
+  businessType: '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license';
   gstinValue: string;
   panValue: string;
   udyamValue: string;
@@ -93,7 +93,6 @@ export const StepReviewDetails: React.FC<StepReviewDetailsProps> = ({
     udyam: t('ob_bt_udyam'),
     fssai: t('ob_bt_fssai'),
     trade_license: t('ob_bt_trade'),
-    none: t('ob_bt_none'),
   } as Record<string, string>)[bt] || t('ob_review_not_selected'));
 
   const valueClass = `text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`;

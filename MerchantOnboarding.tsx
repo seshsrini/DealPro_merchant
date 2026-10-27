@@ -23,10 +23,10 @@ import { StepReviewDetails } from './components/merchant-onboarding/StepReviewDe
 import { StepSubscription } from './components/merchant-onboarding/StepSubscription';
 import { StepPayment } from './components/merchant-onboarding/StepPayment';
 import { StepCongrats } from './components/merchant-onboarding/StepCongrats';
-import { signupMissing, hasAddressDetail } from './components/merchant-onboarding/signupValidation';
+import { signupMissing, hasAddressDetail, hasBusinessDocument, BUSINESS_DOC_COLUMN } from './components/merchant-onboarding/signupValidation';
 
 // --- Types ---
-type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
+type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license'; // no 'none' — registration is mandatory
 
 interface WizardState {
   fullName: string;
@@ -164,7 +164,8 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       dispatch({ type: 'SET_FIELD', field: 'storeName', value: (user as any).legal_name || user.store_name });
     }
     if (user.category) dispatch({ type: 'SET_FIELD', field: 'category', value: user.category });
-    if (user.business_type) dispatch({ type: 'SET_FIELD', field: 'businessType', value: user.business_type });
+    // 'none' (no longer offered) is not restored — the merchant must pick a registration.
+    if (user.business_type && user.business_type in BUSINESS_DOC_COLUMN) dispatch({ type: 'SET_FIELD', field: 'businessType', value: user.business_type });
     if (user.gstin) dispatch({ type: 'SET_FIELD', field: 'gstinValue', value: user.gstin });
     if (user.pan) dispatch({ type: 'SET_FIELD', field: 'panValue', value: user.pan });
     if (user.udyam_no) dispatch({ type: 'SET_FIELD', field: 'udyamValue', value: user.udyam_no });
@@ -201,7 +202,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
     // jump directly to subscription step (step 10).
     // For brand-new merchants whose profile is incomplete, fall through to
     // determineStartStep() so the wizard guides them through Name → Store → etc.
-    const profileComplete = !!(user.full_name && user.store_name && user.business_type && user.terms_accepted && user.privacy_accepted);
+    const profileComplete = !!(user.full_name && user.store_name && hasBusinessDocument(user as any) && user.terms_accepted && user.privacy_accepted);
     if (!user.hasActiveSubscription && profileComplete) {
       console.log('[MerchantOnboarding] Profile complete but no active subscription — jumping to subscription step, trialExpired:', (user as any).trialExpired);
       setCurrentStep(10);
@@ -224,12 +225,13 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       // Brand-new merchants (no full_name) always start at step 0 (Welcome) — they must acknowledge it.
       // Returning merchants who partially completed onboarding skip to their first missing step.
       let startStep = 0;
+      const bizDoc = hasBusinessDocument(user as any);
       if (user.full_name && !user.store_name) { startStep = 2; }
       else if (user.full_name && user.store_name && !hasStores) { startStep = 4; }
-      else if (user.full_name && user.store_name && hasStores && !user.business_type) { startStep = 6; }
-      else if (user.full_name && user.store_name && hasStores && user.business_type && !user.terms_accepted) { startStep = 8; }
-      else if (user.full_name && user.store_name && hasStores && user.business_type && user.terms_accepted && !user.privacy_accepted) { startStep = 9; }
-      else if (user.full_name && user.store_name && hasStores && user.business_type && user.terms_accepted && user.privacy_accepted) { startStep = 7; } // Everything filled — show review
+      else if (user.full_name && user.store_name && hasStores && !bizDoc) { startStep = 6; }
+      else if (user.full_name && user.store_name && hasStores && bizDoc && !user.terms_accepted) { startStep = 8; }
+      else if (user.full_name && user.store_name && hasStores && bizDoc && user.terms_accepted && !user.privacy_accepted) { startStep = 9; }
+      else if (user.full_name && user.store_name && hasStores && bizDoc && user.terms_accepted && user.privacy_accepted) { startStep = 7; } // Everything filled — show review
 
       if (startStep > 0) {
         // Use Math.max so we don't clobber a higher step that the server-draft
@@ -511,6 +513,12 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
         legal_name: state.storeName,
         category: filteredStores.length > 1 ? 'multiple' : 'single',
         business_type: state.businessType,
+        // The saved document, so the business-registration gate sees it right away.
+        gstin: state.businessType === 'gstin' ? encryptedGstin : null,
+        pan: state.businessType === 'gstin' ? encryptedPan : null,
+        udyam_no: state.businessType === 'udyam' ? state.udyamValue.toUpperCase() : null,
+        fssai_no: state.businessType === 'fssai' ? state.fssaiValue : null,
+        trade_license_no: state.businessType === 'trade_license' ? state.tradeLicenseValue.toUpperCase() : null,
         terms_accepted: true,
         privacy_accepted: true,
       };
