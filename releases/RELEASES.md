@@ -20,7 +20,33 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
-## 2026.10.26.2123 — versionCode 1793064196
+## 2026.10.27.0851 — versionCode 1793105486
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.10.27.0851-vc1793105486.aab` |
+| SHA-256 | `881dd0a9be0dd6e78a636958db4cd96b4afbd8f6b322c2760e3c1de0eb27808c` |
+| Size | 22,274,453 bytes |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`), SHA1 `32:7F:5C:…:FD:F5` |
+| targetSdk / minSdk | 36 / 24 |
+| Commit | `7b86e12` |
+| Play status | pending upload |
+
+Everything in `2026.10.26.2123` plus:
+
+- **Business registration mandatory.** "None / Unregistered" removed; every merchant
+  gives GSTIN, Udyam, FSSAI or Trade Licence. Merchants who signed up with "none"
+  get a non-skippable "Business registration required" screen after login (before
+  the subscription page), saved via `set-business-document`.
+- **onboarding_complete only after every step.** The signup submit records step 9;
+  the database sets complete + step 12 once profile, registration, Terms/Privacy
+  and an active subscription are all in place.
+- Server side (DEV + PROD 2026-10-27, before upload): set-business-document,
+  complete-merchant-profile, patch-merchant-profile, create-campaign;
+  `require_business_registration.sql` (campaign_create_gate.has_business_doc,
+  onboarding guard triggers, row correction).
+
+## 2026.10.26.2123 — versionCode 1793064196 — submitted to Play 2026-10-26; superseded by 2026.10.27.0851
 
 | | |
 |---|---|
@@ -29,7 +55,7 @@ timestamp. Both are therefore unique and monotonic per build.
 | Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
 | targetSdk / minSdk | 36 / 24 |
 | Commit | `960a6e1` |
-| Play status | pending upload |
+| Play status | submitted 2026-10-26 (replace with 2026.10.27.0851) |
 
 Everything in `2026.10.26.0818` plus:
 
