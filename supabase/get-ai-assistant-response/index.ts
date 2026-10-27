@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
         message: suggestion,
         suggestions: [
           'What discount should I offer?',
-          'Which products perform best?',
+          'Which products/items perform best?',
           'How often should I create deals?',
         ],
         actionButton: {
@@ -88,12 +88,12 @@ Deno.serve(async (req) => {
       };
     }
     // ========== PRODUCT PERFORMANCE QUERIES ==========
-    else if (normalizedQuery.includes('product') && (normalizedQuery.includes('best') || normalizedQuery.includes('top') || normalizedQuery.includes('perform'))) {
+    else if ((normalizedQuery.includes('product') || normalizedQuery.includes('item')) && (normalizedQuery.includes('best') || normalizedQuery.includes('top') || normalizedQuery.includes('perform'))) {
       if (productCount === 0) {
         response = {
-          message: 'You don\'t have any products yet. Add products to your catalogue to start tracking performance!',
+          message: 'You don\'t have any products/items yet. Add products/items to your catalogue to start tracking performance!',
           actionButton: {
-            text: 'Add Products',
+            text: 'Add Products/Items',
             route: '/merchant/catalogue',
           },
         };
@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
           .sort(([, a], [, b]) => b - a)[0];
 
         response = {
-          message: `You have ${productCount} active product${productCount > 1 ? 's' : ''} across ${Object.keys(categoryMap).length} categor${Object.keys(categoryMap).length === 1 ? 'y' : 'ies'}. Your strongest category is **${topCategory[0]}** with ${topCategory[1]} product${topCategory[1] > 1 ? 's' : ''}. Focus your deals here for best results!`,
+          message: `You have ${productCount} active ${productCount > 1 ? 'products/items' : 'product/item'} across ${Object.keys(categoryMap).length} categor${Object.keys(categoryMap).length === 1 ? 'y' : 'ies'}. Your strongest category is **${topCategory[0]}** with ${topCategory[1]} ${topCategory[1] > 1 ? 'products/items' : 'product/item'}. Focus your deals here for best results!`,
           data: categoryMap,
           suggestions: [
             'What discount should I offer?',
@@ -126,9 +126,9 @@ Deno.serve(async (req) => {
     else if (normalizedQuery.includes('discount') || normalizedQuery.includes('price') || normalizedQuery.includes('offer')) {
       if (productCount === 0) {
         response = {
-          message: 'Add products first, then I can suggest optimal pricing strategies based on your categories!',
+          message: 'Add products/items first, then I can suggest optimal pricing strategies based on your categories!',
           actionButton: {
-            text: 'Add Products',
+            text: 'Add Products/Items',
             route: '/merchant/catalogue',
           },
         };
@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
         const rec = discountRecommendations[topCategory] || discountRecommendations['General'];
 
         response = {
-          message: `For your **${topCategory}** products, I recommend offering **${rec.min}%-${rec.max}%** discounts. The sweet spot is **${rec.optimal}%** - this generates 3.2x more engagement while maintaining healthy margins.`,
+          message: `For your **${topCategory}** products/items, I recommend offering **${rec.min}%-${rec.max}%** discounts. The sweet spot is **${rec.optimal}%** - this generates 3.2x more engagement while maintaining healthy margins.`,
           suggestions: [
             'When should I launch this deal?',
             'How often should I create deals?',
@@ -190,7 +190,7 @@ Deno.serve(async (req) => {
       const tips = [];
 
       if (productCount < 5) {
-        tips.push('📦 **Add more products** - Merchants with 10+ products see 2.4x broader reach');
+        tips.push('📦 **Add more products/items** - Merchants with 10+ products/items see 2.4x broader reach');
       }
       if (activeCampaigns === 0) {
         tips.push('🎯 **Create active deals** - Launch 2-3 deals per month for optimal visibility');
@@ -221,7 +221,7 @@ Deno.serve(async (req) => {
     // ========== ANALYTICS/PERFORMANCE QUERIES ==========
     else if (normalizedQuery.includes('analytics') || normalizedQuery.includes('performance') || normalizedQuery.includes('how am i') || normalizedQuery.includes('stats')) {
       response = {
-        message: `📊 **Your Quick Stats:**\n\n• **${productCount} active products**\n• **${campaignCount} total campaigns**\n• **${activeCampaigns} active deals**\n\nYour business is ${productCount < 5 ? 'growing - building foundation' : productCount < 15 ? 'emerging - gaining traction' : 'established - competitive player'}!`,
+        message: `📊 **Your Quick Stats:**\n\n• **${productCount} active products/items**\n• **${campaignCount} total campaigns**\n• **${activeCampaigns} active deals**\n\nYour business is ${productCount < 5 ? 'growing - building foundation' : productCount < 15 ? 'emerging - gaining traction' : 'established - competitive player'}!`,
         suggestions: [
           'How can I improve sales?',
           'When should I launch my next deal?',
@@ -236,7 +236,7 @@ Deno.serve(async (req) => {
     // ========== GREETING QUERIES ==========
     else if (normalizedQuery.includes('hello') || normalizedQuery.includes('hi ') || normalizedQuery.startsWith('hi') || normalizedQuery.includes('hey')) {
       response = {
-        message: '👋 Hello! I\'m your AI assistant. I can help you with:\n\n• Best times to launch deals\n• Optimal pricing strategies\n• Product performance insights\n• Sales improvement tips\n\nWhat would you like to know?',
+        message: '👋 Hello! I\'m your AI assistant. I can help you with:\n\n• Best times to launch deals\n• Optimal pricing strategies\n• Product/item performance insights\n• Sales improvement tips\n\nWhat would you like to know?',
         suggestions: [
           'When should I launch my next deal?',
           'What discount should I offer?',
@@ -268,7 +268,7 @@ Deno.serve(async (req) => {
     else if ((normalizedQuery.includes('how') && (normalizedQuery.includes('create') || normalizedQuery.includes('add'))) || normalizedQuery.includes('how do i')) {
       if (normalizedQuery.includes('deal') || normalizedQuery.includes('campaign')) {
         response = {
-          message: '📝 **How to Create a Deal:**\n\n1. Go to **Campaigns** page\n2. Click **"Create New Campaign"** button\n3. Fill in deal details:\n   • Product/service name\n   • Discount percentage\n   • **Start date:** At least 2 days from today\n   • **End date:** 15 days from start date\n   • Deal category\n   • Upload image\n4. Submit for review\n\n💡 **Important:** Start date should be minimum 2 days ahead to give better value. Deal runs for 15 days from start date for maximum consumer benefit!\n\n💡 **Best timing:** Launch on Friday evenings (6-8 PM) for 4.5x better engagement!',
+          message: '📝 **How to Create a Deal:**\n\n1. Go to **Campaigns** page\n2. Click **"Create New Campaign"** button\n3. Fill in deal details:\n   • Product/item/service name\n   • Discount percentage\n   • **Start date:** At least 2 days from today\n   • **End date:** 15 days from start date\n   • Deal category\n   • Upload image\n4. Submit for review\n\n💡 **Important:** Start date should be minimum 2 days ahead to give better value. Deal runs for 15 days from start date for maximum consumer benefit!\n\n💡 **Best timing:** Launch on Friday evenings (6-8 PM) for 4.5x better engagement!',
           actionButton: {
             text: 'Go to Campaigns',
             route: '/merchant/campaigns',
@@ -279,25 +279,25 @@ Deno.serve(async (req) => {
             'What are deal statuses?',
           ],
         };
-      } else if (normalizedQuery.includes('product')) {
+      } else if (normalizedQuery.includes('product') || normalizedQuery.includes('item')) {
         response = {
-          message: '📦 **How to Add Products:**\n\n1. Go to **Catalogue** page\n2. Click **"Add Product"** button\n3. Enter product details:\n   • Product name\n   • Category\n   • Upload image\n   • Description (optional)\n4. Save product\n\n💡 **Tip:** Add 10+ products for 2.4x broader reach!',
+          message: '📦 **How to Add Products/Items:**\n\n1. Go to **Catalogue** page\n2. Click **"Add Product/Item"** button\n3. Enter product/item details:\n   • Product/item name\n   • Category\n   • Upload image\n   • Description (optional)\n4. Save product/item\n\n💡 **Tip:** Add 10+ products/items for 2.4x broader reach!',
           actionButton: {
             text: 'Go to Catalogue',
             route: '/merchant/catalogue',
           },
           suggestions: [
             'How do I create a deal?',
-            'What are the product categories?',
+            'What are the product/item categories?',
             'How can I improve sales?',
           ],
         };
       } else {
         response = {
-          message: '🤔 I can help you with:\n\n• **Creating deals:** "How do I create a deal?"\n• **Adding products:** "How do I add products?"\n• **Managing profile:** "How do I edit my profile?"\n\nWhat would you like to know?',
+          message: '🤔 I can help you with:\n\n• **Creating deals:** "How do I create a deal?"\n• **Adding products/items:** "How do I add products/items?"\n• **Managing profile:** "How do I edit my profile?"\n\nWhat would you like to know?',
           suggestions: [
             'How do I create a deal?',
-            'How do I add products?',
+            'How do I add products/items?',
             'Where is my profile?',
           ],
         };
@@ -318,15 +318,15 @@ Deno.serve(async (req) => {
             'Show me analytics',
           ],
         };
-      } else if (normalizedQuery.includes('product') || normalizedQuery.includes('catalogue') || normalizedQuery.includes('catalog')) {
+      } else if (normalizedQuery.includes('product') || normalizedQuery.includes('item') || normalizedQuery.includes('catalogue') || normalizedQuery.includes('catalog')) {
         response = {
-          message: '📍 Your **Catalogue** page manages all your products. Add new products, edit details, and organize your inventory there.',
+          message: '📍 Your **Catalogue** page manages all your products/items. Add new products/items, edit details, and organize your inventory there.',
           actionButton: {
             text: 'Go to Catalogue',
             route: '/merchant/catalogue',
           },
           suggestions: [
-            'How do I add products?',
+            'How do I add products/items?',
             'Where are my campaigns?',
             'Show me analytics',
           ],
@@ -368,7 +368,7 @@ Deno.serve(async (req) => {
         };
       } else {
         response = {
-          message: '📍 **Main Pages:**\n\n• **Campaigns** - Create and manage deals\n• **Catalogue** - Add and organize products\n• **Analytics** - View performance metrics\n• **AI Insights** - Get smart recommendations\n• **Profile** - Edit account details\n\nWhich page do you want to visit?',
+          message: '📍 **Main Pages:**\n\n• **Campaigns** - Create and manage deals\n• **Catalogue** - Add and organize products/items\n• **Analytics** - View performance metrics\n• **AI Insights** - Get smart recommendations\n• **Profile** - Edit account details\n\nWhich page do you want to visit?',
           suggestions: [
             'Go to campaigns',
             'Go to catalogue',
@@ -390,7 +390,7 @@ Deno.serve(async (req) => {
         };
       } else if (normalizedQuery.includes('subscription') || normalizedQuery.includes('plan')) {
         response = {
-          message: '💳 **Subscription Plans:**\n\n• **Basic** - 5 deals/month\n• **Pro** - 15 deals/month + analytics\n• **Premium** - Unlimited deals + AI insights + Deal of the Day\n\nAll plans include product catalogue and customer engagement tools.',
+          message: '💳 **Subscription Plans:**\n\n• **Basic** - 5 deals/month\n• **Pro** - 15 deals/month + analytics\n• **Premium** - Unlimited deals + AI insights + Deal of the Day\n\nAll plans include products/items catalogue and customer engagement tools.',
           suggestions: [
             'How do I upgrade?',
             'What is Deal of the Day?',
@@ -421,7 +421,7 @@ Deno.serve(async (req) => {
         };
       } else if (normalizedQuery.includes('ai insights') || normalizedQuery.includes('ai dashboard')) {
         response = {
-          message: '🤖 **AI Insights** analyzes your business data to provide:\n\n• Product description optimization\n• Category-specific pricing strategies\n• Demand forecasting\n• Performance predictions\n• Competitor positioning\n• Category expansion recommendations\n\nAll powered by smart algorithms - no AI API costs!',
+          message: '🤖 **AI Insights** analyzes your business data to provide:\n\n• Product/item description optimization\n• Category-specific pricing strategies\n• Demand forecasting\n• Performance predictions\n• Competitor positioning\n• Category expansion recommendations\n\nAll powered by smart algorithms - no AI API costs!',
           actionButton: {
             text: 'View AI Insights',
             route: '/merchant/ai-insights',
@@ -446,10 +446,10 @@ Deno.serve(async (req) => {
     // ========== STUCK/PROBLEM QUERIES ==========
     else if (normalizedQuery.includes('stuck') || normalizedQuery.includes('problem') || normalizedQuery.includes('issue') || normalizedQuery.includes('error') || normalizedQuery.includes('not working')) {
       response = {
-        message: '🆘 **I\'m here to help!** Common issues:\n\n• **Can\'t create deal?** Check that you have products in your catalogue first\n• **Deal pending review?** Approval typically takes < 24 hours\n• **Subscription expired?** Visit Subscriptions page to renew\n• **Need immediate help?** Contact support@dealpro.com\n\nWhat specific issue are you facing?',
+        message: '🆘 **I\'m here to help!** Common issues:\n\n• **Can\'t create deal?** Check that you have products/items in your catalogue first\n• **Deal pending review?** Approval typically takes < 24 hours\n• **Subscription expired?** Visit Subscriptions page to renew\n• **Need immediate help?** Contact support@dealpro.com\n\nWhat specific issue are you facing?',
         suggestions: [
           'How do I create a deal?',
-          'How do I add products?',
+          'How do I add products/items?',
           'Where is my profile?',
         ],
       };
@@ -457,7 +457,7 @@ Deno.serve(async (req) => {
     // ========== HELP QUERIES ==========
     else if (normalizedQuery.includes('help') || normalizedQuery === 'what can you do') {
       response = {
-        message: '🤖 I\'m your complete assistant! Ask me about:\n\n**📊 Business Insights:**\n• "When should I launch my next deal?"\n• "What discount should I offer?"\n• "How can I improve sales?"\n\n**🧭 Navigation:**\n• "Where are my campaigns?"\n• "Show me analytics"\n\n**📚 How-To Guides:**\n• "How do I create a deal?"\n• "How do I add products?"\n\n**💡 Feature Explanations:**\n• "What is Deal of the Day?"\n• "What are AI insights?"\n\nJust ask naturally!',
+        message: '🤖 I\'m your complete assistant! Ask me about:\n\n**📊 Business Insights:**\n• "When should I launch my next deal?"\n• "What discount should I offer?"\n• "How can I improve sales?"\n\n**🧭 Navigation:**\n• "Where are my campaigns?"\n• "Show me analytics"\n\n**📚 How-To Guides:**\n• "How do I create a deal?"\n• "How do I add products/items?"\n\n**💡 Feature Explanations:**\n• "What is Deal of the Day?"\n• "What are AI insights?"\n\nJust ask naturally!',
         suggestions: [
           'How do I create a deal?',
           'What discount should I offer?',
@@ -469,11 +469,11 @@ Deno.serve(async (req) => {
     // ========== DEFAULT/UNCLEAR QUERIES ==========
     else {
       response = {
-        message: 'I\'m not sure I understood that. I can help you with:\n\n• Launch timing for deals\n• Pricing & discount strategies\n• Product performance analysis\n• Sales improvement tips\n\nTry asking something like "When should I launch my next deal?" or "What discount should I offer?"',
+        message: 'I\'m not sure I understood that. I can help you with:\n\n• Launch timing for deals\n• Pricing & discount strategies\n• Product/item performance analysis\n• Sales improvement tips\n\nTry asking something like "When should I launch my next deal?" or "What discount should I offer?"',
         suggestions: [
           'When should I launch my next deal?',
           'What discount should I offer?',
-          'Which products perform best?',
+          'Which products/items perform best?',
           'How can I improve sales?',
         ],
       };

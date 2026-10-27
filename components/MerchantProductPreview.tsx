@@ -273,7 +273,7 @@ export const MerchantProductPreview: React.FC<Props> = ({ item, theme, onClose, 
           {specEntries.length > 0 && (
             <div>
               <h3 className={`text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Product Details
+                Product/Item Details
               </h3>
               <div className={`rounded-lg ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'} divide-y ${isDark ? 'divide-slate-700/50' : 'divide-slate-200'}`}>
                 {specEntries.map(([key, value]) => (
@@ -309,7 +309,7 @@ export const MerchantProductPreview: React.FC<Props> = ({ item, theme, onClose, 
             className="flex-1 h-11 rounded-xl bg-slate-900 text-white text-sm font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
             <Edit2 className="w-4 h-4" />
-            Edit Product
+            Edit Product/Item
           </button>
         </div>
       </div>

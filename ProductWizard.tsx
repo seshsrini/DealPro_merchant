@@ -476,7 +476,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
           <X className={`w-5 h-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
         </button>
         <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-          {editProduct ? 'Edit Product' : 'New Product'}
+          {editProduct ? 'Edit Product/Item' : 'New Product/Item'}
         </span>
         <button
           onClick={() => setShowDiscardConfirm(true)}
@@ -561,10 +561,10 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
               <CheckCircle2 className="w-8 h-8 text-emerald-500" />
             </div>
             <h3 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              {editProduct ? 'Product Updated!' : 'Product Added!'}
+              {editProduct ? 'Product/Item Updated!' : 'Product/Item Added!'}
             </h3>
             <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Your product catalogue has been updated.
+              Your catalogue has been updated.
             </p>
           </div>
         </div>

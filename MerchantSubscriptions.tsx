@@ -980,7 +980,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                     : new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
                   }
                 </span>
-                , but you won't be able to post new promotions or update your product catalogue.
+                , but you won't be able to post new promotions or update your catalogue.
               </p>
             </div>
 

@@ -18,6 +18,7 @@ import {
 import { Geolocation } from '@capacitor/geolocation';
 import { biometricService } from './services/biometricService';
 import { fcmService } from './services/fcmService';
+import { MerchantLogoEditor } from './components/MerchantLogoEditor';
 import { AppView } from './types';
 import { editProfileService } from './services/editProfileService';
 import { useTranslation } from './contexts/LanguageContext';
@@ -329,6 +330,14 @@ export const EditProfile: React.FC<EditProfileProps> = ({ user, setUser, setView
               <Store className={`w-3.5 h-3.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`} />,
               t('m_store_info')
             )}
+
+            <MerchantLogoEditor
+              logoUrl={(user as any).logo_url}
+              storeName={storeName}
+              theme={theme}
+              canEdit={!(user as any).staff_role || (user as any).staff_role === 'owner'}
+              onChange={(logo_url) => setUser({ ...user, logo_url } as any)}
+            />
 
             <div>
               {fieldLabel(t('m_store_name'))}

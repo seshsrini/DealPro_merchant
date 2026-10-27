@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
           field: 'title',
           severity: 'info',
           message: 'Title could be more descriptive',
-          suggestion: 'Titles with 30-50 characters get 2.1x more clicks. Add specific product details or value proposition.',
+          suggestion: 'Titles with 30-50 characters get 2.1x more clicks. Add specific product/item details or value proposition.',
           impact: 'Good but can improve',
           currentValue: `${titleLength} characters`,
           recommendedValue: '30-50 characters',
@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
             field: 'category',
             severity: 'success',
             message: 'Category matches your strengths',
-            suggestion: `This matches your top category (${topCategory[0]}) where you have ${topCategory[1]} products. Great choice!`,
+            suggestion: `This matches your top category (${topCategory[0]}) where you have ${topCategory[1]} products/items. Great choice!`,
             impact: 'Aligned with inventory',
           });
         } else {
@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
             field: 'category',
             severity: 'info',
             message: 'Consider your top category',
-            suggestion: `You have the most products in ${topCategory[0]} (${topCategory[1]} products). Deals in your strongest category often perform better.`,
+            suggestion: `You have the most products/items in ${topCategory[0]} (${topCategory[1]} products/items). Deals in your strongest category often perform better.`,
             impact: 'Minor optimization opportunity',
             recommendedValue: topCategory[0],
           });

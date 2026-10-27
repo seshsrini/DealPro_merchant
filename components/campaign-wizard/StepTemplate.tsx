@@ -121,7 +121,7 @@ export const StepTemplate: React.FC<StepTemplateProps> = ({
           </div>
           <div className="text-left flex-1">
             <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Buy & Get Free Gift</p>
-            <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Combine product + gift into one eye-catching image</p>
+            <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Combine product/item + gift into one eye-catching image</p>
           </div>
           <ArrowRight className={`w-4 h-4 shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
         </button>
