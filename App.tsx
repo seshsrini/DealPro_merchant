@@ -18,6 +18,8 @@ import { useCatalogueAccessLocked } from './hooks/useCatalogueAccess';
 import { SleepingBanner } from './components/SleepingBanner';
 import { DealProLogo } from './components/DealProLogo';
 import { MerchantOnboarding } from './MerchantOnboarding';
+import { BusinessRegistrationRequired } from './components/BusinessRegistrationRequired';
+import { hasBusinessDocument } from './components/merchant-onboarding/signupValidation';
 import { QRscan } from './QRscan';
 import { WebLoginApprovalModal } from './components/WebLoginApprovalModal';
 import { webLoginApprovalService, type PendingWebLogin } from './services/webLoginApprovalService';
@@ -40,7 +42,7 @@ import { TermsOfServiceSignup } from './TermsOfServiceSignup'; // Terms of Servi
 // Everything else (dashboard, deals, catalogue, profile, etc.) is gated.
 const MERCHANT_GATE_EXEMPT: AppView[] = [
   'splash', 'login', 'welcome', 'language_selection', 'location_permission', 'verify_phone',
-  'merchant_onboarding', 'merchant_subscriptions',
+  'merchant_onboarding', 'merchant_subscriptions', 'business_registration',
   'terms_of_service', 'privacy_policy', 'terms_of_service_signup', 'privacy_policy_signup',
 ];
 
@@ -52,6 +54,22 @@ const MERCHANT_GATE_EXEMPT: AppView[] = [
 // finish paying); an incomplete one goes back into the wizard (which resumes at the
 // missing step). onboarding_complete is the authoritative flag; the field check is a
 // fallback for a client that predates it.
+// Business registration is mandatory (GSTIN / Udyam / FSSAI / Trade Licence — no
+// "none"). A merchant who finished the signup form without one (signed up while
+// "None / Unregistered" was offered) must add it before anything else — including
+// the subscription page, so nobody pays and is then blocked. Mid-signup merchants
+// are left to the wizard, whose Verification step requires it.
+const BUSINESS_REG_EXEMPT: AppView[] = [
+  'splash', 'login', 'welcome', 'language_selection', 'location_permission', 'verify_phone',
+  'merchant_onboarding', 'business_registration',
+  'terms_of_service', 'privacy_policy', 'terms_of_service_signup', 'privacy_policy_signup',
+];
+function needsBusinessRegistration(u: User): boolean {
+  const profileDone = (u as any).onboarding_complete === true
+    || !!(u.full_name && u.store_name && u.business_type && u.terms_accepted && u.privacy_accepted);
+  return profileDone && !hasBusinessDocument(u as any);
+}
+
 function merchantGateTarget(u: User): AppView | null {
   if (u.hasActiveSubscription) return null;
   const profileDone = (u as any).onboarding_complete === true
@@ -163,6 +181,11 @@ const AppContent: React.FC = () => {
     if (!user.isLoggedIn || user.role !== 'merchant') return;
     const staffRole = (user as any).staff_role;
     if (staffRole && staffRole !== 'owner') return; // staff never onboard/subscribe
+    if (needsBusinessRegistration(user) && !BUSINESS_REG_EXEMPT.includes(view)) {
+      console.warn('[App] Merchant gate: no business registration —', view, '→ business_registration');
+      navigateTo('business_registration');
+      return;
+    }
     if (MERCHANT_GATE_EXEMPT.includes(view)) return;
     const target = merchantGateTarget(user);
     if (target && target !== view) {
@@ -173,7 +196,8 @@ const AppContent: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, loading, user.isLoggedIn, user.role, (user as any).staff_role, user.hasActiveSubscription,
       (user as any).onboarding_complete, user.full_name, user.store_name, user.business_type,
-      user.terms_accepted, user.privacy_accepted]);
+      user.terms_accepted, user.privacy_accepted,
+      (user as any).gstin, (user as any).udyam_no, (user as any).fssai_no, (user as any).trade_license_no]);
 
   // Tracks whether the first deals fetch has completed. The loading animation
   // is shown only on this initial load — the 10s auto-refresh polls stay silent
@@ -935,6 +959,20 @@ const AppContent: React.FC = () => {
                 allowLocation={allowLocation}
                 inviteCode={inviteCode}
               />
+            ) : user.role === 'merchant' && view === 'business_registration' ? (
+              <BusinessRegistrationRequired
+                user={user}
+                setUser={setUser}
+                theme={theme}
+                onDone={() => navigateTo('merchant_dashboard')}
+                onLogout={async () => {
+                  try { await fcmService.unregisterToken(); await fcmService.cleanup(); } catch { /* ignore */ }
+                  try { await biometricService.clearSession(); } catch { /* ignore */ }
+                  try { await supabase.auth.signOut(); } catch { /* ignore */ }
+                  setUser({ id: '', username: '', isLoggedIn: false, role: 'user', access_token: null, refresh_token: null } as any);
+                  setView('login');
+                }}
+              />
             ) : user.role === 'merchant' && view === 'merchant_onboarding' ? (
               <MerchantOnboarding
                 setView={navigateTo}
@@ -967,7 +1005,7 @@ const AppContent: React.FC = () => {
               </PermissionsProvider>
             ) : null}
           </main>
-          {user.isLoggedIn && user.role === 'merchant' && !['verify_phone', 'merchant_onboarding', 'privacy_policy', 'terms_of_service', 'announcement_wizard', 'announcements_list'].includes(view) && (
+          {user.isLoggedIn && user.role === 'merchant' && !['verify_phone', 'merchant_onboarding', 'business_registration', 'privacy_policy', 'terms_of_service', 'announcement_wizard', 'announcements_list'].includes(view) && (
             <MerchantBottomNav currentView={view} setView={navigateTo} theme={theme} catalogueLocked={catalogueLocked} />
           )}
 

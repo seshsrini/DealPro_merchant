@@ -9,7 +9,7 @@ import { useTranslation } from '../../contexts/LanguageContext';
 // Validation shared with the store list, Review step and final submit.
 import { isGstValid, isPanValid, isUdyamValid, isFssaiValid, isTradeLicenseValid } from './signupValidation';
 
-type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license' | 'none';
+type BusinessType = '' | 'gstin' | 'udyam' | 'fssai' | 'trade_license'; // no 'none' — registration is mandatory
 
 interface StepBusinessVerificationProps {
   businessType: BusinessType;
@@ -226,7 +226,6 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
   // Trade License are accepted on format validity + uniqueness only.
   const isValid = (() => {
     if (!businessType) return false;
-    if (businessType === 'none') return true;
     if (businessType === 'gstin') {
       const okFormat = isGstValid(gstinValue) && gstinTaken === false && isPanValid(panValue) && panTaken === false;
       if (!okFormat) return false;
@@ -246,7 +245,6 @@ export const StepBusinessVerification: React.FC<StepBusinessVerificationProps> =
     { key: 'udyam' as BusinessType, label: t('ob_bt_udyam'), desc: t('ob_bt_udyam_desc') },
     { key: 'fssai' as BusinessType, label: t('ob_bt_fssai'), desc: t('ob_bt_fssai_desc') },
     { key: 'trade_license' as BusinessType, label: t('ob_bt_trade'), desc: t('ob_bt_trade_desc') },
-    { key: 'none' as BusinessType, label: t('ob_bt_none'), desc: t('ob_bt_none_desc') },
   ];
 
   return (

@@ -66,8 +66,18 @@ Deno.serve(async (req: Request) => {
         status: 400,
       });
     }
-    // Default to 'none' if merchant has no formal registration
-    const effectiveBusinessType = businessType || 'none';
+    // A business registration is mandatory — GSTIN, Udyam, FSSAI or Trade Licence.
+    // There is no "none / unregistered" option (older clients that still send it,
+    // or send nothing, are refused).
+    const effectiveBusinessType = String(businessType || '');
+    const docValue: Record<string, unknown> = {
+      gstin: gstin && pan, udyam: udyamNo, fssai: fssaiNo, trade_license: tradeLicenseNo,
+    };
+    if (!(effectiveBusinessType in docValue) || !docValue[effectiveBusinessType]) {
+      return new Response(JSON.stringify({
+        error: 'A business registration is required: GSTIN, Udyam, FSSAI or Trade Licence.',
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 });
+    }
 
     if (!termsAccepted || !privacyAccepted) {
       return new Response(JSON.stringify({ error: 'Terms and Privacy Policy must be accepted' }), {
@@ -99,8 +109,13 @@ Deno.serve(async (req: Request) => {
       trade_license_no: effectiveBusinessType === 'trade_license' ? (tradeLicenseNo ? tradeLicenseNo.toUpperCase() : null) : null,
       terms_accepted: true,
       privacy_accepted: true,
-      // Authoritative "signup fully finished" flag — the app gate reads this.
-      onboarding_complete: true,
+      // Profile submitted = step 9 (Privacy). onboarding_complete is NOT set here:
+      // onboarding is complete only after ALL steps, including the subscription, and
+      // the database decides that (require_business_registration.sql trigger) — it
+      // turns true, with step 12, once the profile, a business registration and an
+      // active subscription are all in place.
+      onboarding_step: 9,
+      onboarding_step_at: new Date().toISOString(),
     };
 
     // NOTE: .select() WITHOUT .single(). The old .single() threw PGRST116 ("0 rows")
@@ -116,12 +131,13 @@ Deno.serve(async (req: Request) => {
 
     // Resilience: if a newer column hasn't been added yet (migration not applied),
     // don't fail onboarding — strip the offending column and retry. Handles both
-    // legal_name and onboarding_complete; the regex only matches those names, so
+    // legal_name and onboarding_step(_at); the regex only matches those names, so
     // once they're gone any other error breaks the loop.
-    while (profileError && /(legal_name|onboarding_complete)/i.test(profileError.message || '')) {
-      const missing = /onboarding_complete/i.test(profileError.message || '') ? 'onboarding_complete' : 'legal_name';
+    while (profileError && /(legal_name|onboarding_step)/i.test(profileError.message || '')) {
+      const missing = /onboarding_step/i.test(profileError.message || '') ? 'onboarding_step' : 'legal_name';
       console.warn(`[CompleteMerchantProfile] ${missing} column missing — saving without it.`);
       delete profileUpdate[missing];
+      if (missing === 'onboarding_step') delete profileUpdate.onboarding_step_at;
       ({ data: updatedRows, error: profileError } = await adminClient
         .from('merchant_profiles')
         .update(profileUpdate)
@@ -157,10 +173,11 @@ Deno.serve(async (req: Request) => {
         .insert(insertRow)
         .select();
       // Same not-yet-migrated-column resilience on the insert path.
-      while (insertError && /(legal_name|onboarding_complete)/i.test(insertError.message || '')) {
-        const missing = /onboarding_complete/i.test(insertError.message || '') ? 'onboarding_complete' : 'legal_name';
+      while (insertError && /(legal_name|onboarding_step)/i.test(insertError.message || '')) {
+        const missing = /onboarding_step/i.test(insertError.message || '') ? 'onboarding_step' : 'legal_name';
         console.warn(`[CompleteMerchantProfile] ${missing} column missing on insert — omitting.`);
         delete insertRow[missing];
+        if (missing === 'onboarding_step') delete insertRow.onboarding_step_at;
         ({ data: insertedRows, error: insertError } = await adminClient
           .from('merchant_profiles')
           .insert(insertRow)

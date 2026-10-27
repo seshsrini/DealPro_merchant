@@ -2,6 +2,29 @@ import { supabase } from './supabaseClient';
 
 export const merchantOnboardingService = {
   /**
+   * Saves the business registration for an already-onboarded merchant (the
+   * "Business registration required" screen). Unlike patchProfile this one is
+   * NOT fire-and-forget: it throws with the server's message so the screen can
+   * show it.
+   */
+  setBusinessDocument: async (doc: {
+    businessType: 'gstin' | 'udyam' | 'fssai' | 'trade_license';
+    gstin?: string | null;
+    pan?: string | null;
+    udyamNo?: string | null;
+    fssaiNo?: string | null;
+    tradeLicenseNo?: string | null;
+  }): Promise<Record<string, any>> => {
+    const { data, error } = await supabase.functions.invoke('set-business-document', { body: doc });
+    if (!error && data && !data.error) return data;
+    let msg = data?.error as string | undefined;
+    if (!msg && error && (error as any).context) {
+      try { msg = (await (error as any).context.json())?.error; } catch { /* not JSON */ }
+    }
+    throw new Error(msg || 'Could not save your business registration. Please try again.');
+  },
+
+  /**
    * Saves one signup step into merchant_profiles (via patch-merchant-profile) so
    * partial signups are visible there. Only name, legal/store name, the business
    * document and the step number are accepted — terms/privacy, stores and

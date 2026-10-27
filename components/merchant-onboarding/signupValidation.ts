@@ -59,8 +59,7 @@ export interface SignupDocFields {
  */
 export function isDocumentComplete(d: SignupDocFields): boolean {
   switch (d.businessType) {
-    case 'none':
-      return true;
+    // No 'none' — a business registration is mandatory.
     case 'gstin':
       return isGstValid(d.gstinValue) && isPanValid(d.panValue);
     case 'udyam':
@@ -101,3 +100,25 @@ export const MISSING_LABEL_KEY: Record<MissingItem, string> = {
   store: 'ob_missing_store',
   document: 'ob_missing_document',
 };
+
+/** The four accepted registrations — there is no "none / unregistered". */
+export const BUSINESS_DOC_COLUMN = {
+  gstin: 'gstin',
+  udyam: 'udyam_no',
+  fssai: 'fssai_no',
+  trade_license: 'trade_license_no',
+} as const;
+
+/**
+ * Does this merchant profile carry a business registration? False for
+ * business_type 'none' / empty, or when the chosen document's column is
+ * explicitly empty. A column that is simply ABSENT from the object (an older
+ * cached session that predates it) is not treated as missing — the server
+ * (campaign_create_gate) is the authority and the next profile load corrects it.
+ */
+export function hasBusinessDocument(p: Record<string, any> | null | undefined): boolean {
+  if (!p) return false;
+  const col = (BUSINESS_DOC_COLUMN as Record<string, string>)[String(p.business_type ?? '')];
+  if (!col) return false;
+  return !(col in p) || !!String(p[col] ?? '').trim();
+}
