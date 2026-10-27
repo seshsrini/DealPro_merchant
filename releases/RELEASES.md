@@ -20,7 +20,31 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
-## 2026.10.26.0818 — versionCode 1793017098
+## 2026.10.26.2123 — versionCode 1793064196
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.10.26.2123-vc1793064196.aab` |
+| SHA-256 | `dc77fb4f4929680041b92e20dd441e7c3b2e119ec014adba7975a0c0e27891d5` |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`) |
+| targetSdk / minSdk | 36 / 24 |
+| Commit | `960a6e1` |
+| Play status | pending upload |
+
+Everything in `2026.10.26.0818` plus:
+
+- **Business logo.** Edit Profile → Store Information. Square-cropped on device,
+  content-checked server-side by `set-merchant-logo` (Gemini, fails closed),
+  stored at Cloudinary `dealpro-logos/merchant_<id>`, saved to
+  `merchant_profiles.logo_url` (`add_merchant_logo.sql`). Owner only.
+- **"Products" → "Products/Items"** across catalogue, product wizard, insights,
+  notifications and templates, all 9 languages; AI assistant also understands "item".
+- Login screen: small back button to the referral-code step.
+- Server side (deployed DEV + PROD 2026-10-26, before upload): set-merchant-logo,
+  get-smart-notifications, get-ai-insights-dashboard, get-ai-assistant-response,
+  optimize-campaign, analyze-product-image, get-performance-score, get-ai-insights.
+
+## 2026.10.26.0818 — versionCode 1793017098 — superseded by 2026.10.26.2123, do not upload
 
 | | |
 |---|---|
