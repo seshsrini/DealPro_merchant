@@ -15,6 +15,7 @@ import {
   Fingerprint,
   ShieldCheck,
   MapPin,
+  ArrowLeft,
 } from 'lucide-react';
 import { Geolocation } from '@capacitor/geolocation';
 import { locationsearchService } from './services/locationsearchService';
@@ -518,6 +519,17 @@ export const AuthStack: React.FC<AuthStackProps> = ({ view, setView, setUser, lo
   if (view === 'login') {
     return (
       <div className={`px-6 pt-8 pb-safe-bottom flex flex-col ${isDark ? 'bg-slate-950' : 'bg-slate-50'}`}>
+        {/* Back to the referral-code step, in case the code was skipped or mistyped. */}
+        <button
+          type="button"
+          onClick={() => setView('invite_code')}
+          aria-label="Back"
+          className={`-mt-4 mb-4 w-9 h-9 rounded-xl flex items-center justify-center active:scale-95 transition-all ${
+            isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
+          }`}
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
         <div className="w-full text-left mb-8">
           <h2 className={`text-2xl font-semibold leading-tight mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
             Partner Success
