@@ -147,15 +147,21 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // Owner only: must have their own merchant profile and not be active staff of another merchant.
+    // Owner only — same rule as get-profile / login-merchant: the caller has their own
+    // merchant profile and is not active (non-owner) staff of ANOTHER merchant.
+    // (merchant_profiles.role is not used for this anywhere else, so don't rely on it.)
     const { data: profile } = await admin
-      .from('merchant_profiles').select('id, role').eq('id', user.id).maybeSingle();
-    if (!profile || (profile.role ?? 'merchant') !== 'merchant') {
+      .from('merchant_profiles').select('id').eq('id', user.id).maybeSingle();
+    if (!profile) {
+      console.log('[set-merchant-logo] refused: no merchant profile', user.id);
       return json({ error: 'Only the store owner can change the business logo.' }, 403);
     }
     const { data: staffRows } = await admin
-      .from('merchant_staff').select('merchant_id').eq('user_id', user.id).eq('status', 'active');
-    if ((staffRows ?? []).some((r: { merchant_id: string }) => r.merchant_id && r.merchant_id !== user.id)) {
+      .from('merchant_staff').select('merchant_id, role').eq('user_id', user.id).eq('status', 'active');
+    const staffOf = (staffRows ?? []).find((r: { merchant_id: string; role: string }) =>
+      r.role !== 'owner' && r.merchant_id && r.merchant_id !== user.id);
+    if (staffOf) {
+      console.log('[set-merchant-logo] refused: staff', staffOf.role, 'of', staffOf.merchant_id, 'user', user.id);
       return json({ error: 'Only the store owner can change the business logo.' }, 403);
     }
 
