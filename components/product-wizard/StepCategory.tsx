@@ -34,10 +34,10 @@ export const StepCategory: React.FC<StepCategoryProps> = ({
         <Grid3X3 className="w-8 h-8 text-emerald-500" />
       </div>
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Product category
+        Product/item category
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        Choose the category that best fits your product.
+        Choose the category that best fits your product/item.
       </p>
 
       <div style={floatIn(300, visible)} className="space-y-2 flex-1 overflow-y-auto pb-4">

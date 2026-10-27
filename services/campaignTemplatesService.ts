@@ -204,7 +204,7 @@ export const campaignTemplatesService = {
     // Generate deal offer with better format
     // No template percentage in the offer: the % baked into the deal image must
     // come only from the offer/heading the merchant types, never the template's.
-    const dealOffer = 'Special Offer on <Your Product/Category>';
+    const dealOffer = 'Special Offer on <Your Product/Item/Category>';
 
     // Generate description based on category
     let description = '';
@@ -219,10 +219,10 @@ export const campaignTemplatesService = {
         description = `🏷️ Clearance Sale - Must Go!\n\n💥 Massive Discounts:\n• ${template.suggestedDiscount}% OFF on all items\n• Clear out inventory pricing\n• Limited stock available\n\n⚡ Act fast - While stocks last!\n\n✅ Great quality at unbeatable prices!`;
         break;
       case 'new-launch':
-        description = `🆕 New Arrival Launch Offer!\n\n🌟 Be the First:\n• Exclusive ${template.suggestedDiscount}% launch discount\n• Brand new products\n• Limited time introductory offer\n\n🎯 Early bird special pricing!\n\n💫 Get it before everyone else!`;
+        description = `🆕 New Arrival Launch Offer!\n\n🌟 Be the First:\n• Exclusive ${template.suggestedDiscount}% launch discount\n• Brand new products/items\n• Limited time introductory offer\n\n🎯 Early bird special pricing!\n\n💫 Get it before everyone else!`;
         break;
       case 'premium':
-        description = `👑 Premium Product Exclusive\n\n💎 Luxury at a Great Price:\n• ${template.suggestedDiscount}% OFF on premium items\n• High-quality products\n• Exclusive offer for valued customers\n\n✨ Treat yourself to the best!\n\n🎁 Premium quality, special price!`;
+        description = `👑 Premium Product/Item Exclusive\n\n💎 Luxury at a Great Price:\n• ${template.suggestedDiscount}% OFF on premium items\n• High-quality products/items\n• Exclusive offer for valued customers\n\n✨ Treat yourself to the best!\n\n🎁 Premium quality, special price!`;
         break;
       default:
         description = `🎯 Special Offer Alert!\n\n✅ Amazing Deal:\n• Get ${template.suggestedDiscount}% OFF\n• Limited time offer\n• Great value for money\n\n⏰ Valid for ${template.durationDays} days!\n\n💰 Save big on your favorite items!`;

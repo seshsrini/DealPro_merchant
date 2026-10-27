@@ -191,7 +191,7 @@ export const StepBannerPlacement: React.FC<StepBannerPlacementProps> = ({
       <div style={floatIn(350, visible)} className={`mb-4 p-3 rounded-xl ${isDark ? 'bg-purple-500/5 border border-purple-500/10' : 'bg-purple-50/50 border border-purple-100'}`}>
         <p className={`text-[11px] ${isDark ? 'text-purple-400/70' : 'text-purple-600/80'}`}>
           {value === 'auto'
-            ? 'Auto picks left or right based on where the product sits in your photo.'
+            ? 'Auto picks left or right based on where the product/item sits in your photo.'
             : value === 'none'
               ? 'Image only — no overlay, gradient, or text. Lets the photo speak for itself.'
               : `Text will sit on the ${BANNER_PLACEMENT_LABELS[value].toLowerCase()} of the cover image.`}

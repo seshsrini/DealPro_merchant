@@ -61,7 +61,7 @@ export const StepProductStoreSelect: React.FC<StepProductStoreSelectProps> = ({
           Select stores
         </h2>
         <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-          Choose which stores carry this product. You can select multiple.
+          Choose which stores carry this product/item. You can select multiple.
         </p>
       </div>
 

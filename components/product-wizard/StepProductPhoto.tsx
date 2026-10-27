@@ -291,7 +291,7 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
             const extraSchema = mapCategoryToSchemaId(extraAi.category);
             if (coverSchema !== 'general' && extraSchema !== 'general' && coverSchema !== extraSchema) {
               setMediaError(
-                `That looks like a different product. Please add more photos of "${analysis.product_name || analysis.category}" — not ${extraAi.product_name || extraAi.category}.`
+                `That looks like a different product/item. Please add more photos of "${analysis.product_name || analysis.category}" — not ${extraAi.product_name || extraAi.category}.`
               );
               return;
             }
@@ -398,10 +398,10 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
           <Sparkles className="w-8 h-8 text-emerald-500" />
         </div>
         <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-          Snap your product
+          Snap your product/item
         </h2>
         <p style={floatIn(200, visible)} className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-          Take a photo and our AI will identify the product, category, and details automatically.
+          Take a photo and our AI will identify the product/item, category, and details automatically.
         </p>
 
         {/* Hidden file inputs */}
@@ -455,7 +455,7 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
               <p className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>For best results</p>
               <ul className={`text-[11px] space-y-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 <li>• Good lighting, no shadows</li>
-                <li>• Product fills most of the frame</li>
+                <li>• Product/item fills most of the frame</li>
                 <li>• Plain background if possible</li>
                 <li>• Clear view of label/packaging</li>
               </ul>
@@ -465,7 +465,7 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
           // ── Photo selected — show preview + AI analysis ──
           <div style={floatIn(0, true)} className="space-y-4">
             <div className={`relative rounded-2xl overflow-hidden border-2 ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
-              <img src={previewUrl} alt="Product" className="w-full h-64 object-contain bg-slate-900" />
+              <img src={previewUrl} alt="Product/Item" className="w-full h-64 object-contain bg-slate-900" />
               {!analyzing && !error && (
                 <button
                   onClick={handleRetake}
@@ -483,7 +483,7 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
                 <Loader2 className="w-5 h-5 animate-spin text-blue-500 shrink-0" />
                 <div>
                   <p className={`text-sm font-semibold ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>Analyzing image...</p>
-                  <p className={`text-[11px] ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Gemini AI is identifying the product</p>
+                  <p className={`text-[11px] ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>Gemini AI is identifying the product/item</p>
                 </div>
               </div>
             )}
@@ -494,7 +494,7 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <p className={`text-sm font-semibold ${isDark ? 'text-red-300' : 'text-red-700'}`}>Couldn't identify product</p>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-red-300' : 'text-red-700'}`}>Couldn't identify product/item</p>
                     <p className={`text-[11px] mt-0.5 ${isDark ? 'text-red-400' : 'text-red-600'}`}>{error}</p>
                   </div>
                 </div>
@@ -525,7 +525,7 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
                   <div className="flex-1">
                     <p className={`text-sm font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Couldn't upload your photo</p>
                     <p className={`text-[11px] mt-0.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                      Check your connection and tap Continue to retry — or add this product now and attach a photo later.
+                      Check your connection and tap Continue to retry — or add this product/item now and attach a photo later.
                     </p>
                   </div>
                 </div>
@@ -545,14 +545,14 @@ export const StepProductPhoto: React.FC<StepProductPhotoProps> = ({
               <div className={`p-4 rounded-xl ${isDark ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-emerald-50 border border-emerald-200'}`}>
                 <div className="flex items-center gap-2 mb-3">
                   <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                  <p className={`text-sm font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>Product identified</p>
+                  <p className={`text-sm font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>Product/item identified</p>
                   <span className={`ml-auto text-[10px] font-semibold uppercase ${confidenceColor}`}>
                     {analysis.confidence} confidence
                   </span>
                 </div>
                 <div className="space-y-2">
                   <div>
-                    <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Product</p>
+                    <p className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Product/Item</p>
                     <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{analysis.product_name}</p>
                   </div>
                   <div>

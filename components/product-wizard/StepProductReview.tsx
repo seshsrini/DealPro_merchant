@@ -129,11 +129,11 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
         wizardState.name, wizardState.brand, specsText
       );
       if (modResult.flagged) {
-        throw new Error(modResult.reason || 'Product content violates our guidelines. Please revise.');
+        throw new Error(modResult.reason || 'Product/item content violates our guidelines. Please revise.');
       }
 
       // Phase 2: Save product
-      setProgress(editingId ? 'Updating product...' : 'Adding to catalogue...');
+      setProgress(editingId ? 'Updating product/item...' : 'Adding to catalogue...');
       const { brand, price, mrp, stockCount, schemaId, specs, additionalImages, videoUrl } = wizardState;
 
       // Extract AI-generated description (saved as a spec by the photo step)
@@ -190,7 +190,7 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
 
       onSaveSuccess();
     } catch (err: any) {
-      onSaveError(toMerchantMessage(err, { action: 'save your product', tag: '[ProductReview]' }));
+      onSaveError(toMerchantMessage(err, { action: 'save your product/item', tag: '[ProductReview]' }));
     } finally {
       setSaving(false);
       setProgress(null);
@@ -209,7 +209,7 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
           <Eye className="w-8 h-8 text-emerald-500" />
         </div>
         <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-          Review product
+          Review product/item
         </h2>
         <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           Check everything looks good before saving.
@@ -369,9 +369,9 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
               Copyright & Image Rights
             </h3>
             <div className={`text-sm leading-relaxed mb-6 space-y-3 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-              <p>By adding this product, you confirm and warrant that:</p>
+              <p>By adding this product/item, you confirm and warrant that:</p>
               <ul className="list-disc pl-5 space-y-1.5">
-                <li>You own the copyright to this product image, or have obtained proper written authorization from the copyright holder to use it</li>
+                <li>You own the copyright to this product/item image, or have obtained proper written authorization from the copyright holder to use it</li>
                 <li>The image does not infringe on any third-party intellectual property rights, trademarks, or copyrights</li>
                 <li>You assume full legal responsibility for any copyright claims, disputes, or legal issues arising from the use of this image</li>
               </ul>

@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
           };
 
           const keywords = categoryKeywords[product.category] || ['quality assured', 'best value', 'customer favorite'];
-          const suggested = `${product.name} - ${keywords[0]}. ${currentDesc || 'Premium product with excellent features'}. ${keywords[1]} and ${keywords[2]}. Limited time offer!`;
+          const suggested = `${product.name} - ${keywords[0]}. ${currentDesc || 'Premium product/item with excellent features'}. ${keywords[1]} and ${keywords[2]}. Limited time offer!`;
 
           productOptimizations.push({
             productId: product.id,
@@ -201,7 +201,7 @@ Deno.serve(async (req) => {
         };
 
         const recommendations: Record<string, string> = {
-          'rising': `Stock up on ${category} products and create time-limited deals to capitalize on growing demand`,
+          'rising': `Stock up on ${category} products/items and create time-limited deals to capitalize on growing demand`,
           'stable': `Maintain current ${category} inventory and use promotional bundles to boost sales`,
           'declining': `Clear ${category} inventory with attractive deals and pivot to trending categories`,
         };
@@ -272,11 +272,11 @@ Deno.serve(async (req) => {
         ? 'Emerging - You\'re gaining traction'
         : 'Established - You\'re a competitive player',
       suggestion: productCount < 10
-        ? 'Add 5-10 more products to reach competitive catalogue size'
+        ? 'Add 5-10 more products/items to reach competitive catalogue size'
         : 'Focus on quality deals and customer engagement to maintain edge',
       actionItems: [
         'Create 2-3 deals per month for optimal visibility',
-        'Update product images and descriptions regularly',
+        'Update product/item images and descriptions regularly',
         'Launch deals during peak times (Friday 6-9 PM)',
         'Expand to 3+ categories for broader market reach',
       ],

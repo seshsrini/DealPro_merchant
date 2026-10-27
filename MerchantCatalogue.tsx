@@ -230,10 +230,10 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
         <div className="flex items-center justify-between">
           <div>
             <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Product Catalogue
+              Products/Items Catalogue
             </h1>
             <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              {items.length} {items.length === 1 ? 'product' : 'products'} listed
+              {items.length} {items.length === 1 ? 'product/item' : 'products/items'} listed
             </p>
           </div>
           {items.length > 0 && (
@@ -242,7 +242,7 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
               className="flex items-center gap-2 h-10 px-4 rounded-xl bg-slate-900 text-white text-sm font-medium active:scale-[0.98] transition-all"
             >
               <Plus className="w-4 h-4" />
-              Add Product
+              Add Product/Item
             </button>
           )}
         </div>
@@ -290,17 +290,17 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
             <Package className={`w-8 h-8 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
           </div>
           <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            No products yet
+            No products/items yet
           </h3>
           <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Build your product catalogue. Use barcode or name lookup to auto-fill details.
+            Build your products/items catalogue. Use barcode or name lookup to auto-fill details.
           </p>
           <button
             onClick={openAdd}
             className="flex items-center gap-2 h-11 px-6 rounded-xl bg-slate-900 text-white text-sm font-medium active:scale-[0.98] transition-all"
           >
             <Plus className="w-4 h-4" />
-            Add First Product
+            Add First Product/Item
           </button>
         </div>
       )}
@@ -430,7 +430,7 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
         <div className="flex flex-col items-center py-16 text-center px-6">
           <AlertCircle className={`w-10 h-10 mb-3 ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
           <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            No products in this category
+            No products/items in this category
           </p>
         </div>
       )}
@@ -468,10 +468,10 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
         <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6 bg-black/50">
           <div className={`w-full max-w-sm rounded-xl p-6 ${isDark ? 'bg-slate-900 border border-slate-800' : 'bg-white border border-slate-200'}`}>
             <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Remove product?
+              Remove product/item?
             </h3>
             <p className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              This will remove the product from your catalogue. This action cannot be undone.
+              This will remove the product/item from your catalogue. This action cannot be undone.
             </p>
             <div className="flex gap-3">
               <button

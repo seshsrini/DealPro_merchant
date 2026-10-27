@@ -38,7 +38,7 @@ Instructions:
 6. Set "confidence" to "high" / "medium" / "low" based on how clearly you can identify the product.
 
 If the image is unclear, blurry, or NOT a retail product (e.g., a person, scenery, random object), return:
-{ "error": "Could not identify a product. Please retake the photo with better lighting and focus." }
+{ "error": "Could not identify a product/item. Please retake the photo with better lighting and focus." }
 
 Output format (JSON only, no markdown, no commentary):
 {

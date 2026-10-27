@@ -245,7 +245,7 @@ export const SmartNotifications: React.FC<SmartNotificationsProps> = ({
           <div>
             <p className={`text-xs font-semibold mb-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>About Smart Alerts</p>
             <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              We analyze your product performance, customer engagement, and market trends to bring you
+              We analyze your product/item performance, customer engagement, and market trends to bring you
               timely, actionable insights that help grow your business.
             </p>
           </div>

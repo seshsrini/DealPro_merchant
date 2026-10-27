@@ -211,7 +211,7 @@ export const MerchantAIInsights: React.FC<MerchantAIInsightsProps> = ({ user, th
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'}`}>
               <FileText className="w-4 h-4 text-cyan-500" />
             </div>
-            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Product Description Optimizer</h3>
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Product/Item Description Optimizer</h3>
           </div>
 
           <div className="space-y-3">
@@ -277,7 +277,7 @@ export const MerchantAIInsights: React.FC<MerchantAIInsightsProps> = ({ user, th
                     <Package className="w-3.5 h-3.5 text-emerald-500" />
                     <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>{strategy.category}</p>
                   </div>
-                  <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{strategy.productCount} products</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{strategy.productCount} products/items</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mb-3">

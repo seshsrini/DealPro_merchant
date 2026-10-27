@@ -69,16 +69,16 @@ export const StepProductName: React.FC<StepProductNameProps> = ({
         <Package className="w-8 h-8 text-emerald-500" />
       </div>
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Product details
+        Product/item details
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        Enter the product name and brand.
+        Enter the product/item name and brand.
       </p>
 
       <div style={floatIn(300, visible)} className="space-y-4">
         <div>
           <label className={`block text-xs font-semibold mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Product Name <span className="text-red-500">*</span>
+            Product/Item Name <span className="text-red-500">*</span>
           </label>
           <input
             ref={nameRef}

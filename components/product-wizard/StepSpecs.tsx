@@ -73,7 +73,7 @@ export const StepSpecs: React.FC<StepSpecsProps> = ({
         <ClipboardList className="w-8 h-8 text-emerald-500" />
       </div>
       <h2 style={floatIn(100, visible)} className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-        Product specifications
+        Product/item specifications
       </h2>
       <p style={floatIn(200, visible)} className={`text-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
         Fill in {schema.label} details. All fields are optional.
