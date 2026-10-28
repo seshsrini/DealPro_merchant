@@ -115,6 +115,64 @@ async function razorpayRefund(paymentId: string): Promise<{ id: string } | null>
   return json;
 }
 
+// ── One live plan per merchant ───────────────────────────────────────────────
+// A plan change (e.g. Basic -> Platinum) is a NEW Razorpay subscription, so it
+// arrives here as a new row. Once that new one is charged, every other live
+// subscription of the merchant must be cancelled AT RAZORPAY (or it keeps
+// billing) and its row retired. The website's verify step also does this, but
+// this webhook can arrive first, or the merchant may close the page before that
+// step runs - which left merchants paying for two plans.
+const LIVE_SUB_STATUSES = ['active', 'pending_activation', 'authenticated', 'paused', 'halted'];
+
+async function razorpayCancelSubscription(subscriptionId: string): Promise<boolean> {
+  const keyId = Deno.env.get('RAZORPAY_KEY_ID');
+  const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET');
+  if (!keyId || !keySecret) {
+    console.error('[razorpay-webhook] RAZORPAY_KEY_ID/SECRET not set — cannot cancel', subscriptionId);
+    return false;
+  }
+  const res = await fetch(`https://api.razorpay.com/v1/subscriptions/${subscriptionId}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Basic ' + btoa(`${keyId}:${keySecret}`) },
+    body: JSON.stringify({ cancel_at_cycle_end: 0 }),
+  });
+  if (res.ok) return true;
+  const json = await res.json().catch(() => ({}));
+  const desc = String(json?.error?.description ?? '');
+  // Already cancelled/completed at Razorpay — nothing left to stop.
+  if (/cancelled|completed|expired/i.test(desc)) return true;
+  console.error('[razorpay-webhook] Cancel of replaced subscription failed:', subscriptionId, desc || res.status);
+  return false;
+}
+
+async function retireOtherSubscriptions(supabase: any, merchantId: string, keepSubscriptionId: string): Promise<void> {
+  const { data: others, error } = await supabase
+    .from('merchant_subscriptions')
+    .select('id, razorpay_subscription_id, plan_name, status')
+    .eq('merchant_id', merchantId)
+    .in('status', LIVE_SUB_STATUSES);
+  if (error) {
+    console.error('[razorpay-webhook] Could not look up other subscriptions:', error.message);
+    return;
+  }
+  for (const o of others ?? []) {
+    if (o.razorpay_subscription_id === keepSubscriptionId) continue;
+    // Stop the money first; if Razorpay refuses, leave the row live so it stays visible.
+    if (o.razorpay_subscription_id && !(await razorpayCancelSubscription(o.razorpay_subscription_id))) continue;
+    const { error: updErr } = await supabase
+      .from('merchant_subscriptions')
+      .update({
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason: 'Replaced by plan change',
+        ...(o.razorpay_subscription_id ? { razorpay_status: 'cancelled' } : {}),
+      })
+      .eq('id', o.id);
+    if (updErr) console.error('[razorpay-webhook] Could not retire subscription row', o.id, updErr.message);
+    else console.log('[razorpay-webhook] Retired', o.plan_name, o.razorpay_subscription_id ?? `(row ${o.id})`, 'for', merchantId, '— replaced by', keepSubscriptionId);
+  }
+}
+
 // ── GST on subscriptions ─────────────────────────────────────────────────────
 // subscription_tiers.subscription_fee is the BASE (pre-GST) price; Razorpay
 // plans are priced at base + GST (18%). The DB RPC subscription_gst_breakup
@@ -464,22 +522,39 @@ Deno.serve(async (req: Request) => {
       return new Response('ok (unhandled)', { status: 200 });
   }
 
-  let { error: upsertErr } = await supabase
-    .from('merchant_subscriptions')
-    .upsert(patch, { onConflict: 'razorpay_subscription_id' });
+  // Existing row -> UPDATE it. (An upsert builds a full INSERT row first, and
+  // Postgres rejects it on the NOT NULL plan_name before it ever sees the conflict
+  // — so cancelled/halted/paused/resumed/completed events, which carry no plan,
+  // silently failed and merchants stayed 'active'.) No row yet -> INSERT, which
+  // needs a plan_name (from the subscription notes or the charged plan).
+  const writeSub = () => {
+    if (existingSub) {
+      return supabase.from('merchant_subscriptions').update(patch).eq('razorpay_subscription_id', subEntity.id);
+    }
+    if (!patch.plan_name) {
+      return Promise.resolve({ error: { message: `no plan_name for new subscription ${subEntity.id}` } });
+    }
+    return supabase.from('merchant_subscriptions').insert(patch);
+  };
+  let { error: upsertErr } = await writeSub();
   // Schema lag: if the GST breakup columns aren't there yet, retry without them
   // rather than 500-ing (which would block activation behind Razorpay retries).
   if (upsertErr && SUB_GST_COLS.some((c) => c in patch && (upsertErr!.message || '').includes(c))) {
     console.warn('[razorpay-webhook] GST columns missing on merchant_subscriptions — retrying without them:', upsertErr.message);
     for (const c of SUB_GST_COLS) delete patch[c];
-    ({ error: upsertErr } = await supabase
-      .from('merchant_subscriptions')
-      .upsert(patch, { onConflict: 'razorpay_subscription_id' }));
+    ({ error: upsertErr } = await writeSub());
   }
   if (upsertErr) {
-    console.error('[razorpay-webhook] Upsert failed:', upsertErr);
-    // Returning 500 makes Razorpay retry — desired so we don't drop state.
+    console.error('[razorpay-webhook] Subscription write failed:', upsertErr);
+    // Un-record the event so Razorpay's retry is processed instead of being
+    // short-circuited as a duplicate, then 500 so Razorpay retries.
+    await supabase.from('razorpay_webhook_events').delete().eq('event_id', razorpayEventId);
     return new Response('DB error', { status: 500 });
+  }
+
+  // A charged subscription is now THE plan: retire any other live one (see above).
+  if (event.event === 'subscription.charged') {
+    await retireOtherSubscriptions(supabase, merchantId, subEntity.id);
   }
 
   // Notify the merchant on the two outcomes they care about: a successful renewal
