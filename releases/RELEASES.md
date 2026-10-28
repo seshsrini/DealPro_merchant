@@ -20,6 +20,26 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.10.27.2050 — versionCode 1793148602
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-2026.10.27.2050-vc1793148602.aab` |
+| SHA-256 | `d8c32df1b28d68c773c5f511a473d69359fbe0c61b80af99c286a74b0b69d712` |
+| Size | 22,274,509 bytes |
+| Signing key | `CN=DealPro…` (alias `dealpro-merchant`), SHA1 `32:7F:5C:…:FD:F5` |
+| targetSdk / minSdk | 36 / 24 |
+| Commit | `0b0cbf4` |
+| Play status | pending upload |
+
+Everything in `2026.10.27.0851` plus:
+
+- **Security — login requires proof of phone ownership.** After the SMS code (or
+  instant verification) the app sends Firebase's ID token with the login call;
+  `login-merchant` verifies it (Google keys, our Firebase projects, same phone,
+  < 15 min). Server deployed DEV + PROD 2026-10-27 in lenient mode: app versions
+  without the token still work until the `REQUIRE_PHONE_PROOF` secret is set.
+
 ## 2026.10.27.0851 — versionCode 1793105486
 
 | | |
