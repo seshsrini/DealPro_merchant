@@ -12,33 +12,44 @@ import { createRemoteJWKSet, jwtVerify } from 'https://esm.sh/jose@5.9.6';
 // token as `firebase_token`. We check it with Google's public keys and require it
 // to prove exactly the phone being logged in / registered, so a session can't be
 // obtained by just knowing someone's number.
-// Rollout: old app versions send no token. Until the Supabase secret
-// REQUIRE_PHONE_PROOF is set to "true" such calls are still served (and logged as
-// "legacy login without phone proof" so adoption can be watched); a token that IS
-// sent but fails verification is always rejected.
+// Rollout — safe by design, controlled by the Supabase secret PHONE_PROOF_MODE:
+//   unset / "observe" → NEVER blocks a login. Every login logs one line
+//                       "phone-proof ok | missing | invalid:<reason> | unavailable:<reason>"
+//                       so real-device results can be checked before enforcing.
+//   "enforce"         → missing or invalid proof is refused (401). If Google's
+//                       keys can't be reached ("unavailable") the login is still
+//                       allowed, so a Google outage never locks users out.
 const FIREBASE_PROJECTS = ['dealpro-prod---c', 'dealpro-eacaf', 'dealpro-prod---m', 'dealpro-merchant'];
 const FIREBASE_JWKS = createRemoteJWKSet(
   new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'),
 );
-type PhoneProof = 'ok' | 'missing' | 'invalid';
+type PhoneProof = { result: 'ok' | 'missing' | 'invalid' | 'unavailable'; reason?: string };
 async function verifyPhoneProof(token: unknown, e164Digits: string): Promise<PhoneProof> {
-  if (typeof token !== 'string' || !token) return 'missing';
+  if (typeof token !== 'string' || !token) return { result: 'missing' };
   try {
     const { payload } = await jwtVerify(token, FIREBASE_JWKS, {
       audience: FIREBASE_PROJECTS,
       issuer: FIREBASE_PROJECTS.map((p) => `https://securetoken.google.com/${p}`),
     });
-    if (payload.iss !== `https://securetoken.google.com/${payload.aud}`) return 'invalid';
+    if (payload.iss !== `https://securetoken.google.com/${payload.aud}`) return { result: 'invalid', reason: 'issuer-audience' };
     const provider = (payload.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider;
+    if (provider !== 'phone') return { result: 'invalid', reason: `provider-${provider}` };
     const proven = String(payload.phone_number ?? '').replace(/\D/g, '');
-    const age = Date.now() / 1000 - Number(payload.auth_time ?? 0);
-    if (provider !== 'phone' || proven !== e164Digits || !(age >= -60 && age < 15 * 60)) return 'invalid';
-    return 'ok';
-  } catch {
-    return 'invalid';
+    if (proven !== e164Digits) return { result: 'invalid', reason: 'phone-mismatch' };
+    const age = Math.round(Date.now() / 1000 - Number(payload.auth_time ?? 0));
+    if (!(age >= -60 && age < 15 * 60)) return { result: 'invalid', reason: `age-${age}s` };
+    return { result: 'ok' };
+  } catch (e: any) {
+    const code = String(e?.code ?? '');
+    const msg = String(e?.message ?? e);
+    // Key fetch problems are Google/network issues, not a bad token.
+    if (code === 'ERR_JWKS_TIMEOUT' || code === 'ERR_JWKS_INVALID' || e instanceof TypeError || /fetch|network|timed? ?out/i.test(msg)) {
+      return { result: 'unavailable', reason: code || msg.slice(0, 80) };
+    }
+    return { result: 'invalid', reason: code || msg.slice(0, 80) };
   }
 }
-const phoneProofRequired = () => (Deno.env.get('REQUIRE_PHONE_PROOF') ?? '').toLowerCase() === 'true';
+const phoneProofEnforced = () => (Deno.env.get('PHONE_PROOF_MODE') ?? '').trim().toLowerCase() === 'enforce';
 const maskPhone = (p: string) => (p.length > 4 ? `${'*'.repeat(p.length - 4)}${p.slice(-4)}` : '****');
 
 const corsHeaders = {
@@ -108,17 +119,18 @@ Deno.serve(async (req: Request) => {
     console.log('[MerchantOtpLogin] Login attempt for phone:', normalizedPhone);
 
     // Phone-ownership proof (see verifyPhoneProof above).
+    // Phone-ownership proof (see verifyPhoneProof above). Logged for every
+    // login; only refused when PHONE_PROOF_MODE=enforce.
     const phoneProof = await verifyPhoneProof(body.firebase_token, `${cc}${normalizedPhone}`);
-    if (phoneProof === 'invalid' || (phoneProof === 'missing' && phoneProofRequired())) {
-      console.warn('[MerchantOtpLogin] phone proof', phoneProof, 'for', maskPhone(normalizedPhone));
-      return new Response(JSON.stringify(phoneProof === 'missing'
+    console.log('[MerchantOtpLogin] phone-proof', phoneProof.result + (phoneProof.reason ? `:${phoneProof.reason}` : ''), maskPhone(normalizedPhone));
+    if (phoneProofEnforced() && (phoneProof.result === 'missing' || phoneProof.result === 'invalid')) {
+      return new Response(JSON.stringify(phoneProof.result === 'missing'
         ? { error: 'Please update the app to sign in.', code: 'APP_UPDATE_REQUIRED' }
         : { error: 'Phone verification failed. Please request a new code and try again.', code: 'PHONE_PROOF_INVALID' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 401,
       });
     }
-    if (phoneProof === 'missing') console.warn('[MerchantOtpLogin] legacy login without phone proof', maskPhone(normalizedPhone));
 
 
     // Look up user in merchant_profiles
