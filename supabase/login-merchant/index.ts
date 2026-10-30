@@ -5,41 +5,6 @@ declare const Deno: {
 };
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { createRemoteJWKSet, jwtVerify } from 'https://esm.sh/jose@5.9.6';
-
-// ── Phone-ownership proof ────────────────────────────────────────────────────
-// The app verifies the SMS code with Firebase and sends the resulting Firebase ID
-// token as `firebase_token`. We check it with Google's public keys and require it
-// to prove exactly the phone being logged in / registered, so a session can't be
-// obtained by just knowing someone's number.
-// Rollout: old app versions send no token. Until the Supabase secret
-// REQUIRE_PHONE_PROOF is set to "true" such calls are still served (and logged as
-// "legacy login without phone proof" so adoption can be watched); a token that IS
-// sent but fails verification is always rejected.
-const FIREBASE_PROJECTS = ['dealpro-prod---c', 'dealpro-eacaf', 'dealpro-prod---m', 'dealpro-merchant'];
-const FIREBASE_JWKS = createRemoteJWKSet(
-  new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'),
-);
-type PhoneProof = 'ok' | 'missing' | 'invalid';
-async function verifyPhoneProof(token: unknown, e164Digits: string): Promise<PhoneProof> {
-  if (typeof token !== 'string' || !token) return 'missing';
-  try {
-    const { payload } = await jwtVerify(token, FIREBASE_JWKS, {
-      audience: FIREBASE_PROJECTS,
-      issuer: FIREBASE_PROJECTS.map((p) => `https://securetoken.google.com/${p}`),
-    });
-    if (payload.iss !== `https://securetoken.google.com/${payload.aud}`) return 'invalid';
-    const provider = (payload.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider;
-    const proven = String(payload.phone_number ?? '').replace(/\D/g, '');
-    const age = Date.now() / 1000 - Number(payload.auth_time ?? 0);
-    if (provider !== 'phone' || proven !== e164Digits || !(age >= -60 && age < 15 * 60)) return 'invalid';
-    return 'ok';
-  } catch {
-    return 'invalid';
-  }
-}
-const phoneProofRequired = () => (Deno.env.get('REQUIRE_PHONE_PROOF') ?? '').toLowerCase() === 'true';
-const maskPhone = (p: string) => (p.length > 4 ? `${'*'.repeat(p.length - 4)}${p.slice(-4)}` : '****');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -106,20 +71,6 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log('[MerchantOtpLogin] Login attempt for phone:', normalizedPhone);
-
-    // Phone-ownership proof (see verifyPhoneProof above).
-    const phoneProof = await verifyPhoneProof(body.firebase_token, `${cc}${normalizedPhone}`);
-    if (phoneProof === 'invalid' || (phoneProof === 'missing' && phoneProofRequired())) {
-      console.warn('[MerchantOtpLogin] phone proof', phoneProof, 'for', maskPhone(normalizedPhone));
-      return new Response(JSON.stringify(phoneProof === 'missing'
-        ? { error: 'Please update the app to sign in.', code: 'APP_UPDATE_REQUIRED' }
-        : { error: 'Phone verification failed. Please request a new code and try again.', code: 'PHONE_PROOF_INVALID' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 401,
-      });
-    }
-    if (phoneProof === 'missing') console.warn('[MerchantOtpLogin] legacy login without phone proof', maskPhone(normalizedPhone));
-
 
     // Look up user in merchant_profiles
     let { data: merchantProfile, error: lookupError } = await adminClient

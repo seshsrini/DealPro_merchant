@@ -1,5 +1,4 @@
 import { supabase, supabaseUrl, supabaseAnonKey, updateSupabaseSession } from "./supabaseClient";
-import { firebaseAuthService } from './firebaseAuthService';
 import { ActivityLog } from "../types";
 
 /**
@@ -49,7 +48,7 @@ export const userService = {
       try {
         console.log(`[userService] Calling login-merchant (attempt ${attempt})...`);
         const { data, error } = await supabase.functions.invoke('login-merchant', {
-          body: { phone, country_code: countryCode, ...(inviteCode ? { invite_code: inviteCode } : {}), firebase_token: firebaseAuthService.getPhoneProof() ?? undefined },
+          body: { phone, country_code: countryCode, ...(inviteCode ? { invite_code: inviteCode } : {}) },
           headers: { 'Content-Type': 'application/json' },
         });
 
