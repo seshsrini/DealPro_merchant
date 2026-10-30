@@ -279,8 +279,24 @@ supabase.functions.invoke = async (functionName: string, options?: any) => {
       console.error('[SupabaseClient] Retry refresh failed:', retryErr?.message);
     }
   }
+
+  // Retry once on a transient platform error (502/503/504 from Supabase's edge
+  // gateway, or the request never reaching it). These come back as an HTML page
+  // in a few ms, before the function runs; a second attempt almost always works.
+  // Read-only functions only: retrying a write could create something twice.
+  const status = (result.error as any)?.context?.status;
+  const errName = (result.error as any)?.name || '';
+  const transient = status === 502 || status === 503 || status === 504 || errName === 'FunctionsFetchError';
+  if (transient && READ_ONLY_FN.test(functionName)) {
+    console.warn('[SupabaseClient]', status || errName, 'from', functionName, '— retrying once');
+    await new Promise((r) => setTimeout(r, 700));
+    result = await originalInvoke(functionName, finalOptions);
+  }
   return result;
 };
+
+/** Functions safe to call twice (they only read). */
+const READ_ONLY_FN = /^(get|list|fetch|search|check|validate|lookup)-|^reverse-geocode$/;
 
 /**
  * Updates the global Supabase client with an active session.
