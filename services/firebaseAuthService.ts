@@ -31,16 +31,12 @@ if (getApps().length === 0) {
 class FirebaseAuthService {
   private verificationId: string | null = null;
   private emailIdToken: string | null = null;
-  /** Firebase ID token proving the phone just verified (sent to our login functions). */
-  private phoneIdToken: string | null = null;
-  private phoneIdTokenAt = 0;
 
   /**
    * Send OTP to the given phone number.
    * @param phoneNumber Full phone number with country code, e.g. "+919876543210"
    */
   async sendOtp(phoneNumber: string): Promise<void> {
-    this.phoneIdToken = null;
     console.log('[FirebaseAuth] Sending OTP to:', phoneNumber);
 
     try {
@@ -150,7 +146,6 @@ class FirebaseAuthService {
     // If phone was auto-verified, no code check needed
     if (this.verificationId === '__AUTO_VERIFIED__') {
       console.log('[FirebaseAuth] Phone was auto-verified, skipping code confirmation.');
-      await this.capturePhoneProof();
       await this.signOutFirebase();
       return true;
     }
@@ -165,7 +160,6 @@ class FirebaseAuthService {
 
       // Sign out from Firebase immediately — we only use Firebase for OTP,
       // not for session management. Supabase handles auth.
-      await this.capturePhoneProof();
       await this.signOutFirebase();
 
       return true;
@@ -457,28 +451,6 @@ class FirebaseAuthService {
   /**
    * Sign out from Firebase (cleanup after OTP verification).
    */
-  /**
-   * Keep Firebase's ID token for the phone just verified. Our login/registration
-   * functions check it server-side (proof that this device owns the number)
-   * before issuing a session. Must run before signOutFirebase().
-   */
-  private async capturePhoneProof(): Promise<void> {
-    try {
-      const { token } = await FirebaseAuthentication.getIdToken({ forceRefresh: false });
-      this.phoneIdToken = token || null;
-      this.phoneIdTokenAt = Date.now();
-    } catch (error) {
-      console.warn('[FirebaseAuth] Could not read phone ID token:', error);
-      this.phoneIdToken = null;
-    }
-  }
-
-  /** The phone proof from the last successful verification, if still fresh (< 14 min). */
-  getPhoneProof(): string | null {
-    if (!this.phoneIdToken || Date.now() - this.phoneIdTokenAt > 14 * 60 * 1000) return null;
-    return this.phoneIdToken;
-  }
-
   private async signOutFirebase(): Promise<void> {
     try {
       await FirebaseAuthentication.signOut();
