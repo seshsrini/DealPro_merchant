@@ -93,17 +93,23 @@ Deno.serve(async (req) => {
       generationConfig: {
         temperature: 0.2,
         topP: 0.8,
-        maxOutputTokens: 800,
+        // "Thinking" models (gemini-flash-latest) spend part of this budget on
+        // reasoning before answering; at 800 the JSON was cut off mid-way
+        // (PROD, 29 Oct 2026). Only tokens actually used are billed.
+        maxOutputTokens: 4096,
         responseMimeType: 'application/json',
       },
     };
 
-    // Try each model+endpoint combination until one succeeds
-    let geminiResp: Response | null = null;
+    // Try each model until one returns complete, parseable JSON. A cut-off or
+    // malformed answer moves on to the next model instead of failing the merchant.
+    let parsed: any = null;
     let lastErrText = '';
+    let lastProblem: 'http' | 'empty' | 'format' | null = null;
     let usedModel = '';
     for (const { model, api } of GEMINI_ATTEMPTS) {
       const url = `https://generativelanguage.googleapis.com/${api}/models/${model}:generateContent?key=${apiKey}`;
+      let geminiData: any;
       try {
         const resp = await fetch(url, {
           method: 'POST',
@@ -111,57 +117,59 @@ Deno.serve(async (req) => {
           body: JSON.stringify(geminiPayload),
           signal: AbortSignal.timeout(20000),
         });
-        if (resp.ok) {
-          geminiResp = resp;
-          usedModel = `${api}/${model}`;
-          console.log('[analyze-product-image] Using model:', usedModel);
-          break;
-        } else {
+        if (!resp.ok) {
           lastErrText = await resp.text();
+          lastProblem = 'http';
           console.warn(`[analyze-product-image] ${api}/${model} failed (${resp.status}):`, lastErrText.slice(0, 200));
+          continue;
         }
+        geminiData = await resp.json();
       } catch (fetchErr: any) {
         lastErrText = fetchErr?.message || 'Network error';
+        lastProblem = 'http';
         console.warn(`[analyze-product-image] ${api}/${model} fetch failed:`, lastErrText);
+        continue;
+      }
+
+      const candidate = geminiData?.candidates?.[0];
+      const text = (candidate?.content?.parts ?? [])
+        .map((p: any) => (typeof p?.text === 'string' && !p.thought ? p.text : ''))
+        .join('')
+        .trim();
+      if (!text) {
+        lastProblem = 'empty';
+        console.warn(`[analyze-product-image] ${api}/${model} returned no text (finishReason ${candidate?.finishReason}):`, JSON.stringify(geminiData).slice(0, 300));
+        continue;
+      }
+      try {
+        // Strip any markdown fences just in case
+        const cleanText = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+        parsed = JSON.parse(cleanText);
+        usedModel = `${api}/${model}`;
+        break;
+      } catch {
+        lastProblem = 'format';
+        console.warn(`[analyze-product-image] ${api}/${model} unparseable (finishReason ${candidate?.finishReason}):`, text.slice(0, 300));
       }
     }
 
-    if (!geminiResp) {
-      console.error('[analyze-product-image] All Gemini models failed. Last error:', lastErrText);
-      let detailMsg = 'AI analysis failed. Please try again.';
-      try {
-        const errJson = JSON.parse(lastErrText);
-        if (errJson?.error?.message) {
-          detailMsg = `AI error: ${errJson.error.message}`;
-        }
-      } catch {}
+    if (!parsed) {
+      console.error(`[analyze-product-image] All Gemini models failed (${lastProblem}). Last error:`, lastErrText.slice(0, 300));
+      let detailMsg =
+        lastProblem === 'format' ? 'AI returned invalid format. Please try again.'
+        : lastProblem === 'empty' ? 'AI returned empty response. Please try again.'
+        : 'AI analysis failed. Please try again.';
+      if (lastProblem === 'http') {
+        try {
+          const errJson = JSON.parse(lastErrText);
+          if (errJson?.error?.message) detailMsg = `AI error: ${errJson.error.message}`;
+        } catch {}
+      }
       return new Response(JSON.stringify({ error: detailMsg }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    const geminiData = await geminiResp.json();
-    const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!text) {
-      console.error('[analyze-product-image] No text in Gemini response:', JSON.stringify(geminiData).slice(0, 500));
-      return new Response(JSON.stringify({ error: 'AI returned empty response. Please try again.' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Parse the JSON response
-    let parsed: any;
-    try {
-      // Strip any markdown fences just in case
-      const cleanText = text.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-      parsed = JSON.parse(cleanText);
-    } catch (parseErr) {
-      console.error('[analyze-product-image] Failed to parse AI response:', text.slice(0, 300));
-      return new Response(JSON.stringify({ error: 'AI returned invalid format. Please try again.' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    console.log('[analyze-product-image] Using model:', usedModel);
 
     // If AI couldn't identify the product, surface that as a 200 with the error field
     // (caller checks for `error` to know it's a soft failure, not a server error)
