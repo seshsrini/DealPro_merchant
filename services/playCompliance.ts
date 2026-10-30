@@ -1,5 +1,4 @@
 import { Browser } from '@capacitor/browser';
-import { supabase } from './supabaseClient';
 
 // Google Play compliance switch.
 //
@@ -23,26 +22,14 @@ export const PLAY_COMPLIANT =
 export const MANAGE_SUBSCRIPTION_URL =
   (import.meta as any).env?.VITE_MANAGE_SUBSCRIPTION_URL || 'https://vedicjaalam.com/merchant/subscribe';
 
-// Opens the web management page in the system browser (Capacitor Browser).
-// The link carries a one-time pass (issue-billing-pass, valid 10 minutes) that the
-// website swaps for a short signed-in session, so plan changes / cancels there are
-// tied to this merchant. If a pass can't be obtained (offline, function not yet
-// deployed), it falls back to the older merchant_id link, which the website still
-// accepts until REQUIRE_BILLING_PASS is switched on.
+// Opens the web management page in the system browser (Capacitor Browser),
+// carrying the merchant id so the page can pre-populate their account + plan.
 export async function openManageSubscription(merchantId?: string): Promise<void> {
   try {
-    const sep = MANAGE_SUBSCRIPTION_URL.includes('?') ? '&' : '?';
     let url = MANAGE_SUBSCRIPTION_URL;
-    try {
-      const { data, error } = await supabase.functions.invoke('issue-billing-pass', { body: {} });
-      if (!error && typeof data?.pass === 'string' && data.pass) {
-        url = `${MANAGE_SUBSCRIPTION_URL}${sep}pass=${encodeURIComponent(data.pass)}`;
-      }
-    } catch (e) {
-      console.warn('[playCompliance] Billing pass unavailable, using legacy link:', (e as any)?.message);
-    }
-    if (url === MANAGE_SUBSCRIPTION_URL && merchantId) {
-      url = `${MANAGE_SUBSCRIPTION_URL}${sep}merchant_id=${encodeURIComponent(merchantId)}`;
+    if (merchantId) {
+      const sep = url.includes('?') ? '&' : '?';
+      url = `${url}${sep}merchant_id=${encodeURIComponent(merchantId)}`;
     }
     await Browser.open({ url });
   } catch (e) {
