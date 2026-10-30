@@ -77,6 +77,8 @@ Deno.serve(async (req) => {
     }
     return json({ sent });
   } catch (e) {
+    // Log the cause: without this the dashboard only ever shows "500".
+    console.error('[send-merchant-push] error:', (e as Error).message);
     return json({ error: (e as Error).message }, 500);
   }
 });
