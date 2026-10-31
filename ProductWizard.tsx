@@ -15,6 +15,7 @@ import {
   AiProductAnalysis,
   mapCategoryToSchemaId,
   mapCategoryToUniversalLabel,
+  UNIVERSAL_CATEGORIES,
 } from './services/productLookupService';
 import { merchantService } from './services/merchantService';
 
@@ -389,6 +390,23 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
             brand={state.brand}
             onNameChange={(v) => dispatch({ type: 'SET_FIELD', field: 'name', value: v })}
             onBrandChange={(v) => dispatch({ type: 'SET_FIELD', field: 'brand', value: v })}
+            onCatalogPick={(p) => {
+              // Pre-fill category (and a description if the AI didn't give one) from the catalogue.
+              const schemaId = p.schemaId || 'general';
+              const label = UNIVERSAL_CATEGORIES.find((c) => c.schemaId === (schemaId === 'restaurant' ? 'grocery' : schemaId))?.label
+                || mapCategoryToUniversalLabel(p.sectorName) || '';
+              dispatch({
+                type: 'BULK_UPDATE',
+                payload: {
+                  category: label,
+                  schemaId,
+                  specs: {
+                    ...state.specs,
+                    ...(!state.specs.ai_description && p.description ? { ai_description: p.description } : {}),
+                  },
+                },
+              });
+            }}
             onNext={handleNext}
             onBack={handleBack}
             theme={theme}

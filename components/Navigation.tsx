@@ -166,6 +166,7 @@ const MERCHANT_VIEW_TO_TAB: Record<string, AppView> = {
 
   merchant_catalogue: 'merchant_catalogue',
   product_wizard: 'merchant_catalogue',
+  catalogue_browse: 'merchant_catalogue',
 
   merchant_deal_of_day: 'merchant_deal_of_day',
   dotd_wizard: 'merchant_deal_of_day',
