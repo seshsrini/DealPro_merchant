@@ -33,16 +33,34 @@ interface CatNode {
   id: number; parent_id: number | null; slug: string; name: string; level: number;
   schema_id: string | null; is_restricted: boolean; product_count: number;
 }
-interface Variant { id: string; label: string | null; qty: number | null; unit: string | null; mrp: number | null }
+interface Variant {
+  id: string; label: string | null; qty: number | null; unit: string | null; mrp: number | null;
+  typical: number | null;                          // reference price (approx.)
+  market: number | null; market_shops: number | null; // median of what 3+ DealFynd merchants charge
+}
 interface CatProduct {
   product_id: string; name: string; description: string | null; image_url: string | null;
   category_name: string; sector_name: string; is_restricted: boolean; diet: string | null;
   variants: Variant[]; added: boolean;
+  market_price: number | null; market_shops: number | null;
 }
 // productId → { product, packs: variantId ('' = no pack size) → price text }
 type Selection = Map<string, { product: CatProduct; packs: Map<string, string> }>;
 
 const PAGE = 40;
+
+/** Price to pre-fill: what other merchants charge, else the reference price. */
+function suggestedPrice(p: CatProduct, variantId: string): { value: string; hint: string } {
+  if (!variantId) {
+    return p.market_price != null
+      ? { value: String(p.market_price), hint: `Usual price at ${p.market_shops} shops` }
+      : { value: '', hint: '' };
+  }
+  const v = p.variants.find((x) => x.id === variantId);
+  if (v?.market != null) return { value: String(v.market), hint: `Usual price at ${v.market_shops} shops` };
+  if (v?.typical != null) return { value: String(Math.round(Number(v.typical))), hint: 'Approx. typical price' };
+  return { value: '', hint: '' };
+}
 const NO_PACK = '';
 
 // ── Small pieces ──────────────────────────────────────────────────────────────
@@ -187,7 +205,7 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
       if (next.has(p.product_id)) next.delete(p.product_id);
       else {
         const first = p.variants[0]?.id ?? NO_PACK;
-        next.set(p.product_id, { product: p, packs: new Map([[first, '']]) });
+        next.set(p.product_id, { product: p, packs: new Map([[first, suggestedPrice(p, first).value]]) });
       }
       return next;
     });
@@ -202,7 +220,7 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
       if (packs.has(variantId)) {
         packs.delete(variantId);
         if (!packs.size) { next.delete(p.product_id); return next; }
-      } else packs.set(variantId, '');
+      } else packs.set(variantId, suggestedPrice(p, variantId).value);
       next.set(p.product_id, { ...cur, packs });
       return next;
     });
@@ -444,14 +462,24 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
                       </>
                     )}
                     <div className="space-y-2 mt-2">
-                      {[...sel.packs.entries()].map(([vid, price], idx) => (
-                        <div key={vid || 'none'} className="flex items-center justify-between gap-3">
-                          <span className={`text-sm ${text}`}>
-                            {vid ? variantLabel(p.variants.find((v) => v.id === vid)) : 'Your price'}
-                          </span>
-                          <PriceBox value={price} onChange={(v) => setPrice(p.product_id, vid, v)} isDark={isDark} autoFocus={idx === 0 && !price} />
-                        </div>
-                      ))}
+                      {[...sel.packs.entries()].map(([vid, price], idx) => {
+                        const sug = suggestedPrice(p, vid);
+                        return (
+                          <div key={vid || 'none'} className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <span className={`block text-sm ${text}`}>
+                                {vid ? variantLabel(p.variants.find((v) => v.id === vid)) : 'Your price'}
+                              </span>
+                              {sug.hint && (
+                                <span className={`block text-[11px] ${price === sug.value ? 'text-emerald-600' : muted}`}>
+                                  {price === sug.value ? `${sug.hint} · change if needed` : `${sug.hint}: ₹${sug.value}`}
+                                </span>
+                              )}
+                            </div>
+                            <PriceBox value={price} onChange={(v) => setPrice(p.product_id, vid, v)} isDark={isDark} autoFocus={idx === 0 && !price} />
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

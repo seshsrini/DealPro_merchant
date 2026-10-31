@@ -2,6 +2,14 @@
 -- Run after create_catalog_master.sql + seeds. Safe to re-run.
 -- Called only by the catalog-browse edge function (service role).
 
+-- Typical (reference) price per pack size, used to pre-fill the merchant's price box.
+ALTER TABLE public.catalog_variants ADD COLUMN IF NOT EXISTS typical_price numeric(12,2)
+  CHECK (typical_price IS NULL OR typical_price >= 0);
+ALTER TABLE public.catalog_variants ADD COLUMN IF NOT EXISTS typical_price_source text;   -- 'ai_estimate' | 'admin'
+
+-- Return type changed (market_price) — drop the old version first.
+DROP FUNCTION IF EXISTS public.catalog_browse(text, text, uuid, int, int);
+
 -- Category tree with active product counts (a sector's count includes its sub-categories).
 CREATE OR REPLACE FUNCTION public.catalog_category_tree()
 RETURNS TABLE (id bigint, parent_id bigint, slug text, name text, level smallint,
@@ -36,10 +44,24 @@ RETURNS TABLE (
   product_id uuid, code text, name text, description text, image_url text,
   category_slug text, category_name text, sector_slug text, sector_name text,
   schema_id text, is_restricted boolean, diet text, variants jsonb,
+  market_price numeric, market_shops int,      -- for products listed without a pack size
   added boolean, total bigint)
 LANGUAGE sql STABLE AS $$
   WITH q AS (SELECT nullif(lower(trim(coalesce(p_query, ''))), '') AS t),
   cat AS (SELECT id FROM public.catalog_categories WHERE slug = p_category),
+  -- What merchants actually charge: median per catalogue product / pack size,
+  -- only shown once 3+ different merchants have priced it.
+  market AS (
+    SELECT mp.catalog_product_id AS product_id, mp.catalog_variant_id AS variant_id,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY (mp.attributes->>'price')::numeric) AS median,
+           count(DISTINCT mp.merchant_id)::int AS shops
+    FROM public.products mp
+    WHERE mp.catalog_product_id IS NOT NULL AND coalesce(mp.is_active, true)
+      AND (mp.attributes->>'price') ~ '^[0-9]+(\.[0-9]+)?$'
+      AND (mp.attributes->>'price')::numeric > 0
+    GROUP BY 1, 2
+    HAVING count(DISTINCT mp.merchant_id) >= 3
+  ),
   hits AS (
     SELECT p.*
     FROM public.catalog_products p
@@ -62,9 +84,19 @@ LANGUAGE sql STABLE AS $$
          h.attributes->>'diet',
          coalesce((SELECT jsonb_agg(jsonb_build_object(
                      'id', v.id, 'label', v.variant_label, 'qty', v.net_quantity,
-                     'unit', v.unit, 'mrp', v.mrp) ORDER BY v.created_at, v.id)
+                     'unit', v.unit, 'mrp', v.mrp, 'typical', v.typical_price,
+                     'market', round(mk.median), 'market_shops', mk.shops) ORDER BY v.net_quantity * CASE WHEN v.unit IN ('kg', 'l') THEN 1000 ELSE 1 END NULLS LAST,
+                     CASE WHEN v.variant_label ILIKE 'quarter%' OR v.variant_label ILIKE 'small%' THEN 1
+                          WHEN v.variant_label ILIKE 'half%' OR v.variant_label ILIKE 'regular%' THEN 2
+                          WHEN v.variant_label ILIKE 'full%' OR v.variant_label ILIKE 'medium%' THEN 3
+                          WHEN v.variant_label ILIKE 'family%' OR v.variant_label ILIKE 'large%' THEN 4
+                          ELSE 5 END,
+                     v.variant_label, v.id)
                    FROM public.catalog_variants v
+                   LEFT JOIN market mk ON mk.product_id = h.id AND mk.variant_id = v.id
                    WHERE v.product_id = h.id AND v.status = 'active'), '[]'::jsonb),
+         (SELECT round(mk.median) FROM market mk WHERE mk.product_id = h.id AND mk.variant_id IS NULL),
+         (SELECT mk.shops FROM market mk WHERE mk.product_id = h.id AND mk.variant_id IS NULL),
          (p_merchant IS NOT NULL AND EXISTS (
             SELECT 1 FROM public.products mp
             WHERE mp.merchant_id = p_merchant AND mp.catalog_product_id = h.id
