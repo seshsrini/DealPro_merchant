@@ -7,7 +7,21 @@ ALTER TABLE public.catalog_variants ADD COLUMN IF NOT EXISTS typical_price numer
   CHECK (typical_price IS NULL OR typical_price >= 0);
 ALTER TABLE public.catalog_variants ADD COLUMN IF NOT EXISTS typical_price_source text;   -- 'ai_estimate' | 'admin'
 
--- Return type changed (market_price) — drop the old version first.
+-- Brands commonly sold for each generic product (Potato Chips → Lay's, Bingo!, …).
+CREATE TABLE IF NOT EXISTS public.catalog_product_brands (
+  product_id  uuid NOT NULL REFERENCES public.catalog_products(id) ON DELETE CASCADE,
+  brand_id    uuid NOT NULL REFERENCES public.catalog_brands(id) ON DELETE CASCADE,
+  sort_order  int  NOT NULL DEFAULT 0,
+  source      text NOT NULL DEFAULT 'ai',          -- 'ai' | 'admin' | 'merchant'
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (product_id, brand_id)
+);
+CREATE INDEX IF NOT EXISTS catalog_product_brands_brand_idx ON public.catalog_product_brands (brand_id);
+ALTER TABLE public.catalog_product_brands ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS catalog_product_brands_read ON public.catalog_product_brands;
+CREATE POLICY catalog_product_brands_read ON public.catalog_product_brands FOR SELECT TO authenticated USING (true);
+
+-- Return type changed (market_price, brands) — drop the old version first.
 DROP FUNCTION IF EXISTS public.catalog_browse(text, text, uuid, int, int);
 
 -- Category tree with active product counts (a sector's count includes its sub-categories).
@@ -45,6 +59,7 @@ RETURNS TABLE (
   category_slug text, category_name text, sector_slug text, sector_name text,
   schema_id text, is_restricted boolean, diet text, variants jsonb,
   market_price numeric, market_shops int,      -- for products listed without a pack size
+  brands jsonb,                                -- [{id, name}] most common first
   added boolean, total bigint)
 LANGUAGE sql STABLE AS $$
   WITH q AS (SELECT nullif(lower(trim(coalesce(p_query, ''))), '') AS t),
@@ -74,7 +89,12 @@ LANGUAGE sql STABLE AS $$
       AND (q.t IS NULL OR length(q.t) < 2
            OR p.name ILIKE '%' || q.t || '%'
            OR EXISTS (SELECT 1 FROM public.catalog_aliases al
-                      WHERE al.product_id = p.id AND al.alias ILIKE '%' || q.t || '%'))
+                      WHERE al.product_id = p.id AND al.alias ILIKE '%' || q.t || '%')
+           OR EXISTS (SELECT 1 FROM public.catalog_product_brands pb
+                      JOIN public.catalog_brands b ON b.id = pb.brand_id
+                      WHERE pb.product_id = p.id
+                        AND (b.name ILIKE q.t || '%'
+                             OR b.normalized_name LIKE regexp_replace(q.t, '[^a-z0-9]+', '', 'g') || '%')))
   )
   SELECT h.id, h.code, h.name, h.description, h.image_url,
          c.slug, c.name,
@@ -97,6 +117,9 @@ LANGUAGE sql STABLE AS $$
                    WHERE v.product_id = h.id AND v.status = 'active'), '[]'::jsonb),
          (SELECT round(mk.median) FROM market mk WHERE mk.product_id = h.id AND mk.variant_id IS NULL),
          (SELECT mk.shops FROM market mk WHERE mk.product_id = h.id AND mk.variant_id IS NULL),
+         coalesce((SELECT jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name) ORDER BY pb.sort_order, b.name)
+                   FROM public.catalog_product_brands pb JOIN public.catalog_brands b ON b.id = pb.brand_id
+                   WHERE pb.product_id = h.id), '[]'::jsonb),
          (p_merchant IS NOT NULL AND EXISTS (
             SELECT 1 FROM public.products mp
             WHERE mp.merchant_id = p_merchant AND mp.catalog_product_id = h.id

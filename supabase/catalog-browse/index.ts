@@ -5,7 +5,7 @@
 //               "suggested" = sectors that match the merchant's store types
 //   browse    → { products: [...], total }   body: { category?, query?, limit?, offset? }
 //   suggest   → { products: [...] }           body: { query }   (type-ahead, 3+ chars)
-//   bulk_add  → { added, skipped }            body: { items: [{ productId, variantId?, price?, mrp? }],
+//   bulk_add  → { added, skipped }            body: { items: [{ productId, variantId?, brandId?, brandName?, price?, mrp? }],
 //                                                      storeIds? }  (defaults to all stores)
 //
 // Products added from the catalogue land in public.products exactly like
@@ -149,6 +149,13 @@ Deno.serve(async (req) => {
         .from('catalog_variants').select('id, product_id, variant_label, mrp').in('product_id', productIds);
       const variantById = new Map((variants || []).map((v: any) => [v.id, v]));
 
+      // Catalogue brands referenced by the items (merchants may also type their own brand).
+      const brandIds = [...new Set(items.map((i: any) => String(i.brandId || '')).filter(Boolean))];
+      const { data: brandRows } = brandIds.length
+        ? await admin.from('catalog_brands').select('id, name').in('id', brandIds)
+        : { data: [] as any[] };
+      const brandById = new Map((brandRows || []).map((b: any) => [b.id, b.name as string]));
+
       // Store links: requested stores that belong to this merchant, else all its stores.
       const { data: stores } = await admin.from('merchant_stores').select('id').eq('merchant_id', merchantId);
       const ownStoreIds = (stores || []).map((s: any) => s.id);
@@ -157,9 +164,12 @@ Deno.serve(async (req) => {
 
       // Skip exact duplicates the merchant already has (same catalogue product + pack size).
       const { data: existing } = await admin
-        .from('products').select('catalog_product_id, catalog_variant_id')
+        .from('products').select('catalog_product_id, catalog_variant_id, attributes')
         .eq('merchant_id', merchantId).eq('is_active', true).in('catalog_product_id', productIds);
-      const have = new Set((existing || []).map((e: any) => `${e.catalog_product_id}|${e.catalog_variant_id || ''}`));
+      const keyOf = (pid: string, vid: string | null, brand: string) =>
+        `${pid}|${vid || ''}|${brand.trim().toLowerCase()}`;
+      const have = new Set((existing || []).map((e: any) =>
+        keyOf(e.catalog_product_id, e.catalog_variant_id, String(e.attributes?.brand || ''))));
 
       const rows: Record<string, unknown>[] = [];
       let skipped = 0;
@@ -169,7 +179,14 @@ Deno.serve(async (req) => {
         if (!p) { skipped++; continue; }
         const v = it.variantId ? variantById.get(String(it.variantId)) : null;
         if (it.variantId && (!v || v.product_id !== p.id)) { skipped++; continue; }
-        const key = `${p.id}|${v?.id || ''}`;
+        let brand = '';
+        if (it.brandId) {
+          brand = brandById.get(String(it.brandId)) || '';
+          if (!brand) { skipped++; continue; }
+        } else if (typeof it.brandName === 'string') {
+          brand = it.brandName.replace(/[^\p{L}\p{N}&'!.\- ]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+        }
+        const key = keyOf(p.id, v?.id || null, brand);
         if (have.has(key)) { skipped++; continue; }
         have.add(key);
 
@@ -178,7 +195,8 @@ Deno.serve(async (req) => {
         const label = SCHEMA_LABEL[schemaId] || cat.parent?.name || cat.name || 'General';
         const price = cleanPrice(it.price);
         const mrp = cleanPrice(it.mrp) ?? (v?.mrp != null ? String(v.mrp) : null);
-        const name = v?.variant_label ? `${p.name} (${v.variant_label})` : p.name;
+        const base = brand ? `${brand} ${p.name}` : p.name;
+        const name = v?.variant_label ? `${base} (${v.variant_label})` : base;
 
         rows.push({
           name: name.slice(0, 200),
@@ -189,7 +207,8 @@ Deno.serve(async (req) => {
           store_ids: storeIds,
           merchant_id: merchantId,
           attributes: {
-            brand: '',
+            brand,
+            ...(it.brandId && brand ? { catalog_brand_id: String(it.brandId) } : {}),
             price: price ?? '',
             mrp: mrp ?? '',
             schemaId,
