@@ -233,12 +233,15 @@ Deno.serve(async (req) => {
       matchPincodes = [...new Set([...pincodes, ...radius])].filter(Boolean);
     }
 
-    // send_to is server-enforced to send_from + 2 days (3-day inclusive window),
-    // never trusted from the client.
+    // send_to is server-enforced to send_from + 14 days (15-day inclusive window),
+    // never trusted from the client. The start date can't be in the past (IST).
+    const ANNOUNCEMENT_DAYS = 15;
     const sendFrom = String(b.send_from ?? '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(sendFrom)) return json({ error: 'A valid start date is required.' }, 400);
+    const todayIST = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+    if (sendFrom < todayIST) return json({ error: 'The start date can’t be in the past. Please choose today or a later date.' }, 400);
     const sendToDate = new Date(sendFrom + 'T00:00:00Z');
-    sendToDate.setUTCDate(sendToDate.getUTCDate() + 2);
+    sendToDate.setUTCDate(sendToDate.getUTCDate() + ANNOUNCEMENT_DAYS - 1);
     const sendTo = sendToDate.toISOString().slice(0, 10);
 
     // 5. Insert.

@@ -19,6 +19,8 @@ interface Props {
 const TITLE_MAX = 30;
 const DESC_MAX = 200;
 const MAX_AREAS = 3;
+/** Announcements run for 15 days, inclusive of the start date (server-enforced too). */
+const ANNOUNCEMENT_DAYS = 15;
 const ALL_STORES = '__all__';
 
 function addDaysISO(iso: string, days: number): string {
@@ -42,7 +44,9 @@ export const AnnouncementWizard: React.FC<Props> = ({ user, theme, onBack, onCre
   const [mode, setMode] = useState<'area' | 'city'>('area');
   const [selectedPincodes, setSelectedPincodes] = useState<string[]>([]);
   const [linkedDeal, setLinkedDeal] = useState('');
-  const today = new Date().toISOString().slice(0, 10);
+  // Today in India (IST). Using the UTC date let the picker offer YESTERDAY
+  // between midnight and 05:30 IST.
+  const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
   const [sendFrom, setSendFrom] = useState(today);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +54,7 @@ export const AnnouncementWizard: React.FC<Props> = ({ user, theme, onBack, onCre
   const [submitted, setSubmitted] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const sendTo = useMemo(() => addDaysISO(sendFrom, 2), [sendFrom]);
+  const sendTo = useMemo(() => addDaysISO(sendFrom, ANNOUNCEMENT_DAYS - 1), [sendFrom]);
 
   // Load stores + linkable deals once.
   useEffect(() => {
@@ -325,14 +329,14 @@ export const AnnouncementWizard: React.FC<Props> = ({ user, theme, onBack, onCre
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <p className="text-[10px] text-slate-400 mb-1">From</p>
-                <input type="date" min={today} value={sendFrom} onChange={(e) => setSendFrom(e.target.value || today)} className={inputC} />
+                <input type="date" min={today} value={sendFrom} onChange={(e) => setSendFrom(e.target.value && e.target.value >= today ? e.target.value : today)} className={inputC} />
               </div>
               <div>
-                <p className="text-[10px] text-slate-400 mb-1">To (auto · 3 days)</p>
+                <p className="text-[10px] text-slate-400 mb-1">To (auto · {ANNOUNCEMENT_DAYS} days)</p>
                 <input type="date" value={sendTo} readOnly disabled className={`${inputC} opacity-60 cursor-not-allowed`} />
               </div>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1.5">Consumers see this banner for 3 days, then it expires automatically.</p>
+            <p className="text-[10px] text-slate-400 mt-1.5">Consumers see this banner for {ANNOUNCEMENT_DAYS} days, then it expires automatically.</p>
           </div>
         </div>
       </div>
