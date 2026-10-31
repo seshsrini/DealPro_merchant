@@ -199,7 +199,8 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
         offset,
       });
       if (id !== reqId.current) return;
-      setProducts((prev) => (offset === 0 ? r.products : [...prev, ...r.products]));
+      const rows = (r.products || []).map((x) => ({ ...x, brands: x.brands || [], variants: x.variants || [] }));
+      setProducts((prev) => (offset === 0 ? rows : [...prev, ...rows]));
       setTotal(r.total || 0);
     } catch {
       if (id === reqId.current) setLoadError('Could not load products. Pull back and try again.');
