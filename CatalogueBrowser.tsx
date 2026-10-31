@@ -43,9 +43,22 @@ interface CatProduct {
   category_name: string; sector_name: string; is_restricted: boolean; diet: string | null;
   variants: Variant[]; added: boolean;
   market_price: number | null; market_shops: number | null;
+  brands: { id: string; name: string }[];
 }
-// productId → { product, packs: variantId ('' = no pack size) → price text }
-type Selection = Map<string, { product: CatProduct; packs: Map<string, string> }>;
+// Brand keys: '' = no brand, '<uuid>' = catalogue brand, 'c:<name>' = merchant's own brand.
+// Each listing row is one brand × pack size; key = `${brandKey}::${variantId}` ('' = no pack size).
+interface Sel {
+  product: CatProduct;
+  brands: string[];
+  variants: string[];
+  rows: Map<string, string>;   // row key → price text
+}
+type Selection = Map<string, Sel>;
+const rowKey = (brandKey: string, variantId: string) => `${brandKey}::${variantId}`;
+const splitKey = (key: string) => {
+  const i = key.lastIndexOf('::');
+  return { brandKey: key.slice(0, i), variantId: key.slice(i + 2) };
+};
 
 const PAGE = 40;
 
@@ -62,6 +75,22 @@ function suggestedPrice(p: CatProduct, variantId: string): { value: string; hint
   return { value: '', hint: '' };
 }
 const NO_PACK = '';
+
+/** Rebuild the brand × pack rows, keeping prices already typed and pre-filling new rows. */
+function withRows(sel: { product: CatProduct; brands: string[]; variants: string[]; rows?: Map<string, string> }): Sel {
+  const rows = new Map<string, string>();
+  for (const b of sel.brands) for (const v of sel.variants) {
+    const k = rowKey(b, v);
+    rows.set(k, sel.rows?.get(k) ?? suggestedPrice(sel.product, v).value);
+  }
+  return { product: sel.product, brands: sel.brands, variants: sel.variants, rows };
+}
+
+function brandLabel(p: CatProduct, brandKey: string): string {
+  if (!brandKey) return '';
+  if (brandKey.startsWith('c:')) return brandKey.slice(2);
+  return p.brands.find((b) => b.id === brandKey)?.name ?? '';
+}
 
 // ── Small pieces ──────────────────────────────────────────────────────────────
 
@@ -194,62 +223,97 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
   // ── Selection helpers ──
   const packCount = useMemo(() => {
     let n = 0;
-    selection.forEach((s) => { n += s.packs.size; });
+    selection.forEach((s) => { n += s.rows.size; });
     return n;
   }, [selection]);
+
+  const update = (productId: string, fn: (cur: Sel) => Sel | null) => {
+    setSelection((prev) => {
+      const cur = prev.get(productId);
+      if (!cur) return prev;
+      const next = new Map(prev);
+      const res = fn(cur);
+      if (!res || res.rows.size === 0) next.delete(productId); else next.set(productId, res);
+      return next;
+    });
+  };
 
   const toggleProduct = (p: CatProduct) => {
     if (p.added) return;
     setSelection((prev) => {
       const next = new Map(prev);
       if (next.has(p.product_id)) next.delete(p.product_id);
-      else {
-        const first = p.variants[0]?.id ?? NO_PACK;
-        next.set(p.product_id, { product: p, packs: new Map([[first, suggestedPrice(p, first).value]]) });
-      }
+      else next.set(p.product_id, withRows({ product: p, brands: [''], variants: [p.variants[0]?.id ?? NO_PACK] }));
       return next;
     });
   };
 
-  const togglePack = (p: CatProduct, variantId: string) => {
-    setSelection((prev) => {
-      const next = new Map(prev);
-      const cur = next.get(p.product_id);
-      if (!cur) return prev;
-      const packs = new Map(cur.packs);
-      if (packs.has(variantId)) {
-        packs.delete(variantId);
-        if (!packs.size) { next.delete(p.product_id); return next; }
-      } else packs.set(variantId, suggestedPrice(p, variantId).value);
-      next.set(p.product_id, { ...cur, packs });
-      return next;
-    });
+  const togglePack = (p: CatProduct, variantId: string) => update(p.product_id, (cur) => {
+    const variants = cur.variants.includes(variantId)
+      ? cur.variants.filter((v) => v !== variantId)
+      : [...cur.variants, variantId];
+    return variants.length ? withRows({ ...cur, variants }) : null;
+  });
+
+  // Picking a brand replaces "No brand"; removing the last brand falls back to "No brand".
+  const toggleBrand = (p: CatProduct, brandKey: string) => update(p.product_id, (cur) => {
+    let brands: string[];
+    if (!brandKey) brands = [''];
+    else if (cur.brands.includes(brandKey)) brands = cur.brands.filter((b) => b !== brandKey);
+    else brands = [...cur.brands.filter((b) => b !== ''), brandKey];
+    if (!brands.length) brands = [''];
+    return withRows({ ...cur, brands });
+  });
+
+  const removeRow = (productId: string, key: string) => update(productId, (cur) => {
+    const rows = new Map(cur.rows);
+    rows.delete(key);
+    return { ...cur, rows };
+  });
+
+  const setPrice = (productId: string, key: string, price: string) => update(productId, (cur) => {
+    const rows = new Map(cur.rows);
+    rows.set(key, price);
+    return { ...cur, rows };
+  });
+
+  const [customBrand, setCustomBrand] = useState<Record<string, string>>({});
+  const addCustomBrand = (p: CatProduct) => {
+    const name = (customBrand[p.product_id] || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (name.length < 2) return;
+    const existing = p.brands.find((b) => b.name.toLowerCase() === name.toLowerCase());
+    const key = existing ? existing.id : `c:${name}`;
+    const cur = selection.get(p.product_id);
+    if (!cur?.brands.includes(key)) toggleBrand(p, key);
+    setCustomBrand((m) => ({ ...m, [p.product_id]: '' }));
   };
 
-  const setPrice = (productId: string, variantId: string, price: string) => {
-    setSelection((prev) => {
-      const next = new Map(prev);
-      const cur = next.get(productId);
-      if (!cur) return prev;
-      const packs = new Map(cur.packs);
-      packs.set(variantId, price);
-      next.set(productId, { ...cur, packs });
-      return next;
-    });
+  const rowTitle = (p: CatProduct, key: string) => {
+    const { brandKey, variantId } = splitKey(key);
+    const b = brandLabel(p, brandKey);
+    const v = variantId ? variantLabel(p.variants.find((x) => x.id === variantId)) : '';
+    return [b, v].filter(Boolean).join(' · ') || 'Your price';
   };
 
   const missingPrices = useMemo(() => {
     let n = 0;
-    selection.forEach((s) => s.packs.forEach((price) => { if (!price) n++; }));
+    selection.forEach((s) => s.rows.forEach((price) => { if (!price) n++; }));
     return n;
   }, [selection]);
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError(null);
-    const items: Array<{ productId: string; variantId: string | null; price: string }> = [];
-    selection.forEach((s, productId) => s.packs.forEach((price, variantId) => {
-      items.push({ productId, variantId: variantId || null, price });
+    const items: Array<Record<string, string | null>> = [];
+    selection.forEach((s, productId) => s.rows.forEach((price, key) => {
+      const { brandKey, variantId } = splitKey(key);
+      items.push({
+        productId,
+        variantId: variantId || null,
+        brandId: brandKey && !brandKey.startsWith('c:') ? brandKey : null,
+        brandName: brandKey.startsWith('c:') ? brandKey.slice(2) : null,
+        price,
+      });
     }));
     try {
       let added = 0, skipped = 0;
@@ -283,6 +347,9 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
   const text = isDark ? 'text-white' : 'text-slate-900';
   const muted = isDark ? 'text-slate-400' : 'text-slate-500';
   const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200';
+  const brandChip = (on: boolean) => `px-2.5 py-1 rounded-full text-xs font-medium border ${
+    on ? (isDark ? 'bg-white border-white text-slate-900' : 'bg-slate-900 border-slate-900 text-white')
+       : isDark ? 'border-slate-700 text-slate-300' : 'border-slate-300 text-slate-600'}`;
 
   if (done) {
     return (
@@ -442,12 +509,42 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
                 {/* Pack sizes + price, shown once ticked */}
                 {sel && (
                   <div className={`px-3 pb-3 pt-1 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+                    {/* Brands — chips only when the product has known brands (or the merchant typed one) */}
+                    {(p.brands.length > 0 || sel.brands.some((x) => x.startsWith('c:'))) && (<>
+                    <p className={`text-[11px] font-medium mt-2 mb-1.5 ${muted}`}>Brands you sell</p>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      <button onClick={() => toggleBrand(p, '')} className={brandChip(sel.brands.includes(''))}>No brand / loose</button>
+                      {p.brands.map((b) => (
+                        <button key={b.id} onClick={() => toggleBrand(p, b.id)} className={brandChip(sel.brands.includes(b.id))}>{b.name}</button>
+                      ))}
+                      {sel.brands.filter((b) => b.startsWith('c:')).map((b) => (
+                        <button key={b} onClick={() => toggleBrand(p, b)} className={brandChip(true)}>{b.slice(2)} ✕</button>
+                      ))}
+                    </div>
+                    </>)}
+                    <div className="flex gap-2 mb-2 mt-2">
+                      <input
+                        value={customBrand[p.product_id] || ''}
+                        onChange={(e) => setCustomBrand((m) => ({ ...m, [p.product_id]: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === 'Enter') addCustomBrand(p); }}
+                        placeholder={p.brands.length ? "Other brand" : "Brand (optional)"}
+                        maxLength={40}
+                        className={`flex-1 min-w-0 h-9 px-3 rounded-lg border text-sm outline-none ${
+                          isDark ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'}`}
+                      />
+                      <button onClick={() => addCustomBrand(p)}
+                        disabled={(customBrand[p.product_id] || '').trim().length < 2}
+                        className={`h-9 px-3 rounded-lg text-xs font-semibold border disabled:opacity-40 ${isDark ? 'border-slate-600 text-slate-200' : 'border-slate-300 text-slate-700'}`}>
+                        Add
+                      </button>
+                    </div>
+
                     {p.variants.length > 1 && (
                       <>
                         <p className={`text-[11px] font-medium mt-2 mb-1.5 ${muted}`}>Pack sizes you sell</p>
                         <div className="flex flex-wrap gap-1.5 mb-2">
                           {p.variants.map((v) => {
-                            const on = sel.packs.has(v.id);
+                            const on = sel.variants.includes(v.id);
                             return (
                               <button key={v.id} onClick={() => togglePack(p, v.id)}
                                 className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
@@ -462,21 +559,19 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
                       </>
                     )}
                     <div className="space-y-2 mt-2">
-                      {[...sel.packs.entries()].map(([vid, price], idx) => {
-                        const sug = suggestedPrice(p, vid);
+                      {[...sel.rows.entries()].map(([key, price], idx) => {
+                        const sug = suggestedPrice(p, splitKey(key).variantId);
                         return (
-                          <div key={vid || 'none'} className="flex items-center justify-between gap-3">
+                          <div key={key} className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
-                              <span className={`block text-sm ${text}`}>
-                                {vid ? variantLabel(p.variants.find((v) => v.id === vid)) : 'Your price'}
-                              </span>
+                              <span className={`block text-sm ${text}`}>{rowTitle(p, key)}</span>
                               {sug.hint && (
                                 <span className={`block text-[11px] ${price === sug.value ? 'text-emerald-600' : muted}`}>
                                   {price === sug.value ? `${sug.hint} · change if needed` : `${sug.hint}: ₹${sug.value}`}
                                 </span>
                               )}
                             </div>
-                            <PriceBox value={price} onChange={(v) => setPrice(p.product_id, vid, v)} isDark={isDark} autoFocus={idx === 0 && !price} />
+                            <PriceBox value={price} onChange={(v) => setPrice(p.product_id, key, v)} isDark={isDark} autoFocus={idx === 0 && !price} />
                           </div>
                         );
                       })}
@@ -534,16 +629,16 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 space-y-2 pb-3">
-              {[...selection.values()].map(({ product: p, packs }) =>
-                [...packs.entries()].map(([vid, price]) => (
-                  <div key={`${p.product_id}-${vid}`} className={`flex items-center justify-between gap-3 py-2 border-b ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+              {[...selection.values()].map(({ product: p, rows }) =>
+                [...rows.entries()].map(([key, price]) => (
+                  <div key={`${p.product_id}-${key}`} className={`flex items-center justify-between gap-3 py-2 border-b ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
                     <div className="min-w-0">
                       <p className={`text-sm font-medium truncate ${text}`}>{p.name}</p>
-                      <p className={`text-xs ${muted}`}>{vid ? variantLabel(p.variants.find((v) => v.id === vid)) : p.category_name}</p>
+                      <p className={`text-xs ${muted}`}>{rowTitle(p, key) === 'Your price' ? p.category_name : rowTitle(p, key)}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <PriceBox value={price} onChange={(v) => setPrice(p.product_id, vid, v)} isDark={isDark} />
-                      <button onClick={() => togglePack(p, vid || NO_PACK)} aria-label="Remove" className="p-1">
+                      <PriceBox value={price} onChange={(v) => setPrice(p.product_id, key, v)} isDark={isDark} />
+                      <button onClick={() => removeRow(p.product_id, key)} aria-label="Remove" className="p-1">
                         <X className={`w-4 h-4 ${muted}`} />
                       </button>
                     </div>
