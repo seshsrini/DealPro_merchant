@@ -505,7 +505,7 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
 
       {/* Sticky action bar */}
       {packCount > 0 && !reviewOpen && (
-        <div className={`fixed bottom-0 inset-x-0 z-30 px-4 pt-3 pb-safe-bottom border-t ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-30 px-4 pt-3 pb-safe-bottom border-t ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div>
             <button onClick={() => { setSaveError(null); setReviewOpen(true); }}
               className="w-full h-14 rounded-xl bg-slate-900 text-white font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2">
@@ -520,7 +520,7 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
       {reviewOpen && (
         <div className="fixed inset-0 z-[300] bg-black/60 flex items-end" onClick={() => !saving && setReviewOpen(false)}>
           <div onClick={(e) => e.stopPropagation()}
-            className={`w-full max-h-[88vh] rounded-t-2xl flex flex-col ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
+            className={`w-full max-w-md mx-auto max-h-[88vh] rounded-t-2xl flex flex-col ${isDark ? 'bg-slate-900' : 'bg-white'}`}>
             <div className="px-5 pt-5 pb-3 flex items-center justify-between">
               <div>
                 <h3 className={`text-lg font-bold ${text}`}>Review {packCount} {packCount === 1 ? 'item' : 'items'}</h3>
