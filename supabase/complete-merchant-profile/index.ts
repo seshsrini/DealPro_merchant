@@ -5,6 +5,7 @@ declare const Deno: {
 };
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { fillMissingStoreCoords } from '../_shared/geocodeStore.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -192,6 +193,10 @@ Deno.serve(async (req: Request) => {
       }
       profileData = insertedRows && insertedRows[0];
     }
+
+    // Stores saved without a map position (0,0) never appear in "deals near me";
+    // locate them from their address first.
+    await fillMissingStoreCoords(stores);
 
     // Remove any existing stores for this merchant (handles re-onboarding)
     await adminClient

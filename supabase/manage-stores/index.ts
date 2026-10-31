@@ -5,6 +5,7 @@ declare const Deno: {
 };
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.49.1';
+import { fillMissingStoreCoords, geocodeStoreAddress, hasCoords } from '../_shared/geocodeStore.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -131,6 +132,16 @@ Deno.serve(async (req) => {
 
       if (updateErr) throw updateErr;
 
+      // Still no map position after the edit → locate it from the (new) address.
+      if (updated && !hasCoords(updated)) {
+        const found = await geocodeStoreAddress(updated);
+        if (found) {
+          const { data: located } = await admin.from('merchant_stores').update(found)
+            .eq('id', storeId).eq('merchant_id', merchantId).select().single();
+          if (located) updated = located;
+        }
+      }
+
       return new Response(JSON.stringify({ store: updated }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -146,6 +157,9 @@ Deno.serve(async (req) => {
           status: 400,
         });
       }
+
+      // No map position from the app → locate the store from its address.
+      await fillMissingStoreCoords([store]);
 
       const row = {
         merchant_id: merchantId,
