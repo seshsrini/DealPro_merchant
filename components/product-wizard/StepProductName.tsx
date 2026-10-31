@@ -1,9 +1,21 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Package, Loader2 } from 'lucide-react';
+import { Package, Loader2, Sparkles } from 'lucide-react';
+import { supabase } from '../../services/supabaseClient';
 import { floatIn } from './floatIn';
 import { addCampaignService } from '../../services/addCampaignService';
 
+/** A DealFynd catalogue match picked from the name type-ahead. */
+export interface CatalogPick {
+  productId: string;
+  name: string;
+  schemaId: string | null;
+  sectorName: string;
+  description: string | null;
+}
+
 interface StepProductNameProps {
+  /** When set, typing 3+ letters suggests catalogue products. */
+  onCatalogPick?: (pick: CatalogPick) => void;
   name: string;
   brand: string;
   onNameChange: (value: string) => void;
@@ -14,8 +26,38 @@ interface StepProductNameProps {
 }
 
 export const StepProductName: React.FC<StepProductNameProps> = ({
-  name, brand, onNameChange, onBrandChange, onNext, onBack, theme,
+  name, brand, onNameChange, onBrandChange, onNext, onBack, theme, onCatalogPick,
 }) => {
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const pickedRef = useRef<string | null>(null);
+
+  // Catalogue type-ahead (debounced). Silent on failure — typing always works.
+  useEffect(() => {
+    if (!onCatalogPick) return;
+    const q = name.trim();
+    if (q.length < 3 || q === pickedRef.current) { setSuggestions([]); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await supabase.functions.invoke('catalog-browse', { body: { action: 'suggest', query: q } });
+        if (!cancelled) setSuggestions(Array.isArray(data?.products) ? data.products : []);
+      } catch { if (!cancelled) setSuggestions([]); }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [name, onCatalogPick]);
+
+  const pick = (p: any) => {
+    pickedRef.current = p.name;
+    onNameChange(p.name);
+    onCatalogPick?.({
+      productId: p.product_id, name: p.name, schemaId: p.schema_id ?? null,
+      sectorName: p.sector_name, description: p.description ?? null,
+    });
+    setSuggestions([]);
+    setShowSuggest(false);
+  };
+
   const nameRef = useRef<HTMLInputElement>(null);
   const isDark = theme === 'dark';
   const isValid = name.trim().length >= 2;
@@ -86,6 +128,7 @@ export const StepProductName: React.FC<StepProductNameProps> = ({
             value={name}
             onChange={(e) => {
               onNameChange(e.target.value);
+              setShowSuggest(true);
               if (moderationError) setModerationError(null);
             }}
             onKeyDown={handleKeyDown}
@@ -93,6 +136,24 @@ export const StepProductName: React.FC<StepProductNameProps> = ({
             placeholder="e.g. iPhone 15 Pro Max"
             className={inputClass}
           />
+          {showSuggest && suggestions.length > 0 && (
+            <div className={`mt-1 rounded-xl border overflow-hidden ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200 shadow-lg'}`}>
+              <p className={`px-3 pt-2 pb-1 text-[11px] font-semibold flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <Sparkles className="w-3 h-3 text-emerald-500" /> From DealFynd catalogue
+              </p>
+              {suggestions.map((p) => (
+                <button
+                  key={p.product_id}
+                  type="button"
+                  onClick={() => pick(p)}
+                  className={`w-full text-left px-3 py-2.5 border-t ${isDark ? 'border-slate-700 hover:bg-slate-700' : 'border-slate-100 hover:bg-slate-50'}`}
+                >
+                  <span className={`block text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>{p.name}</span>
+                  <span className={`block text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{p.sector_name}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <p className={`text-xs mt-1.5 text-right ${name.length >= 90 ? 'text-amber-500' : isDark ? 'text-slate-500' : 'text-slate-400'}`}>
             {name.length}/100
           </p>

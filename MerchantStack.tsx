@@ -32,6 +32,7 @@ import { AnnouncementsList } from './AnnouncementsList';
 import { DotdWizard } from './DotdWizard';
 import { MerchantDealOfDay } from './MerchantDealOfDay';
 import { ProductWizard } from './ProductWizard';
+import { CatalogueBrowser } from './CatalogueBrowser';
 import { CatalogueItem } from './MerchantCatalogue';
 
 type CampaignTab = 'active' | 'expired';
@@ -231,6 +232,11 @@ export const MerchantStack: React.FC<MerchantStackProps> = ({
     catalogueLocked
       ? <CatalogueLocked theme={theme} onUpgrade={() => setView('merchant_subscriptions')} />
       : <MerchantCatalogue user={user} theme={theme} setView={setView} setEditProduct={setEditProduct} />
+  );
+  else if (view === 'catalogue_browse') currentView = (
+    catalogueLocked
+      ? <CatalogueLocked theme={theme} onUpgrade={() => setView('merchant_subscriptions')} />
+      : <CatalogueBrowser user={user} theme={theme} setView={setView} />
   );
   else if (view === 'product_wizard') currentView = (
     <ProductWizard

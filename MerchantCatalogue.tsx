@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Plus, Edit2, Trash2, Package, AlertCircle,
+  Plus, Edit2, Trash2, Package, AlertCircle, LayoutGrid,
 } from 'lucide-react';
 import { User, AppView } from './types';
 import { CATEGORY_SCHEMAS } from './data/formSchema';
@@ -246,6 +246,20 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
             </button>
           )}
         </div>
+        {items.length > 0 && (
+          <button
+            onClick={() => setView('catalogue_browse')}
+            className={`mt-4 w-full flex items-center gap-3 p-3 rounded-xl border text-left active:scale-[0.99] transition-all ${
+              isDark ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-emerald-200 bg-emerald-50'
+            }`}
+          >
+            <LayoutGrid className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span className="min-w-0">
+              <span className={`block text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>Add from DealFynd catalogue</span>
+              <span className={`block text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Pick many products at once and set your prices</span>
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Category filter tabs */}
@@ -301,6 +315,15 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
           >
             <Plus className="w-4 h-4" />
             Add First Product/Item
+          </button>
+          <button
+            onClick={() => setView('catalogue_browse')}
+            className={`mt-3 flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-medium border active:scale-[0.98] transition-all ${
+              isDark ? 'border-emerald-500/50 text-emerald-400' : 'border-emerald-300 text-emerald-700 bg-emerald-50'
+            }`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+            Pick from DealFynd catalogue
           </button>
         </div>
       )}
