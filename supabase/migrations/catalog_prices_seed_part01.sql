@@ -2,6 +2,10 @@
 -- Run after catalog_browse.sql. AI-assisted reference prices (labelled 'approx.' in the app). Safe to re-run;
 -- never overwrites a price an admin has set (typical_price_source = 'admin').
 BEGIN;
+-- Columns normally added by catalog_browse.sql; repeated here so run order doesn't matter.
+ALTER TABLE public.catalog_variants ADD COLUMN IF NOT EXISTS typical_price numeric(12,2)
+  CHECK (typical_price IS NULL OR typical_price >= 0);
+ALTER TABLE public.catalog_variants ADD COLUMN IF NOT EXISTS typical_price_source text;
 UPDATE public.catalog_variants v SET typical_price = x.price, typical_price_source = 'ai_estimate'
 FROM (VALUES
   ('DFT00874', '100 g', 20),
