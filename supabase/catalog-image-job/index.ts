@@ -9,7 +9,7 @@
 //
 // Auth: header `x-job-token` whose SHA-256 matches the digest below, or the project's service-role key as a
 // Bearer token (used by the vedicjaalam.com admin catalogue "Regenerate" button).
-// Body: { names?: string[], codes?: string[], limit?: number (max 3), dry?: boolean, overwrite?: boolean,
+// Body: { list?: true, names?: string[], codes?: string[], limit?: number (max 3), dry?: boolean, overwrite?: boolean,
 //         hints?: { [code]: string } — saved to attributes.image_hint before generating }
 // attributes.image_hint ("what it must look like") is added to both the prompt and the check.
 
@@ -108,7 +108,11 @@ async function judge(apiKey: string, p: Product, b64: string, mime: string): Pro
     `You are checking a product photo for an Indian shopping catalogue. The product is "${p.name}".`,
     p.description ? `Description: ${p.description}` : '',
     hintOf(p) ? `It must look like this: ${hintOf(p)}. If it does not, shows_product is false.` : '',
-    'Answer strictly: does the photo clearly and correctly show this product (not a different item)?',
+    'The photo is deliberately unbranded: packaging, bottles, boxes and strips are meant to be completely blank.',
+    'So NEVER fail it because the packaging is blank or does not name the product — for medicines, syrups and packaged',
+    'goods judge only whether it shows the right KIND of item in a plausible form (e.g. a tablet strip for a tablet, a',
+    'syrup bottle for a syrup). For foods, produce and objects it must clearly be this specific item, not a look-alike.',
+    'Answer strictly: does the photo correctly show this product (not a different item)?',
     'Is there ANY text, letters, numbers, label printing, brand name or logo? Any people or hands?',
     'Is the background plain/clean? Is it a sharp, realistic, undistorted photo?',
     'In "issue" give one short sentence describing the main problem, or "" if none.',
@@ -195,6 +199,19 @@ Deno.serve(async (req) => {
       if (t) attrs.image_hint = t; else delete attrs.image_hint;
       await db.from('catalog_products').update({ attributes: attrs }).eq('id', cur.id);
     }
+  }
+
+  // { list: true } → codes of every active product still without a photo (for the bulk runner).
+  if (body.list) {
+    const codes: string[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await db.from('catalog_products').select('code')
+        .eq('status', 'active').is('image_url', null).not('code', 'is', null).order('code').range(from, from + 999);
+      if (error) return json({ error: error.message }, 500);
+      codes.push(...(data ?? []).map((r: { code: string }) => r.code));
+      if (!data || data.length < 1000) break;
+    }
+    return json({ count: codes.length, codes });
   }
 
   let q = db.from('catalog_products')
