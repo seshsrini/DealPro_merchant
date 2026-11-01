@@ -92,11 +92,11 @@ async function generate(apiKey: string, prompt: string) {
       signal: AbortSignal.timeout(60000),
     });
     const text = await res.text();
-    if (!res.ok) { last = `${model} HTTP ${res.status}: ${text.slice(0, 200)}`; continue; }
+    if (!res.ok) { last = `${last ? last + ' | ' : ''}${model} HTTP ${res.status}: ${text.slice(0, 200)}`; continue; }
     const data = JSON.parse(text);
     const part = (data?.candidates?.[0]?.content?.parts ?? []).find((x: any) => x?.inlineData?.data);
     if (part) return { b64: part.inlineData.data as string, mime: (part.inlineData.mimeType || 'image/png') as string, model };
-    last = `${model}: no image (${data?.candidates?.[0]?.finishReason ?? 'unknown'})`;
+    last = `${last ? last + ' | ' : ''}${model}: no image (${data?.candidates?.[0]?.finishReason ?? 'unknown'})`;
   }
   throw new Error(last || 'image generation failed');
 }
