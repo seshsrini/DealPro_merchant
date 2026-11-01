@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
         p_limit: action === 'suggest' ? 8 : Math.min(Number(body.limit) || 40, 100),
         p_offset: action === 'suggest' ? 0 : Math.max(Number(body.offset) || 0, 0),
       });
-      if (error) throw error;
+      if (error) throw new Error(`RPC catalog_browse: ${error.message}${error.hint ? ` (${error.hint})` : ''}`);
       const rows = data || [];
       return json({ products: rows, total: rows.length ? Number(rows[0].total) : 0 });
     }
@@ -240,6 +240,7 @@ Deno.serve(async (req) => {
     const msg = String(err?.message || err);
     const status = msg.startsWith('Unauthorized') ? 401 : msg.startsWith('Forbidden') ? 403 : 500;
     console.error('[catalog-browse]', msg);
-    return json({ error: status === 500 ? 'Something went wrong. Please try again.' : msg }, status);
+    // DEV: surface database errors so they can be diagnosed from the app.
+    return json({ error: status === 500 && !msg.startsWith('RPC ') ? 'Something went wrong. Please try again.' : msg }, status);
   }
 });
