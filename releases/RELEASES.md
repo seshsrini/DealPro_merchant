@@ -51,7 +51,7 @@ Everything in `2026.10.27.2050` plus:
 | Signing key | `CN=DealPro…` (alias `dealpro-merchant`), SHA1 `32:7F:5C:…:FD:F5` |
 | targetSdk / minSdk | 36 / 24 |
 | Commit | `0b0cbf4` |
-| Play status | pending upload |
+| Play status | approved — live in production (confirmed by owner; approval date not recorded) |
 
 Everything in `2026.10.27.0851` plus:
 
