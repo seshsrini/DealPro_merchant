@@ -24,7 +24,11 @@ import { merchantService } from './services/merchantService';
 async function callCatalog<T = any>(body: Record<string, unknown>): Promise<T> {
   await ensureFreshToken().catch(() => { /* invoke wrapper retries on 401 */ });
   const { data, error } = await supabase.functions.invoke('catalog-browse', { body });
-  if (error) throw error;
+  if (error) {
+    // Non-2xx: read the function's own error message from the response body.
+    const body = await (error as any)?.context?.json?.().catch(() => null);
+    throw new Error(body?.error || error.message);
+  }
   if (data?.error) throw new Error(data.error);
   return data as T;
 }
@@ -202,8 +206,8 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
       const rows = (r.products || []).map((x) => ({ ...x, brands: x.brands || [], variants: x.variants || [] }));
       setProducts((prev) => (offset === 0 ? rows : [...prev, ...rows]));
       setTotal(r.total || 0);
-    } catch {
-      if (id === reqId.current) setLoadError('Could not load products. Pull back and try again.');
+    } catch (e: any) {
+      if (id === reqId.current) setLoadError(`Could not load products. ${e?.message && !/non-2xx/i.test(e.message) ? e.message : 'Please try again.'}`);
     } finally {
       if (id === reqId.current) setLoading(false);
     }
