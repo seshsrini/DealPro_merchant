@@ -20,6 +20,27 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.10.31.1611 — versionCode 1793477507
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-PROD-2026.10.31.1611-vc1793477507.aab` |
+| SHA-256 | `b29e44eca523caa627c59b9a76586cc203f7148bc544802c6a9eb4240ac9aeac` |
+| Size | 22,274,709 bytes |
+| targetSdk / minSdk | 36 / 24 |
+| Commit | `67d02c7` |
+| Play status | pending upload |
+
+Everything in `2026.10.27.2050` plus:
+
+- **Announcements run 15 days**, and their start date can't be in the past.
+- **Stores without a map position are located from their address** (Google Geocoding), so
+  their deals show up for nearby customers.
+- **Phone proof at login in observe mode** — never blocks a login.
+- **More reliable on a weak network** — read-only calls retry once on a server hiccup.
+- **"Manage subscription"** back to the plain web page (billing-pass change reverted).
+- Product photo analysis returns complete answers (server side).
+
 ## 2026.10.27.2050 — versionCode 1793148602
 
 | | |
