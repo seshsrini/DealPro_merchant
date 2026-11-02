@@ -30,6 +30,7 @@ import {
   CalendarDays,
   Shield,
 } from 'lucide-react';
+import { PlanExtras } from './components/PlanExtras';
 
 // Displayed price of a tier: the GST-inclusive total (what Razorpay debits)
 // when the tier row carries it, else the base subscription_fee (older caches).
@@ -950,6 +951,7 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
                   </button>
                 )}
               </div>
+              <PlanExtras tier={tier} isDark={isDark} className="col-span-12 -mt-1" />
                 </div>
               </React.Fragment>
               );

@@ -96,6 +96,7 @@ export interface SubscriptionTier {
   updated_at: string;
   max_campaigns_per_month: number;
   max_dotd_per_month: number;
+  max_announcements_per_month?: number | null;
   is_multi_store: boolean;
 }
 

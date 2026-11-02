@@ -9,6 +9,7 @@ import { billingService } from '../../services/BillingService';
 import { localSubscriptionStore } from '../../services/LocalSubscriptionStore';
 import { supabase } from '../../services/supabaseClient';
 import { floatIn } from './floatIn';
+import { PlanExtras } from '../PlanExtras';
 
 // Displayed price of a tier: the GST-inclusive total (what Razorpay debits)
 // when the tier row carries it, else the base subscription_fee (older caches).
@@ -377,6 +378,7 @@ export const StepSubscription: React.FC<StepSubscriptionProps> = ({
                   <Tags className="w-3.5 h-3.5" /> {(tier.max_dotd_per_month ?? 0) >= 999 ? 'Unlimited DOTD' : `${tier.max_dotd_per_month} DOTD/mo`}
                 </span>
               </div>
+              <PlanExtras tier={tier} isDark={isDark} className="-mt-1 mb-3" />
 
               <button
                 onClick={() => handleSelect(tier)}
