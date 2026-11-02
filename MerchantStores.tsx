@@ -417,6 +417,14 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
     }
   };
 
+  // Unticking "Find my store location" = manual entry: clear the address fields and map position
+  // (same as the signup step). Store name, category, hours and phones are kept.
+  const clearAddressForManualEntry = () => {
+    setForm(f => ({ ...f, address: '', locality: '', city: '', state: '', pincode: '', latitude: 0, longitude: 0 }));
+    setPincodeResults([]);
+    setShowPincodeDropdown(false);
+  };
+
   const handleSave = async (waOverride?: boolean) => {
     if (!form.address.trim()) { setError(t('m_address_required')); return; }
     if (!form.city.trim()) { setError(t('m_city_required')); return; }
@@ -834,6 +842,7 @@ export const MerchantStores: React.FC<Props> = ({ user, setView, theme, forceAdd
                     onChange={(e) => {
                       setUseMyLocation(e.target.checked);
                       if (e.target.checked) handleFindMyLocation();
+                      else clearAddressForManualEntry();
                     }}
                     className="w-4 h-4 rounded accent-blue-600 mt-0.5 shrink-0"
                   />

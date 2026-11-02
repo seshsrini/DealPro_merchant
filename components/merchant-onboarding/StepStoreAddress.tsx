@@ -266,6 +266,25 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
     }
   }, [applyReverseGeocode, onChange]);
 
+  // Unticking "Find my store location" means "I'll type it myself": clear the address the
+  // GPS filled (street, pincode, locality, city, state, map position) and any pending lookups,
+  // so no half-detected value lingers. Store name, category and phones are kept.
+  const clearAddressForManualEntry = useCallback(() => {
+    [pincodeSuggestRef, pincodeDebounceRef, localityDebounceRef].forEach((r) => { if (r.current) clearTimeout(r.current); });
+    onChange('street', '');
+    onChange('pincode', '');
+    onChange('locality', '');
+    onChange('city', '');
+    onChange('state', '');
+    onChange('coords', null);
+    onChange('isPincodeSearching', false);
+    setLocalitySearch('');
+    setPincodeResults([]);
+    setShowPincodeDropdown(false);
+    setLocalityResults([]);
+    setShowLocalityDropdown(false);
+  }, [onChange]);
+
   // Resolve coordinates from store address fields, fallback to device GPS
   const handleGetLocation = async () => {
     onChange('isGeocoding', true);
@@ -379,6 +398,7 @@ export const StepStoreAddress: React.FC<StepStoreAddressProps> = ({
             onChange={(e) => {
               setUseMyLocation(e.target.checked);
               if (e.target.checked) handleFindMyLocation();
+              else clearAddressForManualEntry();
             }}
             className="w-4 h-4 rounded accent-blue-600 mt-0.5 shrink-0"
           />
