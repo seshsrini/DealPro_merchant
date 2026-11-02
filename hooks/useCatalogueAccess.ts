@@ -12,6 +12,13 @@ const LOCKED_TIER_PREFIX = 'basic';
 // Pre-GST BASE fees (subscription_tiers.subscription_fee), not the GST-inclusive total_amount.
 const LOCKED_PLAN_FEES = [199, 1990];
 
+/** True when a plan includes the product Catalogue (every plan except Basic). Shared by the
+ *  Catalogue lock below and the plan screens, so what a plan advertises is what it unlocks. */
+export function planIncludesCatalogue(tier: { tier_key?: string | null; subscription_fee?: number | string | null }): boolean {
+  const key = String(tier.tier_key || '').toLowerCase();
+  return !key.startsWith(LOCKED_TIER_PREFIX) && !LOCKED_PLAN_FEES.includes(Number(tier.subscription_fee));
+}
+
 /**
  * Returns true when the merchant's ACTIVE plan is the ₹199 tier, so the caller
  * can gray-out / block the Catalogue feature. Re-evaluated on every mount (app
@@ -42,7 +49,7 @@ export function useCatalogueAccessLocked(
         }
         const tiers = await subscriptionService.getSubscriptionTiers();
         const tier = tiers.find((t) => t.tier_key === tierKey);
-        const isBasic = tierKey.startsWith(LOCKED_TIER_PREFIX) || LOCKED_PLAN_FEES.includes(Number(tier?.subscription_fee));
+        const isBasic = !planIncludesCatalogue({ tier_key: tierKey, subscription_fee: tier?.subscription_fee });
         if (!cancelled) setLocked(isBasic);
       } catch {
         if (!cancelled) setLocked(false); // fail-open
