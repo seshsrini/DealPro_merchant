@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Plus, Edit2, Trash2, Package, AlertCircle, LayoutGrid,
+  Plus, Edit2, Trash2, Package, AlertCircle, LayoutGrid, Camera,
 } from 'lucide-react';
 import { User, AppView } from './types';
 import { CATEGORY_SCHEMAS } from './data/formSchema';
@@ -19,6 +19,7 @@ import { resilient, peekCache } from './services/resilientData';
 import { useResumeRefetch } from './services/useResumeRefetch';
 import { MediaLightbox, LightboxSlide } from './components/MediaLightbox';
 import { MerchantProductPreview } from './components/MerchantProductPreview';
+import { CataloguePhotoSheet } from './components/CataloguePhotoSheet';
 
 // Build the lightbox slides array for a single catalogue item:
 // cover image, then any additional images, then the optional video at the end.
@@ -57,6 +58,10 @@ export interface CatalogueItem {
   mrp: string;
   stockCount: number | null;
   createdAt: string;
+  /** Added from the DealFynd catalogue (attributes.source = 'catalogue'). */
+  fromCatalogue?: boolean;
+  /** The merchant put their own photo on a catalogue product (attributes.photo_source). */
+  ownPhoto?: boolean;
 }
 
 // ── Supabase row → CatalogueItem converter ──────────────────────────────────
@@ -95,6 +100,8 @@ function rowToItem(row: Record<string, unknown>): CatalogueItem {
     mrp,
     stockCount:       Number.isNaN(stockCount as number) ? null : stockCount,
     createdAt:        row.created_at as string,
+    fromCatalogue:    attrs.source === 'catalogue',
+    ownPhoto:         attrs.photo_source === 'merchant',
   };
 }
 
@@ -158,6 +165,7 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [lightboxItem, setLightboxItem] = useState<CatalogueItem | null>(null);
   const [previewItem, setPreviewItem] = useState<CatalogueItem | null>(null);
+  const [photoItem, setPhotoItem] = useState<CatalogueItem | null>(null);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -372,6 +380,19 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
                       {discountPct}% off
                     </span>
                   )}
+                  {/* Own photo for a catalogue product */}
+                  {item.fromCatalogue && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setPhotoItem(item); }}
+                      className={`absolute bottom-2 left-2 z-10 h-7 px-2.5 rounded-full flex items-center gap-1 text-[10px] font-semibold shadow-sm ${
+                        isDark ? 'bg-slate-900/85 text-white' : 'bg-white/90 text-slate-800'
+                      }`}
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      {item.ownPhoto ? 'Your photo' : 'Add your photo'}
+                    </button>
+                  )}
                   {/* Action buttons (z-10 so they sit above the image's click target) */}
                   <div className="absolute top-2 right-2 flex flex-col gap-1.5 z-10">
                     <button
@@ -482,6 +503,27 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
             const item = previewItem;
             setPreviewItem(null);
             openEdit(item);
+          }}
+        />
+      )}
+
+      {/* Own photo for a product added from the DealFynd catalogue */}
+      {photoItem && (
+        <CataloguePhotoSheet
+          productId={photoItem.id}
+          productName={photoItem.name}
+          merchantId={user.id}
+          hasOwnPhoto={!!photoItem.ownPhoto}
+          theme={theme}
+          onClose={() => setPhotoItem(null)}
+          onSaved={(imageUrl, ownPhoto) => {
+            // Keep photo_source in specs too: the product wizard saves specs back as attributes.
+            setItems(prev => prev.map(i => {
+              if (i.id !== photoItem.id) return i;
+              const specs = { ...i.specs };
+              if (ownPhoto) specs.photo_source = 'merchant'; else { delete specs.photo_source; delete specs.photo_at; }
+              return { ...i, imageUrl, ownPhoto, specs };
+            }));
           }}
         />
       )}

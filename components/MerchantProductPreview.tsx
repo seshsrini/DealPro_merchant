@@ -60,11 +60,12 @@ export const MerchantProductPreview: React.FC<Props> = ({ item, theme, onClose, 
     ? Math.round(((mrpNum - priceNum) / mrpNum) * 100)
     : 0;
 
-  // Specs to show (hide internal fields like ai_description / schemaId).
+  // Specs to show (hide internal fields like ai_description / schemaId, and the catalogue
+  // bookkeeping keys: source, catalog_brand_id, restricted, photo_source, photo_at).
+  const HIDDEN_SPECS = new Set(['ai_description', 'schemaId', 'source', 'catalog_brand_id', 'restricted', 'photo_source', 'photo_at']);
   const specEntries = Object.entries(item.specs || {}).filter(
     ([key, value]) =>
-      key !== 'ai_description' &&
-      key !== 'schemaId' &&
+      !HIDDEN_SPECS.has(key) &&
       value !== null && value !== undefined && String(value).trim() !== ''
   );
 

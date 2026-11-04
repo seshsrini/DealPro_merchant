@@ -7,6 +7,7 @@
 //   suggest   → { products: [...] }           body: { query }   (type-ahead, 3+ chars)
 //   bulk_add  → { added, skipped }            body: { items: [{ productId, variantId?, brandId?, brandName?, price?, mrp? }],
 //                                                      storeIds? }  (defaults to all stores)
+//   set_photo → { ok, imageUrl, contributed } body: { productId, imageUrl | null, width?, height?, agreedTerms }
 //
 // Products added from the catalogue land in public.products exactly like
 // wizard-created ones, plus catalog_product_id / catalog_variant_id links.
@@ -233,6 +234,65 @@ Deno.serve(async (req) => {
       }
       console.log(`[catalog-browse] bulk_add merchant=${merchantId} added=${rows.length} skipped=${skipped}`);
       return json({ added: rows.length, skipped });
+    }
+
+    // set_photo — the merchant's own photo for a product they added from the catalogue.
+    //   body: { productId (their products.id), imageUrl | null, width?, height?, agreedTerms: boolean }
+    //   imageUrl null → back to the catalogue photo.
+    // If the catalogue product has NO photo yet, the merchant's photo is also offered to the master
+    // catalogue (catalog_images, pending owner review) under Terms 4.4, which the merchant agreed to
+    // in the upload notice. Nothing is shown to other merchants until an owner approves it.
+    if (action === 'set_photo') {
+      const productId = String(body.productId || '');
+      const { data: prod } = await admin.from('products')
+        .select('id, merchant_id, catalog_product_id, image_url, attributes')
+        .eq('id', productId).maybeSingle();
+      if (!prod || prod.merchant_id !== merchantId) return json({ error: 'Product not found.' }, 404);
+      if (!prod.catalog_product_id) return json({ error: 'This product was not added from the DealFynd catalogue.' }, 400);
+      const { data: cat } = await admin.from('catalog_products')
+        .select('id, image_url').eq('id', prod.catalog_product_id).maybeSingle();
+      const attrs = { ...((prod.attributes as Record<string, unknown>) || {}) };
+
+      if (body.imageUrl === null) {
+        delete attrs.photo_source; delete attrs.photo_at;
+        const { error } = await admin.from('products')
+          .update({ image_url: cat?.image_url || null, attributes: attrs }).eq('id', prod.id);
+        if (error) throw error;
+        return json({ ok: true, imageUrl: cat?.image_url || null, contributed: false });
+      }
+
+      const imageUrl = String(body.imageUrl || '');
+      if (!/^https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/(?:[^?#]+\/)?dealpro-products\/[^/?#]+$/.test(imageUrl)) {
+        return json({ error: 'Upload the photo again.' }, 400);
+      }
+      if (body.agreedTerms !== true) return json({ error: 'Please agree to the photo terms first.' }, 400);
+      const now = new Date().toISOString();
+      attrs.photo_source = 'merchant';
+      attrs.photo_at = now;
+      const { error: upErr } = await admin.from('products').update({ image_url: imageUrl, attributes: attrs }).eq('id', prod.id);
+      if (upErr) throw upErr;
+
+      // Offer it to the master catalogue only when the catalogue product has no photo of its own.
+      let contributed = false;
+      const w = Number(body.width) || null;
+      const h = Number(body.height) || null;
+      const bigEnough = !w || !h || (w >= 400 && h >= 400); // catalog_images_min_size
+      if (cat && !cat.image_url && bigEnough) {
+        const { count } = await admin.from('catalog_images').select('id', { count: 'exact', head: true })
+          .eq('product_id', cat.id).eq('url', imageUrl);
+        if (!count) {
+          const { error } = await admin.from('catalog_images').insert({
+            product_id: cat.id, url: imageUrl, is_primary: false, width: w, height: h,
+            source: 'merchant', license: 'merchant-terms-4.4', attribution: 'Photo by a DealFynd merchant',
+            submitted_by_merchant: merchantId, moderation_status: 'pending',
+            moderation_note: `Merchant photo, terms 4.4 agreed ${now}`,
+          });
+          if (error) console.warn('[catalog-browse] set_photo: catalogue offer failed:', error.message);
+          else contributed = true;
+        }
+      }
+      console.log(`[catalog-browse] set_photo merchant=${merchantId} product=${prod.id} contributed=${contributed}`);
+      return json({ ok: true, imageUrl, contributed });
     }
 
     return json({ error: 'Unknown action' }, 400);
