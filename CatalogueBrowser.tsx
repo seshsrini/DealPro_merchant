@@ -365,7 +365,8 @@ export const CatalogueBrowser: React.FC<Props> = ({ user, theme, setView }) => {
         </h2>
         <p className={`text-sm mb-8 ${muted}`}>
           {done.skipped > 0 ? `${done.skipped} already in your catalogue were skipped. ` : ''}
-          You can add photos, prices and stock anytime from your catalogue.
+          Want customers to see your actual stock? Tap “Add your photo” on any of these in your catalogue.
+          You can change prices and stock there anytime too.
         </p>
         <button
           onClick={() => setView('merchant_catalogue')}
