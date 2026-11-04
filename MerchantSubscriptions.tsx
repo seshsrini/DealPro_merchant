@@ -87,7 +87,10 @@ export const MerchantSubscriptions: React.FC<MerchantSubscriptionsProps> = ({ us
   // where the flag was left on. The ONLY way to see it is to be signed in as a
   // number on the reviewer allow-list, and the server enforces the same list
   // independently, so a tampered client gains nothing.
-  const allowTestBypass = isReviewerAccount(user);
+  // Internal DEV builds (VITE_ALLOW_TEST_SUBSCRIPTION=true) show it to every tester; the server
+  // allows that only where its own ALLOW_TEST_SUBSCRIPTION secret is set (DEV).
+  const allowTestBypass = isReviewerAccount(user)
+    || String((import.meta as any).env?.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true';
   const [testBypassing, setTestBypassing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [tierToConfirm, setTierToConfirm] = useState<SubscriptionTier | null>(null);

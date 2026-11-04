@@ -7,6 +7,12 @@ import { biometricService } from './services/biometricService';
 import { signupDraftService } from './services/draftService';
 import { clearCachedStores } from './services/merchantStoresCache';
 import { PLAY_COMPLIANT } from './services/playCompliance';
+
+// DEV/internal builds (VITE_ALLOW_TEST_SUBSCRIPTION=true) keep the plan step in signup even in
+// Play-compliant mode, so testers can use "Skip Payment (Test Subscription)" there. Store builds
+// don't set it, so they still go straight to the dashboard and activate the plan on the web.
+const TEST_SUBSCRIPTION_BUILD =
+  String((import.meta as any).env?.VITE_ALLOW_TEST_SUBSCRIPTION || '').toLowerCase() === 'true';
 import { useTranslation } from './contexts/LanguageContext';
 import { Loader2 } from 'lucide-react';
 
@@ -544,7 +550,7 @@ export const MerchantOnboarding: React.FC<MerchantOnboardingProps> = ({
       setUser({ ...updatedUser, hasActiveSubscription: actuallySubscribed });
       await biometricService.saveSession({ ...updatedUser, hasActiveSubscription: actuallySubscribed });
 
-      if (PLAY_COMPLIANT || actuallySubscribed) {
+      if ((PLAY_COMPLIANT && !TEST_SUBSCRIPTION_BUILD) || actuallySubscribed) {
         // Compliant build: never show an in-app plan picker. Go to the dashboard;
         // the merchant activates their plan on the web and the deal-posting gate
         // guides them there. (Non-compliant: skip the step only when already
