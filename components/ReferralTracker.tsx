@@ -23,8 +23,8 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
   const isDark = theme === 'dark';
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [referralCount, setReferralCount] = useState(0);
-  const threshold = 5; // 5 qualified referrals = 1 free month (matches the engine)
+  const [pendingCount, setPendingCount] = useState(0); // signed up with the code, not paid yet
+  const threshold = 5; // 5 paid referrals = 1 free month (app_configs.referral_reward_threshold)
   const [totalAllTime, setTotalAllTime] = useState(0);
   const [rewardsEarned, setRewardsEarned] = useState(0);
   const [referralCode, setReferralCode] = useState(
@@ -61,20 +61,14 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
         }
       }
 
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
-
-      // Fetch this month's qualified referrals, all-time count, and rewards.
-      // Threshold is fixed at 5 (matches the refund engine) — no app_configs read.
-      const [monthRes, allTimeRes, rewardsRes] = await Promise.all([
+      // A referral is 'pending' when the merchant signs up with this code and 'qualified' once
+      // they pay for their first subscription. Credits are all-time with carryover.
+      const [pendingRes, allTimeRes, rewardsRes] = await Promise.all([
         supabase
           .from('merchant_referrals')
           .select('id', { count: 'exact', head: true })
           .eq('referrer_id', user.id)
-          .eq('status', 'qualified')
-          .gte('qualified_at', monthStart)
-          .lt('qualified_at', monthEnd),
+          .eq('status', 'pending'),
         supabase
           .from('merchant_referrals')
           .select('id', { count: 'exact', head: true })
@@ -83,10 +77,11 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
         supabase
           .from('merchant_rewards_log')
           .select('id', { count: 'exact', head: true })
-          .eq('merchant_id', user.id),
+          .eq('merchant_id', user.id)
+          .in('reward_type', ['free_month', 'free_month_offer']),
       ]);
 
-      setReferralCount(monthRes.count || 0);
+      setPendingCount(pendingRes.count || 0);
       setTotalAllTime(allTimeRes.count || 0);
       setRewardsEarned(rewardsRes.count || 0);
     } catch (err) {
@@ -176,7 +171,7 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
                 <span className="text-white text-xs font-bold tracking-wide uppercase">Next Free Month</span>
               </div>
               <span className="text-white/90 text-xs font-semibold">
-                {cycleProgress} / {threshold} referrals
+                {cycleProgress} / {threshold} paid referrals
               </span>
             </div>
 
@@ -201,10 +196,10 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
                   <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className={`text-sm font-semibold ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
-                      {availableCredits} free month{availableCredits !== 1 ? 's' : ''} ready 🎁
+                      {availableCredits} free month{availableCredits !== 1 ? 's' : ''} earned 🎁
                     </p>
                     <p className={`text-xs mt-0.5 ${isDark ? 'text-emerald-300/70' : 'text-emerald-700'}`}>
-                      We&apos;ll refund {availableCredits !== 1 ? 'them' : 'it'} to your payment method on your next bill. Referrals carry over — keep going!
+                      Applied to your next bill{availableCredits !== 1 ? 's, one at a time' : ''}. Monthly plan: that month is free (we charge just ₹1 to keep Autopay active). Yearly plan: 1/12 off your renewal.
                     </p>
                   </div>
                 </div>
@@ -213,10 +208,10 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
                   <Gift className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className={`text-sm font-semibold ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
-                      {remaining} more referral{remaining !== 1 ? 's' : ''} for a free month
+                      {remaining} more paid referral{remaining !== 1 ? 's' : ''} for a free month
                     </p>
                     <p className={`text-xs mt-0.5 ${isDark ? 'text-amber-300/70' : 'text-amber-700'}`}>
-                      Every {threshold} qualified referrals = 1 free month. Unused referrals carry over.
+                      A referral counts once that merchant signs up with your code and pays for DealFynd. Every {threshold} = 1 free month. Unused referrals carry over.
                     </p>
                   </div>
                 </div>
@@ -228,13 +223,13 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
           <div className="grid grid-cols-3 gap-3">
             <div className={`rounded-xl p-3 text-center border ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white border-slate-200'}`}>
               <Users className={`w-5 h-5 mx-auto mb-1.5 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-              <p className={`text-xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{referralCount}</p>
-              <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>This Month</p>
+              <p className={`text-xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{pendingCount}</p>
+              <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Waiting to Pay</p>
             </div>
             <div className={`rounded-xl p-3 text-center border ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white border-slate-200'}`}>
               <TrendingUp className={`w-5 h-5 mx-auto mb-1.5 ${isDark ? 'text-emerald-400' : 'text-emerald-500'}`} />
               <p className={`text-xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>{totalAllTime}</p>
-              <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>All Time</p>
+              <p className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Paid Referrals</p>
             </div>
             <div className={`rounded-xl p-3 text-center border ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-white border-slate-200'}`}>
               <Gift className={`w-5 h-5 mx-auto mb-1.5 ${isDark ? 'text-amber-400' : 'text-amber-500'}`} />
@@ -250,8 +245,9 @@ export const ReferralTracker: React.FC<ReferralTrackerProps> = ({ user, setView,
               {[
                 { step: '1', text: 'Share your referral code with other merchants' },
                 { step: '2', text: 'They enter your code during their DealFynd signup' },
-                { step: '3', text: `Every ${threshold} qualified referrals = 1 free month — unused referrals carry over` },
-                { step: '4', text: 'We refund that month’s charge to your payment method' },
+                { step: '3', text: 'Their referral counts once they pay for their first DealFynd subscription' },
+                { step: '4', text: `Every ${threshold} paid referrals = 1 free month. Unused referrals carry over` },
+                { step: '5', text: 'Monthly plan: your next month is free (we charge just ₹1 to keep Autopay active). Yearly plan: 1/12 off your next renewal' },
               ].map((item) => (
                 <div key={item.step} className="flex items-start gap-3">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold ${isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>

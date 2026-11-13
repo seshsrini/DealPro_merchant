@@ -36,6 +36,53 @@ function notifyMerchant(admin: any, merchantId: string, type: string, title: str
   return task;
 }
 
+// GST tax invoice for a captured payment: vedicjaalam.com issues it (VJDF<FY><0001>) and
+// emails it with the PDF. Authenticated with this project's own service-role key; idempotent
+// per payment. Best-effort and in the background, so it never delays the webhook ack.
+// Override the address with the INVOICE_ISSUE_URL secret if needed.
+function requestInvoice(paymentId: string) {
+  const task = (async () => {
+    try {
+      const url = Deno.env.get('SUPABASE_URL');
+      const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (!url || !key) return;
+      const res = await fetch(Deno.env.get('INVOICE_ISSUE_URL') || 'https://vedicjaalam.com/api/billing/invoices/issue', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ razorpay_payment_id: paymentId, project_url: url }),
+      });
+      const out = await res.text().catch(() => '');
+      console.log(`[razorpay-webhook] invoice for ${paymentId}: ${res.status} ${out.slice(0, 200)}`);
+    } catch (e) {
+      console.warn('[razorpay-webhook] invoice request failed (admin can issue it later):', (e as Error)?.message);
+    }
+  })();
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(task);
+  return task;
+}
+
+// Referral reward check for one merchant (process-referral-reward decides whether a credit is
+// available and attaches the next-cycle offer). Background, best-effort.
+function requestReferralReward(merchantId: string, why: string) {
+  const task = (async () => {
+    try {
+      const url = Deno.env.get('SUPABASE_URL');
+      const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (!url || !key) return;
+      const res = await fetch(`${url}/functions/v1/process-referral-reward`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ merchant_id: merchantId }),
+      });
+      console.log(`[razorpay-webhook] referral reward (${why}) for ${merchantId}: ${res.status} ${(await res.text().catch(() => '')).slice(0, 200)}`);
+    } catch (e) {
+      console.warn('[razorpay-webhook] referral reward request failed:', (e as Error)?.message);
+    }
+  })();
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(task);
+  return task;
+}
+
 // Razorpay subscription webhook handler.
 //
 // Deploy with JWT verification OFF (Razorpay can't send a Supabase JWT):
@@ -634,6 +681,20 @@ Deno.serve(async (req: Request) => {
         .upsert(ledger, { onConflict: 'transaction_id', ignoreDuplicates: true }));
     }
     if (payErr) console.error('[razorpay-webhook] merchant_payments ledger insert failed (non-fatal):', payErr.message);
+    else requestInvoice(payEntity.id);
+
+    // Referrals: 5 referred merchants who sign up AND pay = 1 free month for the referrer.
+    // This merchant paid → their own referral (if any) qualifies, once; the referrer's credit is
+    // checked. Then this merchant's own waiting credit (they may be a referrer) is applied to
+    // their next charge, now that this charge has used up any previous reward.
+    try {
+      const { data: referrerId, error: qErr } = await supabase.rpc('qualify_merchant_referral', { p_referee: String(merchantId) });
+      if (qErr) console.warn('[razorpay-webhook] qualify_merchant_referral:', qErr.message);
+      else if (referrerId) requestReferralReward(String(referrerId), `referral ${merchantId} paid`);
+    } catch (e) {
+      console.warn('[razorpay-webhook] referral qualify failed:', (e as Error)?.message);
+    }
+    requestReferralReward(String(merchantId), 'own charge');
 
     // ── Referral reward: handled by the OFFER model, not here ──────────────
     // The referral reward is a one-cycle Razorpay discount OFFER applied via the
