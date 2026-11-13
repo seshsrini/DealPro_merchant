@@ -11,6 +11,7 @@ import { StepCategory } from './components/product-wizard/StepCategory';
 import { StepSpecs } from './components/product-wizard/StepSpecs';
 import { StepPriceStock } from './components/product-wizard/StepPriceStock';
 import { StepProductReview } from './components/product-wizard/StepProductReview';
+import { useCatalogueMaster } from './hooks/useCatalogueMaster';
 import {
   AiProductAnalysis,
   mapCategoryToSchemaId,
@@ -110,6 +111,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
   user, setView, theme, editProduct,
 }) => {
   const isDark = theme === 'dark';
+  const catalogueLive = useCatalogueMaster(); // catalogue name suggestions only where it's live
   const [state, dispatch] = useReducer(wizardReducer, initialState);
   const [currentStep, setCurrentStep] = useState(0);
   // True when the merchant tapped a Review pencil to edit one section.
@@ -390,7 +392,7 @@ export const ProductWizard: React.FC<ProductWizardProps> = ({
             brand={state.brand}
             onNameChange={(v) => dispatch({ type: 'SET_FIELD', field: 'name', value: v })}
             onBrandChange={(v) => dispatch({ type: 'SET_FIELD', field: 'brand', value: v })}
-            onCatalogPick={(p) => {
+            onCatalogPick={!catalogueLive ? undefined : (p) => {
               // Pre-fill category (and a description if the AI didn't give one) from the catalogue.
               const schemaId = p.schemaId || 'general';
               const label = UNIVERSAL_CATEGORIES.find((c) => c.schemaId === (schemaId === 'restaurant' ? 'grocery' : schemaId))?.label
