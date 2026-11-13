@@ -20,6 +20,7 @@ import { useResumeRefetch } from './services/useResumeRefetch';
 import { MediaLightbox, LightboxSlide } from './components/MediaLightbox';
 import { MerchantProductPreview } from './components/MerchantProductPreview';
 import { CataloguePhotoSheet } from './components/CataloguePhotoSheet';
+import { useCatalogueMaster } from './hooks/useCatalogueMaster';
 
 // Build the lightbox slides array for a single catalogue item:
 // cover image, then any additional images, then the optional video at the end.
@@ -158,6 +159,8 @@ interface Props {
 
 export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEditProduct }) => {
   const isDark = theme === 'dark';
+  // DealFynd catalogue entry points show only where the catalogue is live (see useCatalogueMaster).
+  const catalogueLive = useCatalogueMaster();
   const catalogueCacheKey = `catalogue_${user.id}`;
   // Seed from cache so the catalogue paints instantly on a cold resume.
   const [items, setItems] = useState<CatalogueItem[]>(() => peekCache<CatalogueItem[]>(catalogueCacheKey) || []);
@@ -254,7 +257,7 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
             </button>
           )}
         </div>
-        {items.length > 0 && (
+        {items.length > 0 && catalogueLive && (
           <button
             onClick={() => setView('catalogue_browse')}
             className={`mt-4 w-full flex items-center gap-3 p-3 rounded-xl border text-left active:scale-[0.99] transition-all ${
@@ -324,7 +327,7 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
             <Plus className="w-4 h-4" />
             Add First Product/Item
           </button>
-          <button
+          {catalogueLive && <button
             onClick={() => setView('catalogue_browse')}
             className={`mt-3 flex items-center gap-2 h-11 px-6 rounded-xl text-sm font-medium border active:scale-[0.98] transition-all ${
               isDark ? 'border-emerald-500/50 text-emerald-400' : 'border-emerald-300 text-emerald-700 bg-emerald-50'
@@ -332,7 +335,7 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
           >
             <LayoutGrid className="w-4 h-4" />
             Pick from DealFynd catalogue
-          </button>
+          </button>}
         </div>
       )}
 

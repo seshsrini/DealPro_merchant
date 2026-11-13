@@ -5,6 +5,7 @@ import { getSchemaForCategory } from '../../data/formSchema';
 import { addCampaignService } from '../../services/addCampaignService';
 import { supabase } from '../../services/supabaseClient';
 import { toMerchantMessage } from '../../services/friendlyError';
+import { useCatalogueMaster } from '../../hooks/useCatalogueMaster';
 
 async function callManageProducts(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke('manage-products', { body });
@@ -90,6 +91,7 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
   wizardState, user, editingId, onBack, onSaveSuccess, onSaveError, theme, onEditStep, isMultiStore = false,
 }) => {
   const isDark = theme === 'dark';
+  const catalogueLive = useCatalogueMaster(); // the catalogue line + contribute only where it's live
   const [visible, setVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
@@ -190,7 +192,7 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
         // shops can find it once DealFynd has reviewed it (Terms 4.4, agreed in the notice above).
         // Background and silent: the merchant's own product is already saved.
         const newId = (saved?.product as { id?: string } | undefined)?.id;
-        if (newId) {
+        if (newId && catalogueLive) {
           supabase.functions.invoke('catalog-browse', { body: { action: 'contribute', productId: newId } })
             .catch(() => { /* catalogue not available here — nothing to do */ });
         }
@@ -382,7 +384,7 @@ export const StepProductReview: React.FC<StepProductReviewProps> = ({
                 <li>You own the copyright to this product/item image, or have obtained proper written authorization from the copyright holder to use it</li>
                 <li>The image does not infringe on any third-party intellectual property rights, trademarks, or copyrights</li>
                 <li>You assume full legal responsibility for any copyright claims, disputes, or legal issues arising from the use of this image</li>
-                <li>If this product/item is not in the DealFynd catalogue yet, DealFynd may add it there with its photos and details (never your price or stock), so other shops can find and add it after DealFynd reviews it (Terms of Service, section 4.4)</li>
+                {catalogueLive && <li>If this product/item is not in the DealFynd catalogue yet, DealFynd may add it there with its photos and details (never your price or stock), so other shops can find and add it after DealFynd reviews it (Terms of Service, section 4.4)</li>}
               </ul>
               <p className="pt-2 font-medium">
                 DealFynd and its affiliated companies shall not be held liable for any copyright infringement, legal claims, or damages resulting from images uploaded by merchants.
