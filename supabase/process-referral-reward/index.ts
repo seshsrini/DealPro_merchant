@@ -1,28 +1,27 @@
 /**
  * process-referral-reward Edge Function
  *
- * Grants a referral reward: a near-free next billing cycle on the referrer's
- * active subscription. Invoked by the process_merchant_referral() SQL trigger
- * (via pg_net) when a referrer crosses the monthly referral threshold
- * (app_configs.referral_reward_threshold).
+ * Merchant referral reward: every 5 referred merchants who sign up AND pay earn the referrer
+ * one free month. Credits are all-time with carryover:
+ *   available = floor(qualified referrals / threshold) − rewards already given
+ * (SQL merchant_referral_credits, migration zzz_referral_paid_cumulative.sql).
  *
- * Why an offer, not a cash payout: RazorpayX payouts aren't available to a
- * proprietorship, so instead of paying the merchant we discount ONE billing
- * cycle to Razorpay's ~₹1 minimum via a Subscription OFFER attached to their
- * existing subscription (schedule_change_at = cycle_end, so it applies to the
- * NEXT cycle and reverts afterwards). The offer is a single-cycle PERCENTAGE
- * discount created once in the Razorpay Dashboard — its id lives in
- * app_configs.referral_reward_offer_id ({"offer_id":"offer_xxx"}). A percentage
- * offer scales to every tier (₹199…₹2499), unlike a flat amount.
+ * Called by razorpay-webhook (service-role key) on subscription.charged:
+ *   • for the REFERRER when one of their referrals makes its first payment (it just qualified)
+ *   • for the merchant who was just charged, so a credit that was waiting gets applied
  *
- * Legacy (non-Razorpay) subscriptions fall back to grant_free_month() — a 30-day
- * DB period extension (their billing is our custom run, which honours the date).
+ * How the reward is given: Razorpay Autopay can't skip a cycle or charge ₹0, so a one-cycle
+ * subscription OFFER (created once in the Razorpay Dashboard) is attached to the referrer's
+ * subscription with schedule_change_at = cycle_end, i.e. it discounts their NEXT charge:
+ *   monthly plan → ~100% off (the merchant pays ~₹1)       app_configs.referral_reward_offer_id.upi / .card
+ *   yearly plan  → 1/12 off (worth one month)               …yearly_upi / .yearly_card
+ * An offer is scoped to one payment method, so the one matching the mandate (UPI / card) is used.
  *
- * Idempotent: one reward per merchant per calendar month, keyed on
- * merchant_rewards_log (merchant_id, reward_month). The trigger also guards this,
- * but we re-check so a manual/retried invoke can't double-reward.
+ * One credit at a time: if a reward was attached after the merchant's latest charge, it hasn't
+ * been used yet, so nothing more is attached until the next charge. The reward row is written
+ * BEFORE the Razorpay call (and removed if it fails) so two calls can't both attach.
  *
- * Required Supabase secrets: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET (live).
+ * Required secrets: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET (live keys on PROD).
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.49.1';
@@ -36,15 +35,12 @@ const corsHeaders = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-// A Razorpay subscription OFFER is scoped to one payment method, so we keep two
-// (UPI + Card) and attach the one that matches the subscription's mandate. This
-// reads the method from the subscription's latest invoice payment.
+// Payment method of the subscription's mandate, from its latest invoice payment.
 async function getSubscriptionMethod(subId: string, auth: string): Promise<string> {
   try {
-    const invRes = await fetch(
-      `https://api.razorpay.com/v1/invoices?subscription_id=${subId}&count=10`,
-      { headers: { Authorization: `Basic ${auth}` } },
-    );
+    const invRes = await fetch(`https://api.razorpay.com/v1/invoices?subscription_id=${subId}&count=10`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
     if (!invRes.ok) return 'unknown';
     const inv = await invRes.json();
     const paymentId = (inv.items || []).map((i: any) => i.payment_id).find((p: any) => !!p);
@@ -63,116 +59,102 @@ async function getSubscriptionMethod(subId: string, auth: string): Promise<strin
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-  try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    );
+  // Only our own backend (razorpay-webhook) may grant rewards.
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const bearer = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!bearer || bearer !== serviceKey) return json({ error: 'Unauthorized' }, 401);
 
-    const { merchant_id } = await req.json();
+  try {
+    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey);
+    const { merchant_id } = await req.json().catch(() => ({}));
     if (!merchant_id) return json({ error: 'merchant_id is required' }, 400);
 
-    // reward_month = first day of the current month (YYYY-MM-01) — the idempotency key.
-    const now = new Date();
-    const rewardMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    // 1. Any credit available?
+    const { data: credits, error: credErr } = await supabase
+      .rpc('merchant_referral_credits', { p_merchant: String(merchant_id) }).maybeSingle();
+    if (credErr) return json({ error: `merchant_referral_credits: ${credErr.message}` }, 500);
+    const c: any = credits || {};
+    if (!c.available || c.available <= 0) {
+      return json({ skipped: 'no credit available', qualified: c.qualified ?? 0, granted: c.granted ?? 0 });
+    }
 
-    // Idempotency: at most one reward per merchant per month.
-    const { data: already } = await supabase
-      .from('merchant_rewards_log')
-      .select('id')
-      .eq('merchant_id', merchant_id)
-      .eq('reward_month', rewardMonth)
-      .maybeSingle();
-    if (already) return json({ skipped: 'already rewarded this month' });
-
-    // The referrer's active subscription.
+    // 2. The referrer's active Razorpay subscription and its plan frequency.
     const { data: sub } = await supabase
       .from('merchant_subscriptions')
-      .select('id, razorpay_subscription_id, billing_type, current_period_end, status')
+      .select('id, razorpay_subscription_id, plan_name, current_period_end, status')
       .eq('merchant_id', merchant_id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (!sub) return json({ skipped: 'no active subscription for merchant' });
+    if (!sub?.razorpay_subscription_id) {
+      return json({ skipped: 'no active Razorpay subscription; the credit waits for their next payment' });
+    }
+    const { data: tier } = await supabase
+      .from('subscription_tiers').select('billing_frequency').eq('tier_key', sub.plan_name).maybeSingle();
+    const yearly = tier?.billing_frequency === 'yearly';
 
-    // Qualified referrals this month — for the audit log only.
-    const { count: refCount } = await supabase
-      .from('merchant_referrals')
-      .select('*', { count: 'exact', head: true })
-      .eq('referrer_id', merchant_id)
-      .eq('status', 'qualified')
-      .gte('qualified_at', rewardMonth);
-
-    // ── Razorpay Autopay path: attach the one-cycle discount offer ──────────────
-    if (sub.razorpay_subscription_id) {
-      const keyId = Deno.env.get('RAZORPAY_KEY_ID');
-      const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET');
-      if (!keyId || !keySecret) return json({ error: 'Razorpay keys not configured' }, 500);
-      const auth = btoa(`${keyId}:${keySecret}`);
-
-      // Offer ids per payment method (a subscription offer is method-scoped):
-      //   app_configs.referral_reward_offer_id = {"upi":"offer_...","card":"offer_..."}
-      const { data: cfg } = await supabase
-        .from('app_configs')
-        .select('config_value')
-        .eq('config_key', 'referral_reward_offer_id')
-        .maybeSingle();
-      const cv: any = cfg?.config_value || {};
-
-      // Attach the offer matching the subscription's mandate method.
-      const method = await getSubscriptionMethod(sub.razorpay_subscription_id, auth);
-      const offerId: string | null =
-        method === 'card' ? (cv.card || null)
-        : method === 'upi' ? (cv.upi || null)
-        : (cv.upi || cv.card || null); // unknown → best effort
-      if (!offerId) {
-        console.error(`[process-referral-reward] no offer configured for method=${method}`);
-        return json({ error: `referral_reward_offer_id for method '${method}' not configured` }, 500);
-      }
-
-      // Attach the offer to the EXISTING subscription. schedule_change_at=cycle_end
-      // → it discounts the NEXT billing cycle, then the subscription reverts to the
-      // normal amount (the offer itself is configured single-cycle in the Dashboard).
-      const rzpRes = await fetch(
-        `https://api.razorpay.com/v1/subscriptions/${sub.razorpay_subscription_id}`,
-        {
-          method: 'PATCH',
-          headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ offer_id: offerId, schedule_change_at: 'cycle_end', customer_notify: 1 }),
-        },
-      );
-      if (!rzpRes.ok) {
-        const errText = await rzpRes.text();
-        console.error('[process-referral-reward] Razorpay offer attach failed:', rzpRes.status, errText.slice(0, 300));
-        return json({ error: `Razorpay offer attach failed (${rzpRes.status}): ${errText}` }, 502);
-      }
-
-      // Audit + idempotency marker. days_extended=0 — it's a discount, not an extension.
-      await supabase.from('merchant_rewards_log').insert({
-        merchant_id,
-        reward_type: 'free_month_offer',
-        referral_count: refCount ?? 0,
-        reward_month: rewardMonth,
-        days_extended: 0,
-        old_end_date: sub.current_period_end,
-        new_end_date: sub.current_period_end,
-      });
-
-      console.log(`[process-referral-reward] Attached ${method} offer ${offerId} to ${sub.razorpay_subscription_id} (merchant ${merchant_id})`);
-      return json({ success: true, method: 'razorpay_offer', payment_method: method, subscription_id: sub.razorpay_subscription_id, offer_id: offerId });
+    // 3. One credit at a time: a reward attached after their latest charge is still unused.
+    const [{ data: lastReward }, { data: lastPay }] = await Promise.all([
+      supabase.from('merchant_rewards_log').select('created_at')
+        .eq('merchant_id', merchant_id).in('reward_type', ['free_month', 'free_month_offer'])
+        .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('merchant_payments').select('created_at')
+        .eq('merchant_id', merchant_id).eq('payment_status', 'captured')
+        .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    if (lastReward?.created_at && (!lastPay?.created_at || new Date(lastReward.created_at) > new Date(lastPay.created_at))) {
+      return json({ skipped: 'a reward is already waiting for their next charge', available: c.available });
     }
 
-    // ── Legacy (non-Razorpay) path: extend the DB period by 30 days ─────────────
-    // grant_free_month() finds the active sub, extends trial_end/current_period_end
-    // by 30 days, and logs to merchant_rewards_log itself.
-    const { error: rpcErr } = await supabase.rpc('grant_free_month', { m_id: merchant_id });
-    if (rpcErr) {
-      console.error('[process-referral-reward] grant_free_month failed:', rpcErr.message);
-      return json({ error: rpcErr.message }, 500);
+    // 4. The offer for this plan frequency and payment method.
+    const keyId = Deno.env.get('RAZORPAY_KEY_ID');
+    const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET');
+    if (!keyId || !keySecret) return json({ error: 'Razorpay keys not configured' }, 500);
+    const auth = btoa(`${keyId}:${keySecret}`);
+    const { data: cfg } = await supabase
+      .from('app_configs').select('config_value').eq('config_key', 'referral_reward_offer_id').maybeSingle();
+    const cv: any = cfg?.config_value || {};
+    const method = await getSubscriptionMethod(sub.razorpay_subscription_id, auth);
+    const upi = yearly ? cv.yearly_upi : cv.upi;
+    const card = yearly ? cv.yearly_card : cv.card;
+    const offerId: string | null = method === 'card' ? (card || null) : method === 'upi' ? (upi || null) : (upi || card || null);
+    if (!offerId) {
+      console.error(`[process-referral-reward] no ${yearly ? 'yearly' : 'monthly'} offer configured for method=${method}`);
+      return json({ error: `No ${yearly ? 'yearly' : 'monthly'} referral offer configured for '${method}' (app_configs.referral_reward_offer_id)` }, 500);
     }
-    return json({ success: true, method: 'grant_free_month' });
 
+    // 5. Claim the credit first (so a parallel call sees it), then attach the offer.
+    const now = new Date();
+    const rewardMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    const { data: claim, error: claimErr } = await supabase.from('merchant_rewards_log').insert({
+      merchant_id,
+      reward_type: 'free_month_offer',
+      referral_count: c.qualified ?? 0,
+      reward_month: rewardMonth,
+      days_extended: 0,
+      old_end_date: sub.current_period_end,
+      new_end_date: sub.current_period_end,
+    }).select('id').single();
+    if (claimErr) return json({ error: `could not record the reward: ${claimErr.message}` }, 500);
+
+    const rzpRes = await fetch(`https://api.razorpay.com/v1/subscriptions/${sub.razorpay_subscription_id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ offer_id: offerId, schedule_change_at: 'cycle_end', customer_notify: 1 }),
+    });
+    if (!rzpRes.ok) {
+      const errText = await rzpRes.text();
+      await supabase.from('merchant_rewards_log').delete().eq('id', claim.id); // credit stays available
+      console.error('[process-referral-reward] Razorpay offer attach failed:', rzpRes.status, errText.slice(0, 300));
+      return json({ error: `Razorpay offer attach failed (${rzpRes.status}): ${errText}` }, 502);
+    }
+
+    console.log(`[process-referral-reward] ${yearly ? 'yearly' : 'monthly'} ${method} offer ${offerId} → ${sub.razorpay_subscription_id} (merchant ${merchant_id}, credits ${c.available} → ${c.available - 1})`);
+    return json({
+      success: true, plan: yearly ? 'yearly' : 'monthly', payment_method: method,
+      subscription_id: sub.razorpay_subscription_id, offer_id: offerId, credits_left: c.available - 1,
+    });
   } catch (err: any) {
     console.error('[process-referral-reward] Error:', err?.message);
     return json({ error: err?.message || 'Internal error' }, 500);
