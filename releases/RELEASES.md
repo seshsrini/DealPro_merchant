@@ -20,6 +20,40 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.11.13.0829 — versionCode 1794576542
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-PROD-2026.11.13.0829-vc1794576542.aab` |
+| SHA-256 | `cf833a368d766f3b2d1465d6c65504ebd270847e0453989a4e546cb5287a2c33` |
+| Size | 22,275,105 bytes |
+| Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`), SHA1 `32:7F:5C:…:FD:F5` |
+| Backend | PROD Supabase `trrinhrajmsnkjnwtncz` |
+| Commit | `e9548f7` |
+| Play status | pending upload |
+
+Everything in `2026.10.31.1611` plus:
+
+- **Referral rewards fixed.** A referral counts only once the referred merchant signs up with
+  the code **and pays**; every 5 paid referrals = 1 free month, all-time, with carryover.
+  Monthly plan: the next month is charged ₹1 (to keep Autopay active); yearly plan: 1/12 off
+  the next renewal. The referral screen shows paid referrals and "waiting to pay", and no
+  longer promises a refund. Server side (deploy separately): `zzz_referral_paid_cumulative.sql`,
+  `razorpay-webhook`, `process-referral-reward`, `merchant-subscription`.
+- **GST tax invoice emailed for every subscription payment** (server side: razorpay-webhook →
+  vedicjaalam.com; numbered VJDF26270001…).
+- **Plan screens:** announcements per month shown on every plan; "Includes Product Catalogue"
+  on non-Basic plans.
+- **Store address:** unticking "Find my store location" clears the street, PIN code,
+  locality, city, state and map position (signup and My Stores).
+
+**Play Console "What's new" (en-IN):**
+
+> • Referral rewards: every 5 merchants who join with your code and subscribe earn you a free month. Track paid and pending referrals in Referral Progress.
+> • Clearer plan details on the subscription screens.
+> • Store address: unticking "Find my store location" now clears the old address so you can enter a new one.
+> • Bug fixes and reliability improvements.
+
 ## 2026.10.31.1611 — versionCode 1793477507
 
 | | |
