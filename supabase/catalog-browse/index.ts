@@ -8,6 +8,7 @@
 //   bulk_add  → { added, skipped }            body: { items: [{ productId, variantId?, brandId?, brandName?, price?, mrp? }],
 //                                                      storeIds? }  (defaults to all stores)
 //   set_photo → { ok, imageUrl, contributed } body: { productId, imageUrl | null, width?, height?, agreedTerms }
+//   contribute → { status, code? }            body: { productId }  (a hand-added product → catalogue, pending review)
 //
 // Products added from the catalogue land in public.products exactly like
 // wizard-created ones, plus catalog_product_id / catalog_variant_id links.
@@ -293,6 +294,152 @@ Deno.serve(async (req) => {
       }
       console.log(`[catalog-browse] set_photo merchant=${merchantId} product=${prod.id} contributed=${contributed}`);
       return json({ ok: true, imageUrl, contributed });
+    }
+
+    // contribute — a product the merchant added by hand (product wizard), not from the catalogue.
+    //   body: { productId (their products.id) }
+    // Same name already in the catalogue → their listing is linked to it (and their photo offered if
+    // the catalogue has none). Otherwise a new catalogue product is created with their photos, details,
+    // brand and pack size/MRP (never their selling price or stock) as 'pending_review'. Other merchants
+    // see it only after an owner approves it on vedicjaalam.com (Admin, Product Catalogue).
+    // The merchant agreed to this in the save notice (Terms of Service 4.4).
+    if (action === 'contribute') {
+      const { data: prod } = await admin.from('products')
+        .select('id, merchant_id, name, category, image_url, additional_images, description, attributes, catalog_product_id')
+        .eq('id', String(body.productId || '')).maybeSingle();
+      if (!prod || prod.merchant_id !== merchantId) return json({ error: 'Product not found.' }, 404);
+      if (prod.catalog_product_id) return json({ status: 'already_linked' });
+      const attrs = (prod.attributes as Record<string, unknown>) || {};
+      if (attrs.restricted === true) return json({ status: 'skipped' });
+
+      const clean = (s: unknown, max: number) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+      const fullName = clean(prod.name, 200);
+      if (fullName.length < 2) return json({ status: 'skipped' });
+      const brand = clean(attrs.brand, 60).replace(/[^\p{L}\p{N}&'!.\- ]/gu, '').trim();
+      // Catalogue products are generic ("Magic Masala Chips") and the brand is picked separately,
+      // so drop a leading brand from the name ("Lay's Magic Masala Chips").
+      const lowerName = fullName.toLowerCase();
+      const catName = brand && lowerName.startsWith(brand.toLowerCase() + ' ') && fullName.length - brand.length > 3
+        ? fullName.slice(brand.length).trim()
+        : fullName;
+      const photoRe = /^https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/(?:[^?#]+\/)?dealpro-products\/[^/?#]+$/;
+      const photos = [...new Set([prod.image_url, ...((prod.additional_images as string[]) || [])]
+        .filter((u): u is string => typeof u === 'string' && photoRe.test(u)))].slice(0, 5);
+      const now = new Date().toISOString();
+      const photoRow = (productId: string, url: string, primary: boolean) => ({
+        product_id: productId, url, is_primary: primary, source: 'merchant', license: 'merchant-terms-4.4',
+        attribution: 'Photo by a DealFynd merchant', submitted_by_merchant: merchantId,
+        moderation_status: 'pending', moderation_note: `Merchant product, terms 4.4 agreed ${now}`,
+      });
+
+      // Already in the catalogue (live or waiting for review) under this name?
+      const esc = (s: string) => s.replace(/[%_\\]/g, (c) => `\\${c}`);
+      let match: { id: string; code: string; status: string; image_url: string | null } | null = null;
+      for (const n of [...new Set([catName, fullName])]) {
+        const { data } = await admin.from('catalog_products').select('id, code, status, image_url')
+          .ilike('name', esc(n)).in('status', ['active', 'pending_review']).limit(1);
+        if (data?.length) { match = data[0] as any; break; }
+      }
+      if (match) {
+        const { error } = await admin.from('products').update({ catalog_product_id: match.id }).eq('id', prod.id);
+        if (error) throw error;
+        let offered = false;
+        if (!match.image_url && photos.length) {
+          const { count } = await admin.from('catalog_images').select('id', { count: 'exact', head: true })
+            .eq('product_id', match.id).eq('url', photos[0]);
+          if (!count) {
+            const { error: imgErr } = await admin.from('catalog_images').insert(photoRow(match.id, photos[0], false));
+            if (imgErr) console.warn('[catalog-browse] contribute: photo offer failed:', imgErr.message);
+            else offered = true;
+          }
+        }
+        console.log(`[catalog-browse] contribute merchant=${merchantId} product=${prod.id} matched=${match.code}`);
+        return json({ status: match.status === 'active' ? 'matched' : 'pending', code: match.code, photoOffered: offered });
+      }
+
+      // Suggested category: the first sector using the same product form; the owner confirms it.
+      const schemaId = clean(attrs.schemaId, 40);
+      let categoryId: number | null = null;
+      if (schemaId && schemaId !== 'general') {
+        const { data: sec } = await admin.from('catalog_categories').select('id')
+          .eq('schema_id', schemaId).eq('level', 1).eq('is_active', true).order('sort_order').limit(1);
+        categoryId = (sec?.[0] as any)?.id ?? null;
+      }
+
+      // Details the merchant filled in (not price, MRP, stock or internal flags).
+      const SKIP = new Set(['brand', 'price', 'mrp', 'schemaId', 'source', 'photo_source', 'photo_at', 'restricted', 'catalog_brand_id', 'ai_description']);
+      const specs: Record<string, string> = {};
+      for (const [k, v] of Object.entries(attrs)) {
+        if (SKIP.has(k) || (typeof v !== 'string' && typeof v !== 'number')) continue;
+        const t = clean(v, 300);
+        if (t) specs[k.slice(0, 40)] = t;
+      }
+
+      const slug = catName.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'product';
+      let code = `DFM-${slug}`;
+      for (let i = 2; ; i++) {
+        const { data: taken } = await admin.from('catalog_products').select('id').eq('code', code).maybeSingle();
+        if (!taken) break;
+        code = `DFM-${slug}-${i}`;
+      }
+      const ins = await admin.from('catalog_products').insert({
+        code, name: catName, is_generic: true, category_id: categoryId,
+        description: clean(prod.description || attrs.ai_description, 500) || null,
+        attributes: {
+          ...(Object.keys(specs).length ? { specs } : {}),
+          submitted_name: fullName,
+          submitted_category: clean(prod.category, 50) || null,
+        },
+        source: 'merchant', source_ref: prod.id, verified: false, status: 'pending_review',
+        submitted_by_merchant: merchantId,
+      }).select('id').single();
+      if (ins.error) {
+        if (ins.error.code === '23505') return json({ status: 'already_linked' }); // sent twice
+        throw ins.error;
+      }
+      const catId = (ins.data as any).id as string;
+
+      try {
+        // Pack size + MRP, when the merchant gave a size with a unit ("500 g", "1 L", "XL").
+        const pack = clean(attrs.weight || attrs.volume || attrs.quantity || attrs.size, 60);
+        const mrpN = Number(String(attrs.mrp ?? '').replace(/[,₹\s]/g, ''));
+        const mrp = Number.isFinite(mrpN) && mrpN > 0 && mrpN < 10_000_000 ? Math.round(mrpN * 100) / 100 : null;
+        if (pack && /[a-z]/i.test(pack)) {
+          const { error } = await admin.from('catalog_variants').insert({
+            product_id: catId, variant_label: pack, mrp, mrp_source: mrp != null ? 'merchant' : null,
+            mrp_updated_at: mrp != null ? now : null, status: 'pending_review',
+          });
+          if (error) throw new Error(`pack size: ${error.message}`);
+        }
+        if (photos.length) {
+          const { error } = await admin.from('catalog_images').insert(photos.map((u, i) => photoRow(catId, u, i === 0)));
+          if (error) throw new Error(`photos: ${error.message}`);
+        }
+        if (catName.toLowerCase() !== lowerName) {
+          await admin.from('catalog_aliases').insert({ product_id: catId, alias: fullName.slice(0, 120), language: 'en' });
+        }
+        const brandKey = brand.replace(/[^a-zA-Z0-9]+/g, '').toLowerCase(); // = catalog_brands.normalized_name
+        if (brandKey) {
+          const { data: b } = await admin.from('catalog_brands').select('id').eq('normalized_name', brandKey).maybeSingle();
+          let brandId = (b as any)?.id as string | undefined;
+          if (!brandId) {
+            const c = await admin.from('catalog_brands').insert({ name: brand, is_verified: false }).select('id').single();
+            if (c.error) throw new Error(`brand: ${c.error.message}`);
+            brandId = (c.data as any).id;
+          }
+          await admin.from('catalog_product_brands').upsert(
+            { product_id: catId, brand_id: brandId, sort_order: 0, source: 'merchant' },
+            { onConflict: 'product_id,brand_id', ignoreDuplicates: true });
+        }
+        await admin.from('catalog_sources').insert({ product_id: catId, source_name: 'Added by a DealFynd merchant (product wizard)' });
+        const { error: linkErr } = await admin.from('products').update({ catalog_product_id: catId }).eq('id', prod.id);
+        if (linkErr) throw new Error(`link: ${linkErr.message}`);
+      } catch (e) {
+        await admin.from('catalog_products').delete().eq('id', catId); // cascades the rows above
+        throw e;
+      }
+      console.log(`[catalog-browse] contribute merchant=${merchantId} product=${prod.id} new=${code} photos=${photos.length}`);
+      return json({ status: 'submitted', code });
     }
 
     return json({ error: 'Unknown action' }, 400);
