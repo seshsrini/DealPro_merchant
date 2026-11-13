@@ -20,19 +20,30 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
-## 2026.11.13.0829 — versionCode 1794576542
+## 2026.11.13.1754 — versionCode 1794610448
 
 | | |
 |---|---|
-| File | `dealfynd-merchant-PROD-2026.11.13.0829-vc1794576542.aab` |
-| SHA-256 | `cf833a368d766f3b2d1465d6c65504ebd270847e0453989a4e546cb5287a2c33` |
-| Size | 22,275,105 bytes |
+| File | `dealfynd-merchant-PROD-2026.11.13.1754-vc1794610448.aab` |
+| SHA-256 | `9a5a6e7511332a7a985b703186c8db4e78696d90fa51c407b4579687af7e5743` |
+| Size | 22,288,263 bytes |
 | Signing key | `CN=DealPro, OU=Mobile, O=DealPro, C=IN` (alias `dealpro-merchant`), SHA1 `32:7F:5C:…:FD:F5` |
 | Backend | PROD Supabase `trrinhrajmsnkjnwtncz` |
-| Commit | `e9548f7` |
+| Commit | `e0fdf24` |
 | Play status | pending upload |
 
+Replaces build `2026.11.13.0829` (vc1794576542), which was never uploaded: same changes
+minus the catalogue.
+
 Everything in `2026.10.31.1611` plus:
+
+- **DealFynd product catalogue (switches on by itself).** Browse the catalogue by category,
+  pick many products with per-pack prices and brands, add your own photo, catalogue name
+  suggestions in the product wizard, and hand-added products offered to the catalogue for
+  review (Terms 4.4). Every catalogue entry point stays hidden until `catalog-browse` answers
+  with categories on this database (`hooks/useCatalogueMaster.ts`). PROD has no catalogue yet,
+  so this build looks and works as before; loading the catalogue onto PROD turns it on
+  without a new release.
 
 - **Referral rewards fixed.** A referral counts only once the referred merchant signs up with
   the code **and pays**; every 5 paid referrals = 1 free month, all-time, with carryover.
