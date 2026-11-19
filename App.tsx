@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { syncSystemBars } from './services/systemBars';
 import { AppView, User, Deal } from './types'; // Import User type
 import { biometricService, hydrateSessionFromDurableStore, logBootDiagnostics } from './services/biometricService';
 import { staffLockoutService } from './services/staffLockoutService';
@@ -81,6 +82,8 @@ const AppContent: React.FC = () => {
   const [view, setView] = useState<AppView>('splash');
   const [lastListView, setLastListView] = useState<AppView>('home');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  // Status/navigation bar area follows the theme (Android).
+  useEffect(() => { syncSystemBars(theme === 'dark'); }, [theme]);
   const [loading, setLoading] = useState(false);
   const [hasBiometricSession, setHasBiometricSession] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);

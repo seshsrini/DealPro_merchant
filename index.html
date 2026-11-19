@@ -8,6 +8,13 @@
          insets on Android (edge-to-edge devices, e.g. Samsung One UI gesture bar).
          Without it those insets are 0, so bottom buttons/nav slide under the bar. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <!-- Inside the Android app every phone lays the app out at the same 412px width and scales it to
+         the screen (MainActivity enables this on phones), so it looks the same on every model. -->
+    <script>
+      if (/Android/.test(navigator.userAgent) && /; wv\)/.test(navigator.userAgent)) {
+        document.querySelector('meta[name="viewport"]').setAttribute('content', 'width=412, user-scalable=no, viewport-fit=cover');
+      }
+    </script>
     <title>DealFynd | Premium Local Discovery</title>
     
     <!-- PWA & Mobile Install Tags -->

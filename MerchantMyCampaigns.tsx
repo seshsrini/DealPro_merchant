@@ -690,9 +690,9 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                         </p>
                       </div>
 
-                      {/* Date + Stats */}
-                      <div className="flex items-center gap-2 mt-2">
-                        <div className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-medium ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-50 text-slate-600'}`}>
+                      {/* Date, then stats on their own row: chips never wrap inside or run past the card edge */}
+                      <div className="flex flex-col items-start gap-1.5 mt-2">
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-medium whitespace-nowrap ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-50 text-slate-600'}`}>
                           <Clock className="w-3 h-3" />
                           {deal.start_date && deal.end_date ? (
                             (() => {
@@ -704,14 +704,16 @@ export const MerchantMyCampaigns: React.FC<MerchantMyCampaignsProps> = ({
                             })()
                           ) : t('m_no_dates')}
                         </div>
-                        <div className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-medium ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-50 text-slate-600'}`} title="Views">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-medium whitespace-nowrap ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-50 text-slate-600'}`} title="Views">
                           <MousePointer2 className="w-3 h-3" /> {clicks}
                         </div>
-                        <div className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-medium ${isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`} title="Claim clicks">
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-medium whitespace-nowrap ${isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`} title="Claim clicks">
                           <Megaphone className="w-3 h-3" /> {claims}
                         </div>
-                        <div className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-medium ${isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`} title="Redeemed">
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-medium whitespace-nowrap ${isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`} title="Redeemed">
                           <TicketCheck className="w-3 h-3" /> {redemptions}
+                        </div>
                         </div>
                       </div>
 
