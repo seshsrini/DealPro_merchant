@@ -20,7 +20,25 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
-## 2026.11.20.0744 — versionCode 1795178683
+## 2026.11.20.0757 — versionCode 1795179426
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-PROD-2026.11.20.0757-vc1795179426.aab` |
+| SHA-256 | `ad14f2f7a358959fdf4bb55664fead4d73cd1482efc1614b3f77531923cceaa7` |
+| Size | 22,288,633 bytes |
+| targetSdk / minSdk | 36 / 24 |
+| Signing key | `CN=DealPro` release key (jarsigner verified) |
+| Backend | PROD Supabase `trrinhrajmsnkjnwtncz` only |
+| Commit | `1e5d971` |
+| Play status | pending upload |
+
+Same app as `2026.11.20.0744`, plus one manifest fix: `android.hardware.screen.portrait` is declared
+`required="false"`. The app is locked to portrait, which made Play treat portrait screens as
+required hardware and block the release in pre-review ("Required hardware feature
+declarations are restricting your app's availability"). The app still opens in portrait only.
+
+## 2026.11.20.0744 — versionCode 1795178683 — superseded by 2026.11.20.0757 (Play pre-review: portrait required), do not upload
 
 | | |
 |---|---|
