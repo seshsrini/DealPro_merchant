@@ -128,7 +128,7 @@ export const AIAssistantChat: React.FC<AIAssistantChatProps> = ({ user, theme, s
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className={`fixed bottom-6 right-6 p-4 rounded-xl shadow-lg transition-all active:scale-[0.98] z-50 ${
+          className={`fixed bottom-24 right-4 p-4 rounded-xl shadow-lg transition-all active:scale-[0.98] z-50 ${
             isDark ? 'bg-blue-600 hover:bg-blue-500' : 'bg-blue-600 hover:bg-blue-700'
           }`}
         >

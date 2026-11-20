@@ -420,7 +420,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200'
               }`}>
                 <div className="flex items-center gap-3">
-                  <div className="relative">
+                  <div className="relative shrink-0">
                     <UsageRing
                       used={campaignUsage.campaigns_used}
                       limit={campaignUsage.campaigns_limit}
@@ -432,11 +432,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                       <Megaphone className="w-4 h-4 text-blue-500" />
                     </div>
                   </div>
-                  <div>
-                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_campaigns')}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-[10px] font-medium truncate ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_campaigns')}</p>
                     <p className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {campaignUsage.campaigns_limit >= 999 ? (
-                        <span className="text-base">Unlimited</span>
+                        <span className="text-[15px] break-words">Unlimited</span>
                       ) : (
                         <>
                           {campaignUsage.campaigns_used}
@@ -461,7 +461,7 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                 isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200'
               }`}>
                 <div className="flex items-center gap-3">
-                  <div className="relative">
+                  <div className="relative shrink-0">
                     <UsageRing
                       used={campaignUsage.dotd_used}
                       limit={campaignUsage.dotd_limit}
@@ -473,11 +473,11 @@ export const MerchantDashboard: React.FC<MerchantDashboardProps> = ({
                       <Zap className="w-4 h-4 text-amber-500" />
                     </div>
                   </div>
-                  <div>
-                    <p className={`text-[10px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_deal_of_day')}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-[10px] font-medium truncate ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>{t('m_deal_of_day')}</p>
                     <p className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {campaignUsage.dotd_limit >= 999 ? (
-                        <span className="text-base">Unlimited</span>
+                        <span className="text-[15px] break-words">Unlimited</span>
                       ) : (
                         <>
                           {campaignUsage.dotd_used}

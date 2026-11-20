@@ -238,9 +238,9 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
 
       {/* Page header */}
       <div className="px-6 pt-6 pb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className={`text-xl font-semibold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
               Products/Items Catalogue
             </h1>
             <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -250,10 +250,10 @@ export const MerchantCatalogue: React.FC<Props> = ({ user, theme, setView, setEd
           {items.length > 0 && (
             <button
               onClick={openAdd}
-              className="flex items-center gap-2 h-10 px-4 rounded-xl bg-slate-900 text-white text-sm font-medium active:scale-[0.98] transition-all"
+              className="flex shrink-0 items-center gap-1.5 h-10 px-3.5 rounded-xl bg-slate-900 text-white text-sm font-medium whitespace-nowrap active:scale-[0.98] transition-all"
             >
               <Plus className="w-4 h-4" />
-              Add Product/Item
+              Add Item
             </button>
           )}
         </div>
