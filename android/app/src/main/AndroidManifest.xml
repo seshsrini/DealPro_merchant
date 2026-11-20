@@ -66,6 +66,10 @@
     <!-- Camera permission for QR code scanning -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- The app is locked to portrait (screenOrientation="portrait"), which makes Google Play
+         treat portrait screens as REQUIRED and hide the app from devices that don't report them
+         (Play pre-review: "Required hardware feature declarations"). Portrait is a preference. -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
 
     <!-- Location permissions for location-based deals -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
