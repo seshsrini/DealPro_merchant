@@ -20,6 +20,33 @@ timestamp. Both are therefore unique and monotonic per build.
 
 ---
 
+## 2026.11.20.0744 — versionCode 1795178683
+
+| | |
+|---|---|
+| File | `dealfynd-merchant-PROD-2026.11.20.0744-vc1795178683.aab` |
+| SHA-256 | `246d53375573ee3b4950234ec5c998ec084961d6ac0c9d4081919c241f37a043` |
+| Size | 22,288,597 bytes |
+| targetSdk / minSdk | 36 / 24 |
+| Signing key | `CN=DealPro` release key (jarsigner verified) |
+| Backend | PROD Supabase `trrinhrajmsnkjnwtncz` only |
+| Commit | `ca367b8` |
+| Play status | pending upload |
+
+Everything in `2026.11.13.1754` plus:
+
+- **Same look on every phone.** Every Android phone lays the app out at the same width and
+  scales it to the screen; a large system font or display size no longer breaks the layout
+  (found on a OnePlus 15). The status bar and gesture bar are always kept clear (Android 15/16),
+  and turn dark in dark mode.
+- **Console:** "Unlimited" no longer cut off on the Campaigns / Deal of the Day cards.
+- **My Campaigns:** the date has its own row; views / claims / redeemed stay inside the card.
+- **Catalogue:** the button reads "+ Add Item" and fits.
+- **AI assistant button** sits above the bottom tabs instead of behind them.
+- Server side (already live on PROD, 2026-11-19): a new pincode / area entered when adding
+  **or editing** a store is saved to the pincode directory for future merchants and consumers
+  (one row per pincode + area).
+
 ## 2026.11.13.1754 — versionCode 1794610448
 
 | | |
