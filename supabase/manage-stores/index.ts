@@ -30,6 +30,48 @@ async function authenticateRequest(req: Request) {
   return user;
 }
 
+// Same loose key as public.dir_norm(): "Indiranagar" == "Indira Nagar",
+// "Jeevan Bhima Nagar" == "Jeevanbheemanagar".
+const dirNorm = (s: string) =>
+  String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+    .replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/aa/g, 'a').replace(/w/g, 'v').replace(/y/g, 'i')
+    .replace(/([bcdgjkpst])h/g, '$1').replace(/(.)\1+/g, '$1');
+
+/**
+ * Crowd-source the pincode directory: when a merchant's store has a pincode +
+ * area that the directory doesn't know yet (a new pincode, or a colony that
+ * isn't an India Post office name), add it so future merchants and consumers
+ * can pick it. Spelling variants of an existing area are not added twice.
+ * Best-effort — never fails the store save.
+ */
+async function contributeToDirectory(admin: any, store: any, merchantId: string | null, tag: string) {
+  try {
+    const pincode = String(store?.pincode || '').trim();
+    const locality = String(store?.locality || '').trim().replace(/\s+/g, ' ');
+    if (!/^\d{6}$/.test(pincode) || locality.length < 2) return;
+    const { data: existing, error: readErr } = await admin
+      .from('pincode_directory')
+      .select('locality')
+      .eq('pincode', pincode)
+      .limit(500);
+    if (readErr) { console.warn(`[manage-stores] ${tag} directory read failed:`, readErr.message); return; }
+    const key = dirNorm(locality);
+    if ((existing || []).some((r: any) => dirNorm(r.locality) === key)) return;
+    const { error: dirErr } = await admin.from('pincode_directory').insert({
+      pincode,
+      locality,
+      city: store.city || null,
+      state: store.state || null,
+      source: 'merchant',
+      merchant_id: merchantId,
+    });
+    if (dirErr) console.warn(`[manage-stores] ${tag} directory contribute failed:`, dirErr.message);
+    else console.log(`[manage-stores] ${tag}: contributed ${pincode} / ${locality} to the directory`);
+  } catch (e: any) {
+    console.warn(`[manage-stores] ${tag} directory contribute skipped (non-blocking):`, e?.message);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -142,6 +184,11 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Pincode or area changed → make sure the directory knows it.
+      if (updated && ('pincode' in allowed || 'locality' in allowed)) {
+        await contributeToDirectory(admin, updated, merchantId, 'update');
+      }
+
       return new Response(JSON.stringify({ store: updated }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -202,37 +249,8 @@ Deno.serve(async (req) => {
 
       if (insertErr) throw insertErr;
 
-      // Crowd-source the pincode directory: contribute a merchant-typed locality
-      // (e.g. a colony/neighbourhood not in the India Post list) so future signups
-      // and consumers see it as an autocomplete option. Best-effort — never fails
-      // the add. (Mirrors complete-merchant-profile.)
-      try {
-        const pincode = String(store.pincode || '').trim();
-        const locality = String(store.locality || '').trim();
-        if (/^\d{6}$/.test(pincode) && locality.length >= 2) {
-          const { data: existing } = await admin
-            .from('pincode_directory')
-            .select('id')
-            .eq('pincode', pincode)
-            .ilike('locality', locality)
-            .limit(1)
-            .maybeSingle();
-          if (!existing) {
-            const { error: dirErr } = await admin.from('pincode_directory').insert({
-              pincode,
-              locality,
-              city: store.city || null,
-              state: store.state || null,
-              source: 'merchant',
-              merchant_id: merchantId,
-            });
-            if (dirErr) console.warn('[manage-stores] directory contribute failed:', dirErr.message);
-            else console.log(`[manage-stores] Contributed locality to directory: ${pincode} / ${locality}`);
-          }
-        }
-      } catch (e: any) {
-        console.warn('[manage-stores] directory contribute skipped (non-blocking):', e?.message);
-      }
+      // New pincode / area → add it to the directory for future merchants and consumers.
+      await contributeToDirectory(admin, store, merchantId, 'add');
 
       return new Response(JSON.stringify({ store: inserted }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
